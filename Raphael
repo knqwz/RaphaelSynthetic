@@ -245,6 +245,18 @@ local State = {
     XRayWallTransparency = 0.72,
     SpectatingPlayer = nil,
     SpectateButton = nil,
+    TelePlayerMode = "Instant",
+    TeleItemMode = "Instant",
+    TravelSpeed = 80,
+    ActiveTravelTween = nil,
+    MobManualFilterEnabled = false,
+    MobManualNames = {},
+    MobFilterScanRadiusMeters = 150,
+    MobFilterText = "",
+    MobFilterBox = nil,
+    MobFilterToggle = nil,
+    ConfigControls = {},
+    ConfigAutoLoad = false,
     CameraFov = Camera.FieldOfView,
     UnlockZoom = false,
     TouchTeleportArmed = false,
@@ -256,7 +268,17 @@ local State = {
     AntiAFK = false,
     AntiRagdoll = false,
     FPSBoost = false,
+    FPSBoostApplied = false,
+    RenderQualityBackup = nil,
+    TerrainDecorationBackup = nil,
     ItemScanRunning = false,
+    MobScanRunning = false,
+    ExecutorText = nil,
+    ESPRefreshMode = "Adaptive",
+    LastRagdollMaintain = 0,
+    ItemHealthCurrentNames = {"Health", "HP", "Durability", "Amount"},
+    ItemHealthMaximumNames = {"MaxHealth", "MaxHP", "MaxDurability", "MaxAmount"},
+    MobDisplayAttributeNames = {"DisplayName", "EnemyName", "MobName", "NPCName", "Title"},
     PlayerESP = {
         Enabled = false,
         Tracer = true,
@@ -270,12 +292,13 @@ local State = {
     },
     MobESP = {
         Enabled = false,
-        Tracer = true,
+        Tracer = false,
         Box = true,
         BoxMode = "Skin",
         Name = true,
         Health = true,
         Distance = true,
+        MaxTargets = 25,
         MaxDistanceMeters = 1000,
         Color = Theme.Mob
     },
@@ -339,6 +362,7 @@ local scanItems
 local refreshInfo
 local rebuildPlayerList
 local removeAllVisuals
+local Extensions = {}
 
 local function connect(signal, callback)
     local connection = signal:Connect(callback)
@@ -460,6 +484,71 @@ local function safeTeleport(targetCFrame)
     return true
 end
 
+local function cancelActiveTravel()
+    local activeTween = State.ActiveTravelTween
+    State.ActiveTravelTween = nil
+    if activeTween then
+        pcall(function()
+            activeTween:Cancel()
+        end)
+    end
+end
+
+local function travelToCFrame(targetCFrame, mode)
+    if mode ~= "Fly" then
+        cancelActiveTravel()
+        return safeTeleport(targetCFrame)
+    end
+
+    local character, humanoid, root = getCharacter()
+    if not character or not humanoid or not root then
+        notify("Không thể bay: nhân vật chưa sẵn sàng.", Theme.Danger)
+        return false
+    end
+
+    cancelActiveTravel()
+    local collisionBackup = {}
+    for _, descendant in ipairs(character:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            collisionBackup[descendant] = descendant.CanCollide
+            descendant.CanCollide = false
+        end
+    end
+
+    local originalAutoRotate = humanoid.AutoRotate
+    humanoid.AutoRotate = false
+    humanoid.PlatformStand = true
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+
+    local distance = (root.Position - targetCFrame.Position).Magnitude
+    local duration = math.clamp(distance / math.max(State.TravelSpeed, 1), 0.15, 35)
+    local travelTween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
+    State.ActiveTravelTween = travelTween
+    local completedConnection
+    completedConnection = travelTween.Completed:Connect(function()
+        if completedConnection then
+            completedConnection:Disconnect()
+        end
+        if State.ActiveTravelTween == travelTween then
+            State.ActiveTravelTween = nil
+        end
+        for part, canCollide in pairs(collisionBackup) do
+            if part and part.Parent then
+                part.CanCollide = canCollide
+            end
+        end
+        if humanoid and humanoid.Parent then
+            humanoid.PlatformStand = false
+            humanoid.AutoRotate = originalAutoRotate
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+    end)
+    travelTween:Play()
+    notify(string.format("Đang bay %.1f m với tốc độ %.0f stud/s.", distance * 0.28, State.TravelSpeed), Theme.Warning)
+    return true
+end
+
 local function findPlayer(query)
     local normalized = string.lower(tostring(query or ""))
     if normalized == "" then
@@ -529,7 +618,7 @@ local GuiParent = resolveGuiParent()
 
 for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
     pcall(function()
-        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden"}) do
+        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden", "Raphael_Sovereign_V6_3_SmartMob", "Raphael_Sovereign_V6_4_ManualMob", "Raphael_Sovereign_V6_4_1_Stable", "Raphael_Sovereign_V6_4_2_RegisterFix", "Raphael_Sovereign_V6_4_Final", "Raphael_Sovereign_V6_4_Enhanced", "Raphael_Sovereign_V6_4_Enhanced_2", "Raphael_Sovereign_V6_4_Enhanced_3", "Raphael_Sovereign_V6_4_Enhanced_4", "Raphael_Sovereign_V6_4_Enhanced_5", "Raphael_Sovereign_V6_4_FinalSkin", "Raphael_Sovereign_V6_4_Optimized"}) do
             local staleInterface = guiRoot:FindFirstChild(interfaceName)
             if staleInterface then
                 staleInterface:Destroy()
@@ -539,7 +628,7 @@ for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
 end
 
 ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "Raphael_Sovereign_V6_2_Golden"
+ScreenGui.Name = "Raphael_Sovereign_V6_4_Optimized"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1475,9 +1564,103 @@ connect(MinimizeButton.Activated, function()
     RestoreOrb.Visible = true
 end)
 connect(CloseButton.Activated, function()
-    if cleanup then
-        cleanup()
+    if not ScreenGui or ScreenGui:FindFirstChild("ShutdownConfirmation") then
+        return
     end
+
+    local confirmationOverlay = Instance.new("Frame")
+    confirmationOverlay.Name = "ShutdownConfirmation"
+    confirmationOverlay.Size = UDim2.fromScale(1, 1)
+    confirmationOverlay.BackgroundColor3 = Color3.fromRGB(7, 5, 3)
+    confirmationOverlay.BackgroundTransparency = 0.28
+    confirmationOverlay.BorderSizePixel = 0
+    confirmationOverlay.ZIndex = 1000
+    confirmationOverlay.Parent = ScreenGui
+
+    local confirmationCard = Instance.new("Frame")
+    confirmationCard.AnchorPoint = Vector2.new(0.5, 0.5)
+    confirmationCard.Position = UDim2.fromScale(0.5, 0.5)
+    confirmationCard.Size = UDim2.new(1, -36, 0, 178)
+    confirmationCard.BackgroundColor3 = Theme.Surface
+    confirmationCard.BackgroundTransparency = 0.04
+    confirmationCard.BorderSizePixel = 0
+    confirmationCard.ZIndex = 1001
+    confirmationCard.Parent = confirmationOverlay
+    Instance.new("UICorner", confirmationCard).CornerRadius = UDim.new(0, 14)
+
+    local confirmationConstraint = Instance.new("UISizeConstraint")
+    confirmationConstraint.MinSize = Vector2.new(280, 178)
+    confirmationConstraint.MaxSize = Vector2.new(430, 178)
+    confirmationConstraint.Parent = confirmationCard
+
+    local confirmationAccent = Instance.new("Frame")
+    confirmationAccent.Size = UDim2.new(1, 0, 0, 3)
+    confirmationAccent.BackgroundColor3 = Theme.Accent
+    confirmationAccent.BorderSizePixel = 0
+    confirmationAccent.ZIndex = 1002
+    confirmationAccent.Parent = confirmationCard
+
+    local confirmationTitle = Instance.new("TextLabel")
+    confirmationTitle.Position = UDim2.fromOffset(18, 18)
+    confirmationTitle.Size = UDim2.new(1, -36, 0, 25)
+    confirmationTitle.BackgroundTransparency = 1
+    confirmationTitle.Text = "XÁC NHẬN TẮT RAPHAEL"
+    confirmationTitle.TextColor3 = Theme.Text
+    confirmationTitle.Font = Enum.Font.GothamBold
+    confirmationTitle.TextSize = 15
+    confirmationTitle.TextXAlignment = Enum.TextXAlignment.Left
+    confirmationTitle.ZIndex = 1002
+    confirmationTitle.Parent = confirmationCard
+
+    local confirmationMessage = Instance.new("TextLabel")
+    confirmationMessage.Position = UDim2.fromOffset(18, 50)
+    confirmationMessage.Size = UDim2.new(1, -36, 0, 49)
+    confirmationMessage.BackgroundTransparency = 1
+    confirmationMessage.Text = "Toàn bộ kết nối, ESP và thay đổi client sẽ được dừng và khôi phục."
+    confirmationMessage.TextColor3 = Theme.SubText
+    confirmationMessage.Font = Enum.Font.Gotham
+    confirmationMessage.TextSize = 11
+    confirmationMessage.TextWrapped = true
+    confirmationMessage.TextXAlignment = Enum.TextXAlignment.Left
+    confirmationMessage.TextYAlignment = Enum.TextYAlignment.Top
+    confirmationMessage.ZIndex = 1002
+    confirmationMessage.Parent = confirmationCard
+
+    local cancelButton = Instance.new("TextButton")
+    cancelButton.Position = UDim2.new(0, 18, 1, -55)
+    cancelButton.Size = UDim2.new(0.5, -23, 0, 37)
+    cancelButton.BackgroundColor3 = Theme.SurfaceLight
+    cancelButton.BorderSizePixel = 0
+    cancelButton.Text = "Cancel"
+    cancelButton.TextColor3 = Theme.Text
+    cancelButton.Font = Enum.Font.GothamBold
+    cancelButton.TextSize = 12
+    cancelButton.ZIndex = 1002
+    cancelButton.Parent = confirmationCard
+    Instance.new("UICorner", cancelButton).CornerRadius = UDim.new(0, 9)
+
+    local shutdownButton = Instance.new("TextButton")
+    shutdownButton.Position = UDim2.new(0.5, 5, 1, -55)
+    shutdownButton.Size = UDim2.new(0.5, -23, 0, 37)
+    shutdownButton.BackgroundColor3 = Theme.Danger
+    shutdownButton.BorderSizePixel = 0
+    shutdownButton.Text = "Tắt script"
+    shutdownButton.TextColor3 = Theme.Text
+    shutdownButton.Font = Enum.Font.GothamBold
+    shutdownButton.TextSize = 12
+    shutdownButton.ZIndex = 1002
+    shutdownButton.Parent = confirmationCard
+    Instance.new("UICorner", shutdownButton).CornerRadius = UDim.new(0, 9)
+
+    cancelButton.Activated:Connect(function()
+        confirmationOverlay:Destroy()
+    end)
+    shutdownButton.Activated:Connect(function()
+        confirmationOverlay:Destroy()
+        if cleanup then
+            cleanup()
+        end
+    end)
 end)
 connect(UserInputService.InputBegan, function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.RightShift then
@@ -1511,12 +1694,7 @@ local function loadFlyGui()
     end
 
     local success, result = pcall(function()
-        local source = game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt")
-        local compiled, compileError = loadstring(source)
-        if not compiled then
-            error(compileError or "Không thể biên dịch FlyGuiV3")
-        end
-        return compiled()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
     end)
 
     if not success then
@@ -1616,6 +1794,10 @@ local function applyNoEffects()
     Lighting.FogStart = 1000000
     Lighting.FogEnd = 1000000
     for _, instance in ipairs(Lighting:GetDescendants()) do
+        suppressEffect(instance)
+    end
+    Camera = Workspace.CurrentCamera or Camera
+    for _, instance in ipairs(Camera:GetDescendants()) do
         suppressEffect(instance)
     end
 end
@@ -1925,12 +2107,10 @@ local function getHealthText(humanoid)
 end
 
 local function getItemHealthText(item)
-    local currentNames = {"Health", "HP", "Durability", "Amount"}
-    local maximumNames = {"MaxHealth", "MaxHP", "MaxDurability", "MaxAmount"}
     local current
     local maximum
 
-    for _, name in ipairs(currentNames) do
+    for _, name in ipairs(State.ItemHealthCurrentNames) do
         local attribute = item:GetAttribute(name)
         if type(attribute) == "number" then
             current = attribute
@@ -1943,7 +2123,7 @@ local function getItemHealthText(item)
         end
     end
 
-    for _, name in ipairs(maximumNames) do
+    for _, name in ipairs(State.ItemHealthMaximumNames) do
         local attribute = item:GetAttribute(name)
         if type(attribute) == "number" then
             maximum = attribute
@@ -2022,6 +2202,16 @@ local function updateVisual(category, key, target, root, displayName, healthText
         return
     end
 
+    local needsScreenDrawing = espEnabled and ((config.Box and config.BoxMode == "2D") or config.Tracer or config.Name or (config.Health and healthText ~= nil) or config.Distance)
+    if not needsScreenDrawing then
+        setDrawingVisible(visual.Box, false)
+        setDrawingVisible(visual.Tracer, false)
+        setDrawingVisible(visual.Name, false)
+        setDrawingVisible(visual.Health, false)
+        setDrawingVisible(visual.Distance, false)
+        return
+    end
+
     local topLeft, boxSize = getScreenBounds(target)
     if not topLeft or not boxSize then
         setDrawingVisible(visual.Box, false)
@@ -2092,7 +2282,6 @@ local function updateXRayOcclusion()
     end
 
     Camera = Workspace.CurrentCamera or Camera
-    local localCharacter = LocalPlayer.Character
     local cameraPosition = Camera.CFrame.Position
     local candidates = {}
 
@@ -2100,24 +2289,18 @@ local function updateXRayOcclusion()
         if player ~= LocalPlayer and player.Character then
             local root = getAdorneeRoot(player.Character)
             if root then
-                table.insert(candidates, {
-                    Target = player.Character,
-                    Root = root,
-                    Distance = (root.Position - cameraPosition).Magnitude
-                })
+                local offset = root.Position - cameraPosition
+                table.insert(candidates, {Target = player.Character, Root = root, DistanceSquared = offset:Dot(offset)})
             end
         end
     end
 
-    for model in pairs(MobCache) do
-        if model and model.Parent then
-            local root = getAdorneeRoot(model)
-            if root then
-                table.insert(candidates, {
-                    Target = model,
-                    Root = root,
-                    Distance = (root.Position - cameraPosition).Magnitude
-                })
+    for model, classification in pairs(MobCache) do
+        if model and model.Parent and type(classification) == "table" then
+            local root = classification.Root
+            if root and root.Parent then
+                local offset = root.Position - cameraPosition
+                table.insert(candidates, {Target = model, Root = root, DistanceSquared = offset:Dot(offset)})
             end
         end
     end
@@ -2126,58 +2309,53 @@ local function updateXRayOcclusion()
         if item and item.Parent then
             local root = getAdorneeRoot(item)
             if root then
-                table.insert(candidates, {
-                    Target = item,
-                    Root = root,
-                    Distance = (root.Position - cameraPosition).Magnitude
-                })
+                local offset = root.Position - cameraPosition
+                table.insert(candidates, {Target = item, Root = root, DistanceSquared = offset:Dot(offset)})
             end
         end
     end
 
     table.sort(candidates, function(left, right)
-        return left.Distance < right.Distance
+        return left.DistanceSquared < right.DistanceSquared
     end)
 
-    local currentOccluders = {}
+    local castPoints = {}
+    local ignored = {}
+    local localCharacter = LocalPlayer.Character
+    if localCharacter then
+        table.insert(ignored, localCharacter)
+    end
     local candidateLimit = math.min(#candidates, 24)
     for index = 1, candidateLimit do
         local candidate = candidates[index]
-        local excluded = {candidate.Target}
-        if localCharacter then
-            table.insert(excluded, localCharacter)
-        end
+        table.insert(castPoints, candidate.Root.Position)
+        table.insert(ignored, candidate.Target)
+    end
 
-        for _ = 1, 7 do
-            local direction = candidate.Root.Position - cameraPosition
-            if direction.Magnitude < 1 then
-                break
+    local currentOccluders = {}
+    if #castPoints > 0 then
+        local success, obscuringParts = pcall(function()
+            return Camera:GetPartsObscuringTarget(castPoints, ignored)
+        end)
+        if success and type(obscuringParts) == "table" then
+            for _, part in ipairs(obscuringParts) do
+                if part and part:IsA("BasePart") then
+                    if XRayOccluders[part] == nil then
+                        XRayOccluders[part] = part.LocalTransparencyModifier
+                    end
+                    currentOccluders[part] = true
+                    part.LocalTransparencyModifier = State.XRayWallTransparency
+                end
             end
-            local parameters = RaycastParams.new()
-            parameters.FilterType = Enum.RaycastFilterType.Exclude
-            parameters.FilterDescendantsInstances = excluded
-            parameters.IgnoreWater = true
-            local result = Workspace:Raycast(cameraPosition, direction, parameters)
-            if not result then
-                break
-            end
-            local part = result.Instance
-            if not part or not part:IsA("BasePart") then
-                break
-            end
-            if XRayOccluders[part] == nil then
-                XRayOccluders[part] = part.LocalTransparencyModifier
-            end
-            currentOccluders[part] = true
-            part.LocalTransparencyModifier = State.XRayWallTransparency
-            table.insert(excluded, part)
         end
     end
 
     restoreXRayOccluders(currentOccluders)
 end
 
-local EnemyHints = {"enemy", "enemies", "mob", "mobs", "monster", "monsters", "npc", "boss", "zombie", "creature", "bot"}
+local EnemyHints = {"enemy", "enemies", "mob", "mobs", "monster", "monsters", "npc", "boss", "zombie", "creature", "bot", "hostile", "wave"}
+EnemyHints.Attributes = {"Enemy", "IsEnemy", "Mob", "IsMob", "NPC", "IsNPC", "Monster", "Hostile", "IsHostile", "EntityType", "Faction", "Team"}
+local GenericMobNames = {model = true, npc = true, enemy = true, mob = true, rig = true, dummy = true}
 
 local function textHasHint(text, hints)
     local lower = string.lower(tostring(text or ""))
@@ -2190,54 +2368,178 @@ local function textHasHint(text, hints)
 end
 
 local function hasEnemyMetadata(model)
-    for _, tag in ipairs(CollectionService:GetTags(model)) do
-        if textHasHint(tag, EnemyHints) then
-            return true
-        end
-    end
-    local attributes = {"Enemy", "IsEnemy", "Mob", "IsMob", "NPC", "IsNPC", "Monster", "EntityType", "Faction"}
-    for _, attributeName in ipairs(attributes) do
-        local value = model:GetAttribute(attributeName)
-        if value == true or type(value) == "string" and textHasHint(value, EnemyHints) then
-            return true
-        end
+    if textHasHint(model.Name, EnemyHints) then
+        return true
     end
     local ancestor = model.Parent
     local depth = 0
-    while ancestor and ancestor ~= Workspace and depth < 4 do
+    while ancestor and ancestor ~= Workspace and depth < 5 do
         if textHasHint(ancestor.Name, EnemyHints) then
             return true
         end
         ancestor = ancestor.Parent
         depth = depth + 1
     end
-    return textHasHint(model.Name, EnemyHints)
+    for _, attributeName in ipairs(EnemyHints.Attributes) do
+        local value = model:GetAttribute(attributeName)
+        if value == true or type(value) == "string" and textHasHint(value, EnemyHints) then
+            return true
+        end
+    end
+    for _, tag in ipairs(CollectionService:GetTags(model)) do
+        if textHasHint(tag, EnemyHints) then
+            return true
+        end
+    end
+    return false
 end
 
-local function isMobModel(model)
-    if not model or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then
-        return false
+local function belongsToPlayerCharacter(model)
+    local current = model
+    local depth = 0
+    while current and current ~= Workspace and depth < 12 do
+        if current:IsA("Model") and Players:GetPlayerFromCharacter(current) then
+            return true
+        end
+        current = current.Parent
+        depth = depth + 1
     end
-    if Players:GetPlayerFromCharacter(model) or model == LocalPlayer.Character then
-        return false
+    return false
+end
+
+local function getMobDisplayName(model, humanoid)
+    for _, attributeName in ipairs(State.MobDisplayAttributeNames) do
+        local value = model:GetAttribute(attributeName)
+        if type(value) == "string" and value ~= "" then
+            return value
+        end
+    end
+
+    if humanoid and humanoid.DisplayName and humanoid.DisplayName ~= "" then
+        local lowerDisplayName = string.lower(humanoid.DisplayName)
+        if lowerDisplayName ~= "humanoid" and not GenericMobNames[lowerDisplayName] then
+            return humanoid.DisplayName
+        end
+    end
+
+    if not GenericMobNames[string.lower(model.Name)] then
+        return model.Name
+    end
+
+    local ancestor = model.Parent
+    local depth = 0
+    while ancestor and ancestor ~= Workspace and depth < 4 do
+        local lowerName = string.lower(ancestor.Name)
+        local genericContainer = lowerName == "workspace" or lowerName == "folder" or lowerName == "entities" or lowerName == "characters" or lowerName == "map"
+        if not GenericMobNames[lowerName] and not genericContainer then
+            return ancestor.Name
+        end
+        ancestor = ancestor.Parent
+        depth = depth + 1
+    end
+    return model.Name
+end
+
+local function classifyMob(model)
+    if not model or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then
+        return nil
+    end
+    if belongsToPlayerCharacter(model) then
+        return nil
     end
 
     local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        return humanoid.Health > 0 and getAdorneeRoot(model) ~= nil
+    local metadata = not humanoid and hasEnemyMetadata(model)
+    if not humanoid and not metadata then
+        return nil
+    end
+    if humanoid and humanoid.Health <= 0 then
+        return nil
     end
 
-    local controller = model:FindFirstChildOfClass("AnimationController")
-    if controller and hasEnemyMetadata(model) then
-        return getAdorneeRoot(model) ~= nil
+    local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or getAdorneeRoot(model)
+    if not root then
+        return nil
     end
 
-    if hasEnemyMetadata(model) then
-        local health = model:GetAttribute("Health") or model:GetAttribute("HP")
-        return getAdorneeRoot(model) ~= nil and (health == nil or type(health) ~= "number" or health > 0)
-    end
+    return {
+        Humanoid = humanoid,
+        Root = root,
+        DisplayName = getMobDisplayName(model, humanoid),
+        LastValidated = os.clock()
+    }
+end
 
+local function parseMobManualNames(text)
+    local parsed = {}
+    local count = 0
+    for entry in string.gmatch(tostring(text or ""), "[^,]+") do
+        local trimmed = string.gsub(entry, "^%s*(.-)%s*$", "%1")
+        if trimmed ~= "" then
+            local key = string.lower(trimmed)
+            if not parsed[key] then
+                parsed[key] = true
+                count = count + 1
+            end
+        end
+    end
+    State.MobManualNames = parsed
+    State.MobFilterText = tostring(text or "")
+    return count
+end
+
+local function isMobAllowedByManualFilter(model, classification)
+    if not State.MobManualFilterEnabled then
+        return true
+    end
+    local names = State.MobManualNames
+    if names[string.lower(model.Name)] then
+        return true
+    end
+    if classification and classification.DisplayName and names[string.lower(classification.DisplayName)] then
+        return true
+    end
+    local humanoid = classification and classification.Humanoid
+    if humanoid and humanoid.DisplayName and names[string.lower(humanoid.DisplayName)] then
+        return true
+    end
     return false
+end
+
+local function collectMobNamesInRadius()
+    local _, _, localRoot = getCharacter()
+    if not localRoot then
+        return {}, 0
+    end
+    local maximumStuds = State.MobFilterScanRadiusMeters / 0.28
+    local uniqueNames = {}
+    local names = {}
+    for model, classification in pairs(MobCache) do
+        if model and model.Parent and type(classification) == "table" then
+            local root = classification.Root
+            if root and root.Parent and (root.Position - localRoot.Position).Magnitude <= maximumStuds then
+                local displayName = classification.DisplayName or model.Name
+                local key = string.lower(displayName)
+                if displayName ~= "" and not uniqueNames[key] then
+                    uniqueNames[key] = true
+                    table.insert(names, displayName)
+                end
+            end
+        end
+    end
+    table.sort(names, function(left, right)
+        return string.lower(left) < string.lower(right)
+    end)
+    return names, #names
+end
+
+local function removeMobFromCache(model)
+    MobCache[model] = nil
+    local visual = Visuals.Mob[model]
+    if visual then
+        destroyVisual(visual)
+        Visuals.Mob[model] = nil
+    end
 end
 
 local function considerMob(instance)
@@ -2249,30 +2551,35 @@ local function considerMob(instance)
     else
         model = instance:FindFirstAncestorOfClass("Model")
     end
-    if model and isMobModel(model) then
-        MobCache[model] = true
+    if not model or not model:IsA("Model") then
+        return
+    end
+
+    local classification = classifyMob(model)
+    if classification then
+        MobCache[model] = classification
+    elseif MobCache[model] then
+        removeMobFromCache(model)
     end
 end
 
 local function rescanMobs()
+    if State.MobScanRunning then
+        return
+    end
+    State.MobScanRunning = true
     local descendants = Workspace:GetDescendants()
     for index, instance in ipairs(descendants) do
         if instance:IsA("Model") then
             considerMob(instance)
         end
-        if index % 1200 == 0 then
+        if index % 1400 == 0 then
             task.wait()
         end
     end
+    State.MobScanRunning = false
 end
 
-connect(Workspace.DescendantAdded, function(instance)
-    task.defer(function()
-        if instance.Parent then
-            considerMob(instance)
-        end
-    end)
-end)
 connect(Workspace.DescendantRemoving, function(instance)
     if MobCache[instance] then
         MobCache[instance] = nil
@@ -2295,9 +2602,10 @@ end)
 task.spawn(rescanMobs)
 
 local ItemHints = {"item", "pickup", "drop", "loot", "collect", "coin", "chest", "fruit", "weapon", "key", "potion", "gem", "ore", "crate"}
+ItemHints.Attributes = {"Item", "IsItem", "Pickup", "IsPickup", "Collectible", "Loot", "Drop"}
 
 local function isCharacterDescendant(instance)
-    local model = instance:FindFirstAncestorOfClass("Model")
+    local model = instance:IsA("Model") and instance or instance:FindFirstAncestorOfClass("Model")
     if not model then
         return false
     end
@@ -2307,20 +2615,69 @@ local function isCharacterDescendant(instance)
     return model:FindFirstChildOfClass("Humanoid") ~= nil
 end
 
-local function hasItemMetadata(instance)
-    for _, tag in ipairs(CollectionService:GetTags(instance)) do
-        if textHasHint(tag, ItemHints) then
+local function isPlayerCharacterDescendant(instance)
+    local current = instance
+    local depth = 0
+    while current and current ~= Workspace and depth < 12 do
+        if current:IsA("Model") and Players:GetPlayerFromCharacter(current) then
             return true
         end
+        current = current.Parent
+        depth = depth + 1
     end
-    local attributes = {"Item", "IsItem", "Pickup", "IsPickup", "Collectible", "Loot", "Drop"}
-    for _, name in ipairs(attributes) do
+    return false
+end
+
+local function findClosestNamedWorldObject(name)
+    local normalized = string.lower(string.gsub(tostring(name or ""), "^%s*(.-)%s*$", "%1"))
+    if normalized == "" then
+        return nil, nil
+    end
+
+    local _, _, localRoot = getCharacter()
+    local origin = localRoot and localRoot.Position or Camera.CFrame.Position
+    local closestObject
+    local closestRoot
+    local closestDistance = math.huge
+    local descendants = Workspace:GetDescendants()
+
+    for index, instance in ipairs(descendants) do
+        if string.lower(instance.Name) == normalized and (instance:IsA("Model") or instance:IsA("Tool") or instance:IsA("BasePart")) then
+            if not isPlayerCharacterDescendant(instance) then
+                local objectRoot = getAdorneeRoot(instance)
+                if objectRoot then
+                    local distance = (objectRoot.Position - origin).Magnitude
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestObject = instance
+                        closestRoot = objectRoot
+                    end
+                end
+            end
+        end
+        if index % 1800 == 0 then
+            task.wait()
+        end
+    end
+    return closestObject, closestRoot
+end
+
+local function hasItemMetadata(instance)
+    if textHasHint(instance.Name, ItemHints) then
+        return true
+    end
+    for _, name in ipairs(ItemHints.Attributes) do
         local value = instance:GetAttribute(name)
         if value == true or type(value) == "string" and textHasHint(value, ItemHints) then
             return true
         end
     end
-    return textHasHint(instance.Name, ItemHints)
+    for _, tag in ipairs(CollectionService:GetTags(instance)) do
+        if textHasHint(tag, ItemHints) then
+            return true
+        end
+    end
+    return false
 end
 
 local function findExactAncestor(part, exactLower)
@@ -2363,6 +2720,32 @@ local function findAutomaticItem(part)
     end
     return best
 end
+
+connect(Workspace.DescendantAdded, function(instance)
+    if State.FPSBoostApplied and (instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles")) then
+        if FPSBackup[instance] == nil then
+            FPSBackup[instance] = instance.Enabled
+        end
+        instance.Enabled = false
+    end
+
+    if instance:IsA("Model") or instance:IsA("Humanoid") or instance:IsA("AnimationController") or instance:IsA("BasePart") and instance.Name == "HumanoidRootPart" then
+        task.defer(function()
+            if instance.Parent then
+                considerMob(instance)
+            end
+        end)
+    end
+
+    local exactLower = string.lower(State.ItemESP.ExactName)
+    if exactLower ~= "" and string.lower(instance.Name) == exactLower and (instance:IsA("Model") or instance:IsA("Tool") or instance:IsA("BasePart")) then
+        task.defer(function()
+            if instance:IsDescendantOf(Workspace) and not isCharacterDescendant(instance) then
+                ItemCache[instance] = true
+            end
+        end)
+    end
+end)
 
 scanItems = function(forceNotification)
     if State.ItemScanRunning then
@@ -2600,15 +2983,32 @@ local function hopServer(preferFew)
     end)
 end
 
-local function setFPSBoost(enabled)
+local function setFPSBoost(enabled, silent)
     State.FPSBoost = enabled
     if enabled then
-        for _, instance in ipairs(Workspace:GetDescendants()) do
+        if State.FPSBoostApplied then
+            return
+        end
+        State.FPSBoostApplied = true
+        pcall(function()
+            State.RenderQualityBackup = settings().Rendering.QualityLevel
+        end)
+        if gethiddenproperty then
+            pcall(function()
+                State.TerrainDecorationBackup = gethiddenproperty(Workspace.Terrain, "Decoration")
+            end)
+        end
+
+        local descendants = Workspace:GetDescendants()
+        for index, instance in ipairs(descendants) do
             if instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles") then
                 if FPSBackup[instance] == nil then
                     FPSBackup[instance] = instance.Enabled
                 end
                 instance.Enabled = false
+            end
+            if index % 1200 == 0 then
+                task.wait()
             end
         end
         Lighting.GlobalShadows = false
@@ -2618,8 +3018,14 @@ local function setFPSBoost(enabled)
         pcall(function()
             sethiddenproperty(Workspace.Terrain, "Decoration", false)
         end)
-        notify("FPS Boost đã bật.", Theme.Success)
+        if not silent then
+            notify("FPS Boost đã bật.", Theme.Success)
+        end
     else
+        if not State.FPSBoostApplied then
+            return
+        end
+        State.FPSBoostApplied = false
         for instance, enabledValue in pairs(FPSBackup) do
             if instance and instance.Parent then
                 pcall(function()
@@ -2631,29 +3037,401 @@ local function setFPSBoost(enabled)
         if State.FullBrightLevel == nil then
             Lighting.GlobalShadows = OriginalLighting.GlobalShadows
         end
+        if State.RenderQualityBackup ~= nil then
+            pcall(function()
+                settings().Rendering.QualityLevel = State.RenderQualityBackup
+            end)
+        end
         pcall(function()
-            sethiddenproperty(Workspace.Terrain, "Decoration", true)
+            local decoration = State.TerrainDecorationBackup
+            sethiddenproperty(Workspace.Terrain, "Decoration", decoration == nil and true or decoration)
         end)
-        notify("FPS Boost đã tắt.", Theme.Success)
+        State.RenderQualityBackup = nil
+        State.TerrainDecorationBackup = nil
+        if not silent then
+            notify("FPS Boost đã tắt.", Theme.Success)
+        end
     end
 end
 
-connect(Workspace.DescendantAdded, function(instance)
-    if State.FPSBoost and (instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles")) then
-        FPSBackup[instance] = instance.Enabled
-        instance.Enabled = false
+Extensions.ConfigFolder = "RaphaelSovereign"
+Extensions.ConfigPath = "RaphaelSovereign/V6_4_Config.json"
+
+function Extensions.BuildConfig()
+    return {
+        Version = 3,
+        AutoLoad = State.ConfigAutoLoad,
+        Movement = {
+            SpeedValue = State.SpeedValue,
+            SpeedMethod = State.SpeedMethod,
+            JumpValue = State.JumpValue,
+            JumpMethod = State.JumpMethod,
+            InfiniteJump = State.InfiniteJump,
+            Noclip = State.Noclip,
+            NoclipMethod = State.NoclipMethod,
+            GravityValue = State.GravityValue
+        },
+        PlayerESP = {
+            Enabled = State.PlayerESP.Enabled,
+            Tracer = State.PlayerESP.Tracer,
+            Box = State.PlayerESP.Box,
+            BoxMode = State.PlayerESP.BoxMode,
+            Name = State.PlayerESP.Name,
+            Health = State.PlayerESP.Health,
+            Distance = State.PlayerESP.Distance,
+            MaxDistanceMeters = State.PlayerESP.MaxDistanceMeters
+        },
+        MobESP = {
+            Enabled = State.MobESP.Enabled,
+            Tracer = State.MobESP.Tracer,
+            Box = State.MobESP.Box,
+            BoxMode = State.MobESP.BoxMode,
+            Name = State.MobESP.Name,
+            Health = State.MobESP.Health,
+            Distance = State.MobESP.Distance,
+            MaxDistanceMeters = State.MobESP.MaxDistanceMeters,
+            MaxTargets = State.MobESP.MaxTargets
+        },
+        ItemESP = {
+            Enabled = State.ItemESP.Enabled,
+            Tracer = State.ItemESP.Tracer,
+            Box = State.ItemESP.Box,
+            BoxMode = State.ItemESP.BoxMode,
+            Name = State.ItemESP.Name,
+            Health = State.ItemESP.Health,
+            Distance = State.ItemESP.Distance,
+            RadiusMeters = State.ItemESP.RadiusMeters,
+            ExactName = State.ItemESP.ExactName
+        },
+        Vision = {
+            ClockTime = State.ClockTime == nil and false or State.ClockTime,
+            FullBrightEnabled = State.RemoveEffects,
+            FullBrightLevel = State.FullBrightLevel or 0,
+            XRay = State.XRay,
+            XRayMethod = State.XRayMethod,
+            XRayWallTransparency = State.XRayWallTransparency,
+            CameraFov = State.CameraFov,
+            UnlockZoom = State.UnlockZoom
+        },
+        Travel = {
+            TelePlayerMode = State.TelePlayerMode,
+            TeleItemMode = State.TeleItemMode,
+            TravelSpeed = State.TravelSpeed,
+            SavedButtonName = State.SavedButtonName
+        },
+        MobFilter = {
+            Enabled = State.MobManualFilterEnabled,
+            Text = State.MobFilterText,
+            ScanRadiusMeters = State.MobFilterScanRadiusMeters
+        },
+        Misc = {
+            NoVoid = State.NoVoid,
+            NoVoidMargin = State.NoVoidMargin,
+            AntiAFK = State.AntiAFK,
+            AntiRagdoll = State.AntiRagdoll,
+            FPSBoost = State.FPSBoost,
+            ESPRefreshMode = State.ESPRefreshMode
+        }
+    }
+end
+
+function Extensions.SyncConfigControls()
+    local controls = State.ConfigControls
+    local textValues = {
+        SpeedValue = State.SpeedValue,
+        JumpValue = State.JumpValue,
+        GravityValue = State.GravityValue,
+        PlayerESPDistance = State.PlayerESP.MaxDistanceMeters,
+        MobESPMaxTargets = State.MobESP.MaxTargets,
+        MobESPDistance = State.MobESP.MaxDistanceMeters,
+        ItemExactName = State.ItemESP.ExactName,
+        ItemRadius = State.ItemESP.RadiusMeters,
+        FullBrightLevel = State.FullBrightLevel or 0,
+        XRayTransparency = State.XRayWallTransparency,
+        CameraFov = State.CameraFov,
+        TravelSpeed = State.TravelSpeed,
+        SavedButtonName = State.SavedButtonName,
+        MobFilterRadius = State.MobFilterScanRadiusMeters,
+        NoVoidMargin = State.NoVoidMargin
+    }
+    if State.ClockTime ~= nil then
+        textValues.ClockTime = State.ClockTime
     end
-end)
+    for name, value in pairs(textValues) do
+        local control = controls[name]
+        if control and control:IsA("TextBox") then
+            control.Text = tostring(value)
+        end
+    end
+    if State.MobFilterBox then
+        State.MobFilterBox.Text = State.MobFilterText or ""
+    end
+
+    local selectorValues = {
+        SpeedMethod = State.SpeedMethod,
+        JumpMethod = State.JumpMethod,
+        NoclipMethod = State.NoclipMethod,
+        PlayerESPBoxMode = State.PlayerESP.BoxMode,
+        MobESPBoxMode = State.MobESP.BoxMode,
+        ItemESPBoxMode = State.ItemESP.BoxMode,
+        XRayMethod = State.XRayMethod,
+        TelePlayerMode = State.TelePlayerMode,
+        TeleItemMode = State.TeleItemMode,
+        ESPRefreshMode = State.ESPRefreshMode
+    }
+    for name, value in pairs(selectorValues) do
+        local control = controls[name]
+        if control and control.Set then
+            control.Set(value, true)
+        end
+    end
+
+    local toggleValues = {
+        InfiniteJump = State.InfiniteJump,
+        Noclip = State.Noclip,
+        PlayerESPEnabled = State.PlayerESP.Enabled,
+        PlayerESPTracer = State.PlayerESP.Tracer,
+        PlayerESPBox = State.PlayerESP.Box,
+        PlayerESPName = State.PlayerESP.Name,
+        PlayerESPHealth = State.PlayerESP.Health,
+        PlayerESPDistanceToggle = State.PlayerESP.Distance,
+        MobESPEnabled = State.MobESP.Enabled,
+        MobESPTracer = State.MobESP.Tracer,
+        MobESPBox = State.MobESP.Box,
+        MobESPName = State.MobESP.Name,
+        MobESPHealth = State.MobESP.Health,
+        MobESPDistanceToggle = State.MobESP.Distance,
+        ItemESPEnabled = State.ItemESP.Enabled,
+        ItemESPTracer = State.ItemESP.Tracer,
+        ItemESPBox = State.ItemESP.Box,
+        ItemESPName = State.ItemESP.Name,
+        ItemESPHealth = State.ItemESP.Health,
+        ItemESPDistanceToggle = State.ItemESP.Distance,
+        FullBrightEnabled = State.RemoveEffects,
+        XRay = State.XRay,
+        UnlockZoom = State.UnlockZoom,
+        MobFilterEnabled = State.MobManualFilterEnabled,
+        NoVoid = State.NoVoid,
+        AntiAFK = State.AntiAFK,
+        AntiRagdoll = State.AntiRagdoll,
+        FPSBoost = State.FPSBoost,
+        ConfigAutoLoad = State.ConfigAutoLoad
+    }
+    for name, value in pairs(toggleValues) do
+        local control = controls[name]
+        if control and control.Set then
+            control.Set(value, true)
+        end
+    end
+end
+
+function Extensions.ApplyConfig(config, silent)
+    if type(config) ~= "table" then
+        if not silent then notify("Config không hợp lệ.", Theme.Danger) end
+        return false
+    end
+
+    local function booleanValue(source, key, fallback)
+        if type(source[key]) == "boolean" then
+            return source[key]
+        end
+        return fallback
+    end
+    local function allowed(value, options, fallback)
+        return table.find(options, value) and value or fallback
+    end
+
+    local movement = type(config.Movement) == "table" and config.Movement or {}
+    State.SpeedValue = math.clamp(tonumber(movement.SpeedValue) or State.SpeedValue, 0, 1000)
+    State.SpeedMethod = allowed(movement.SpeedMethod, {"WalkSpeed", "Velocity", "CFrame"}, State.SpeedMethod)
+    State.JumpValue = math.clamp(tonumber(movement.JumpValue) or State.JumpValue, 0, 1000)
+    State.JumpMethod = allowed(movement.JumpMethod, {"JumpPower", "JumpHeight", "Velocity"}, State.JumpMethod)
+    State.InfiniteJump = booleanValue(movement, "InfiniteJump", State.InfiniteJump)
+    State.Noclip = booleanValue(movement, "Noclip", State.Noclip)
+    State.NoclipMethod = allowed(movement.NoclipMethod, {"Toàn thân", "Chỉ Root", "State + Parts"}, State.NoclipMethod)
+    State.GravityValue = math.clamp(tonumber(movement.GravityValue) or State.GravityValue, 0, 1000)
+
+    local function applyESP(target, source, includeRadius)
+        if type(source) ~= "table" then return end
+        target.Enabled = booleanValue(source, "Enabled", target.Enabled)
+        target.Tracer = booleanValue(source, "Tracer", target.Tracer)
+        target.Box = booleanValue(source, "Box", target.Box)
+        target.BoxMode = allowed(source.BoxMode, {"2D", "Skin"}, target.BoxMode)
+        target.Name = booleanValue(source, "Name", target.Name)
+        target.Health = booleanValue(source, "Health", target.Health)
+        target.Distance = booleanValue(source, "Distance", target.Distance)
+        if source.MaxDistanceMeters ~= nil then
+            target.MaxDistanceMeters = math.clamp(tonumber(source.MaxDistanceMeters) or target.MaxDistanceMeters, 1, 10000)
+        end
+        if includeRadius and source.RadiusMeters ~= nil then
+            target.RadiusMeters = math.clamp(tonumber(source.RadiusMeters) or target.RadiusMeters, 1, 10000)
+        end
+    end
+    applyESP(State.PlayerESP, config.PlayerESP, false)
+    applyESP(State.MobESP, config.MobESP, false)
+    applyESP(State.ItemESP, config.ItemESP, true)
+    if type(config.MobESP) == "table" then
+        State.MobESP.MaxTargets = math.clamp(tonumber(config.MobESP.MaxTargets) or State.MobESP.MaxTargets, 1, 150)
+    end
+    if type(config.ItemESP) == "table" then
+        State.ItemESP.ExactName = tostring(config.ItemESP.ExactName or "")
+    end
+
+    local vision = type(config.Vision) == "table" and config.Vision or {}
+    State.ClockTime = type(vision.ClockTime) == "number" and math.clamp(vision.ClockTime, 1, 24) or nil
+    State.RemoveEffects = booleanValue(vision, "FullBrightEnabled", State.RemoveEffects)
+    State.FullBrightLevel = State.RemoveEffects and math.clamp(tonumber(vision.FullBrightLevel) or 0, 0, 20) or nil
+    State.XRay = booleanValue(vision, "XRay", State.XRay)
+    State.XRayMethod = allowed(vision.XRayMethod, {"Hybrid", "Outline", "Wall Transparency"}, State.XRayMethod)
+    State.XRayWallTransparency = math.clamp(tonumber(vision.XRayWallTransparency) or State.XRayWallTransparency, 0.1, 0.95)
+    State.CameraFov = math.clamp(tonumber(vision.CameraFov) or State.CameraFov, 1, 120)
+    State.UnlockZoom = booleanValue(vision, "UnlockZoom", State.UnlockZoom)
+
+    local travel = type(config.Travel) == "table" and config.Travel or {}
+    State.TelePlayerMode = allowed(travel.TelePlayerMode, {"Instant", "Fly"}, State.TelePlayerMode)
+    State.TeleItemMode = allowed(travel.TeleItemMode, {"Instant", "Fly"}, State.TeleItemMode)
+    State.TravelSpeed = math.clamp(tonumber(travel.TravelSpeed) or State.TravelSpeed, 10, 1000)
+    State.SavedButtonName = tostring(travel.SavedButtonName or State.SavedButtonName)
+
+    local filter = type(config.MobFilter) == "table" and config.MobFilter or {}
+    State.MobManualFilterEnabled = booleanValue(filter, "Enabled", State.MobManualFilterEnabled)
+    State.MobFilterText = tostring(filter.Text or State.MobFilterText or "")
+    State.MobFilterScanRadiusMeters = math.clamp(tonumber(filter.ScanRadiusMeters) or State.MobFilterScanRadiusMeters, 10, 5000)
+    parseMobManualNames(State.MobFilterText)
+
+    local misc = type(config.Misc) == "table" and config.Misc or {}
+    local previousFPSBoost = State.FPSBoost
+    State.NoVoid = booleanValue(misc, "NoVoid", State.NoVoid)
+    State.NoVoidMargin = math.clamp(tonumber(misc.NoVoidMargin) or State.NoVoidMargin, 5, 200)
+    State.AntiAFK = booleanValue(misc, "AntiAFK", State.AntiAFK)
+    State.AntiRagdoll = booleanValue(misc, "AntiRagdoll", State.AntiRagdoll)
+    State.FPSBoost = booleanValue(misc, "FPSBoost", State.FPSBoost)
+    State.ESPRefreshMode = allowed(misc.ESPRefreshMode, {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode)
+    if type(config.AutoLoad) == "boolean" then
+        State.ConfigAutoLoad = config.AutoLoad
+    end
+
+    Extensions.SyncConfigControls()
+    if not State.Noclip then
+        restoreCollisions()
+    end
+    LocalPlayer.CameraMinZoomDistance = State.UnlockZoom and 0.5 or OriginalCamera.MinZoom
+    LocalPlayer.CameraMaxZoomDistance = State.UnlockZoom and 10000 or OriginalCamera.MaxZoom
+    if not State.AntiRagdoll then
+        local _, humanoid = getCharacter()
+        if humanoid then
+            pcall(function()
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            end)
+        end
+    end
+    Workspace.Gravity = State.GravityValue
+    Camera = Workspace.CurrentCamera or Camera
+    Camera.FieldOfView = State.CameraFov
+    removeAllVisuals()
+    if State.RemoveEffects then
+        applyNoEffects()
+        applyFullBright()
+    else
+        restoreEffects()
+        restoreLightingVisuals()
+    end
+    if not State.XRay then
+        restoreXRayOccluders()
+    end
+    if previousFPSBoost ~= State.FPSBoost then
+        setFPSBoost(State.FPSBoost, true)
+    elseif State.FPSBoostApplied then
+        Lighting.GlobalShadows = false
+    end
+    if State.MobESP.Enabled or State.XRay then
+        if next(MobCache) == nil then
+            task.spawn(rescanMobs)
+        end
+    end
+    if State.ItemESP.Enabled or State.XRay then
+        task.spawn(function()
+            scanItems(false)
+        end)
+    end
+    if not silent then
+        notify("Đã áp dụng config V6.4.", Theme.Success)
+    end
+    return true
+end
+
+function Extensions.ReadConfig(silent)
+    if not readfile or not isfile then
+        if not silent then notify("DeltaX không cung cấp readfile/isfile.", Theme.Danger) end
+        return nil
+    end
+    if not isfile(Extensions.ConfigPath) then
+        if not silent then notify("Chưa có config đã lưu.", Theme.Warning) end
+        return nil
+    end
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(readfile(Extensions.ConfigPath))
+    end)
+    if not success or type(result) ~= "table" then
+        if not silent then notify("Không đọc được config: " .. tostring(result), Theme.Danger) end
+        return nil
+    end
+    return result
+end
+
+function Extensions.SaveConfig()
+    if not writefile then
+        notify("DeltaX không cung cấp writefile.", Theme.Danger)
+        return false
+    end
+    local success, result = pcall(function()
+        if makefolder and (not isfolder or not isfolder(Extensions.ConfigFolder)) then
+            makefolder(Extensions.ConfigFolder)
+        end
+        writefile(Extensions.ConfigPath, HttpService:JSONEncode(Extensions.BuildConfig()))
+    end)
+    if success then
+        notify("Đã lưu config vào " .. Extensions.ConfigPath, Theme.Success)
+        return true
+    end
+    notify("Lưu config thất bại: " .. tostring(result), Theme.Danger)
+    return false
+end
+
+function Extensions.LoadConfig(silent)
+    local config = Extensions.ReadConfig(silent)
+    if not config then return false end
+    return Extensions.ApplyConfig(config, silent)
+end
+
+function Extensions.DeleteConfig()
+    if not delfile or not isfile then
+        notify("DeltaX không cung cấp delfile/isfile.", Theme.Danger)
+        return false
+    end
+    local success, result = pcall(function()
+        if isfile(Extensions.ConfigPath) then
+            delfile(Extensions.ConfigPath)
+        end
+    end)
+    if success then
+        notify("Đã xoá config V6.4.", Theme.Success)
+        return true
+    end
+    notify("Xoá config thất bại: " .. tostring(result), Theme.Danger)
+    return false
+end
 
 do
 local SpeedSection = createSection(MovementPage, "Speed", "Giá trị được áp dụng ngay khi nhập; không cần công tắc bật/tắt.")
-createInput(SpeedSection, "Tốc độ", State.SpeedValue, "1 - 1000", true, function(text)
+State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", State.SpeedValue, "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
         State.SpeedValue = math.clamp(value, 0, 1000)
     end
 end)
-createSelector(SpeedSection, "Phương thức", {"WalkSpeed", "Velocity", "CFrame"}, State.SpeedMethod, function(value)
+State.ConfigControls.SpeedMethod = createSelector(SpeedSection, "Phương thức", {"WalkSpeed", "Velocity", "CFrame"}, State.SpeedMethod, function(value)
     resetSpeedSideEffects()
     State.SpeedMethod = value
     notify("Speed Method: " .. value, Theme.Success)
@@ -2666,8 +3444,11 @@ createButton(SpeedSection, "Khôi phục tốc độ mặc định", function()
     notify("Đã khôi phục tốc độ nhân vật.", Theme.Success)
 end, Theme.SurfaceLight)
 
+end
+
+do
 local JumpSection = createSection(MovementPage, "Jump", "JumpPower và JumpHeight được duy trì phía client. Velocity phù hợp game ghi đè thuộc tính Humanoid.")
-createInput(JumpSection, "Lực/độ cao nhảy", State.JumpValue, "1 - 1000", true, function(text)
+State.ConfigControls.JumpValue = createInput(JumpSection, "Lực/độ cao nhảy", State.JumpValue, "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
         State.JumpValue = math.clamp(value, 0, 1000)
@@ -2684,26 +3465,32 @@ createInput(JumpSection, "Lực/độ cao nhảy", State.JumpValue, "1 - 1000", 
         end
     end
 end)
-createSelector(JumpSection, "Phương thức", {"JumpPower", "JumpHeight", "Velocity"}, State.JumpMethod, function(value)
+State.ConfigControls.JumpMethod = createSelector(JumpSection, "Phương thức", {"JumpPower", "JumpHeight", "Velocity"}, State.JumpMethod, function(value)
     State.JumpMethod = value
     notify("Jump Method: " .. value, Theme.Success)
 end)
-createToggle(JumpSection, "Infinite Jump không delay", false, function(value)
+State.ConfigControls.InfiniteJump = createToggle(JumpSection, "Infinite Jump không delay", false, function(value)
     State.InfiniteJump = value
 end)
 
+end
+
+do
 local NoclipSection = createSection(MovementPage, "Noclip", "Chọn cách xử lý phù hợp cấu trúc va chạm của từng game.")
-createToggle(NoclipSection, "Bật Noclip", false, function(value)
+State.ConfigControls.Noclip = createToggle(NoclipSection, "Bật Noclip", false, function(value)
     State.Noclip = value
     if not value then
         restoreCollisions()
     end
 end)
-createSelector(NoclipSection, "Phương thức", {"Toàn thân", "Chỉ Root", "State + Parts"}, State.NoclipMethod, function(value)
+State.ConfigControls.NoclipMethod = createSelector(NoclipSection, "Phương thức", {"Toàn thân", "Chỉ Root", "State + Parts"}, State.NoclipMethod, function(value)
     restoreCollisions()
     State.NoclipMethod = value
 end)
 
+end
+
+do
 local FlySection = createSection(MovementPage, "FlyGuiV3", "Tải trực tiếp FlyGuiV3 theo nguồn Ngài chỉ định; có thể ẩn/hiện hoặc xoá giao diện.")
 createButton(FlySection, "Tải và chạy FlyGuiV3", function()
     task.spawn(loadFlyGui)
@@ -2712,8 +3499,11 @@ createDualButtons(FlySection, "Ẩn / Hiện", function()
     setFlyHidden(not State.FlyHidden)
 end, "Xoá Fly", deleteFlyGui, Theme.SurfaceLight, Theme.Danger)
 
+end
+
+do
 local GravitySection = createSection(MovementPage, "Movement bổ sung", "Trọng lực chỉ thay đổi ở client và được duy trì liên tục.")
-createInput(GravitySection, "Gravity", string.format("%.1f", Workspace.Gravity), "0 - 1000", true, function(text)
+State.ConfigControls.GravityValue = createInput(GravitySection, "Gravity", string.format("%.1f", Workspace.Gravity), "0 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
         State.GravityValue = math.clamp(value, 0, 1000)
@@ -2725,69 +3515,86 @@ createButton(GravitySection, "Khôi phục Gravity", function()
     notify("Đã khôi phục Gravity.", Theme.Success)
 end, Theme.SurfaceLight)
 
+end
+
+do
 local ColorSection = createSection(ESPPage, "Bảng màu phân loại", "Màu cố định giúp không nhầm mục tiêu giữa Player, Quái và Item.")
 createColorLegend(ColorSection)
 
+end
+
+do
 local PlayerESPSection = createSection(ESPPage, "ESP Player", "Tracer bắt đầu chính xác từ giữa màn hình. Khoảng cách hiển thị theo mét, quy đổi 1 stud ≈ 0.28 m.")
-createToggle(PlayerESPSection, "Bật ESP Player", false, function(value)
+State.ConfigControls.PlayerESPEnabled = createToggle(PlayerESPSection, "Bật ESP Player", false, function(value)
     State.PlayerESP.Enabled = value
     if not value then
         removeAllVisuals("Player")
     end
 end)
-createToggle(PlayerESPSection, "Tracer", State.PlayerESP.Tracer, function(value)
+State.ConfigControls.PlayerESPTracer = createToggle(PlayerESPSection, "Tracer", State.PlayerESP.Tracer, function(value)
     State.PlayerESP.Tracer = value
 end)
-createToggle(PlayerESPSection, "Khung", State.PlayerESP.Box, function(value)
+State.ConfigControls.PlayerESPBox = createToggle(PlayerESPSection, "Khung", State.PlayerESP.Box, function(value)
     State.PlayerESP.Box = value
 end)
-createSelector(PlayerESPSection, "Kiểu khung", {"2D", "Skin"}, State.PlayerESP.BoxMode, function(value)
+State.ConfigControls.PlayerESPBoxMode = createSelector(PlayerESPSection, "Kiểu khung", {"2D", "Skin"}, State.PlayerESP.BoxMode, function(value)
     State.PlayerESP.BoxMode = value
 end)
-createToggle(PlayerESPSection, "Hiện tên", State.PlayerESP.Name, function(value)
+State.ConfigControls.PlayerESPName = createToggle(PlayerESPSection, "Hiện tên", State.PlayerESP.Name, function(value)
     State.PlayerESP.Name = value
 end)
-createToggle(PlayerESPSection, "Hiện HP", State.PlayerESP.Health, function(value)
+State.ConfigControls.PlayerESPHealth = createToggle(PlayerESPSection, "Hiện HP", State.PlayerESP.Health, function(value)
     State.PlayerESP.Health = value
 end)
-createToggle(PlayerESPSection, "Hiện khoảng cách", State.PlayerESP.Distance, function(value)
+State.ConfigControls.PlayerESPDistanceToggle = createToggle(PlayerESPSection, "Hiện khoảng cách", State.PlayerESP.Distance, function(value)
     State.PlayerESP.Distance = value
 end)
-createInput(PlayerESPSection, "Tầm ESP tối đa (m)", State.PlayerESP.MaxDistanceMeters, "1 - 10000", true, function(text)
+State.ConfigControls.PlayerESPDistance = createInput(PlayerESPSection, "Tầm ESP tối đa (m)", State.PlayerESP.MaxDistanceMeters, "1 - 10000", true, function(text)
     local value = tonumber(text)
     if value then
         State.PlayerESP.MaxDistanceMeters = math.clamp(value, 1, 10000)
     end
 end)
 
-local MobESPSection = createSection(ESPPage, "ESP Quái", "Bộ dò nhận Humanoid, AnimationController, tag, attribute và cấu trúc folder Enemy/Mob/NPC/Boss; không loại Dummy hoặc NPC.")
-createToggle(MobESPSection, "Bật ESP Quái", false, function(value)
+end
+
+do
+local MobESPSection = createSection(ESPPage, "ESP Quái", "Quét Broad tương thích tối đa. Danh sách lọc tên quái được cấu hình trong tab Misc để loại AmmoBox, props và Model không cần thiết.")
+State.ConfigControls.MobESPEnabled = createToggle(MobESPSection, "Bật ESP Quái", false, function(value)
     State.MobESP.Enabled = value
     if value then
-        task.spawn(rescanMobs)
+        if next(MobCache) == nil then
+            task.spawn(rescanMobs)
+        end
     else
         removeAllVisuals("Mob")
     end
 end)
-createToggle(MobESPSection, "Tracer", State.MobESP.Tracer, function(value)
+State.ConfigControls.MobESPMaxTargets = createInput(MobESPSection, "Số quái hiển thị tối đa", State.MobESP.MaxTargets, "1 - 150", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.MobESP.MaxTargets = math.floor(math.clamp(value, 1, 150))
+    end
+end)
+State.ConfigControls.MobESPTracer = createToggle(MobESPSection, "Tracer", State.MobESP.Tracer, function(value)
     State.MobESP.Tracer = value
 end)
-createToggle(MobESPSection, "Khung", State.MobESP.Box, function(value)
+State.ConfigControls.MobESPBox = createToggle(MobESPSection, "Khung", State.MobESP.Box, function(value)
     State.MobESP.Box = value
 end)
-createSelector(MobESPSection, "Kiểu khung", {"2D", "Skin"}, State.MobESP.BoxMode, function(value)
+State.ConfigControls.MobESPBoxMode = createSelector(MobESPSection, "Kiểu khung", {"2D", "Skin"}, State.MobESP.BoxMode, function(value)
     State.MobESP.BoxMode = value
 end)
-createToggle(MobESPSection, "Hiện tên", State.MobESP.Name, function(value)
+State.ConfigControls.MobESPName = createToggle(MobESPSection, "Hiện tên", State.MobESP.Name, function(value)
     State.MobESP.Name = value
 end)
-createToggle(MobESPSection, "Hiện HP", State.MobESP.Health, function(value)
+State.ConfigControls.MobESPHealth = createToggle(MobESPSection, "Hiện HP", State.MobESP.Health, function(value)
     State.MobESP.Health = value
 end)
-createToggle(MobESPSection, "Hiện khoảng cách", State.MobESP.Distance, function(value)
+State.ConfigControls.MobESPDistanceToggle = createToggle(MobESPSection, "Hiện khoảng cách", State.MobESP.Distance, function(value)
     State.MobESP.Distance = value
 end)
-createInput(MobESPSection, "Tầm ESP tối đa (m)", State.MobESP.MaxDistanceMeters, "1 - 10000", true, function(text)
+State.ConfigControls.MobESPDistance = createInput(MobESPSection, "Tầm ESP tối đa (m)", State.MobESP.MaxDistanceMeters, "1 - 10000", true, function(text)
     local value = tonumber(text)
     if value then
         State.MobESP.MaxDistanceMeters = math.clamp(value, 1, 10000)
@@ -2804,20 +3611,30 @@ createButton(MobESPSection, "Quét lại toàn bộ quái", function()
     end)
 end, Theme.SurfaceLight)
 
+end
+
+do
 local ItemESPSection = createSection(ESPPage, "ESP Item", "Để trống: tự nhận diện trong bán kính cấu hình. Nhập tên chính xác: quét toàn bộ bản đồ và hiển thị không giới hạn khoảng cách.")
-createToggle(ItemESPSection, "Bật quét Item tự động", false, function(value)
+State.ConfigControls.ItemESPEnabled = createToggle(ItemESPSection, "Bật quét Item tự động", false, function(value)
     State.ItemESP.Enabled = value
     if value then
-        scanItems(true)
+        task.spawn(function()
+            scanItems(true)
+        end)
     else
         table.clear(ItemCache)
         removeAllVisuals("Item")
     end
 end)
-createInput(ItemESPSection, "Tên item chính xác", "", "Để trống = tự phát hiện", false, function(text)
+State.ConfigControls.ItemExactName = createInput(ItemESPSection, "Tên item chính xác", "", "Để trống = tự phát hiện", false, function(text)
     State.ItemESP.ExactName = string.gsub(text, "^%s*(.-)%s*$", "%1")
+    if State.ItemESP.Enabled then
+        task.spawn(function()
+            scanItems(false)
+        end)
+    end
 end)
-createInput(ItemESPSection, "Bán kính quét (m)", State.ItemESP.RadiusMeters, "Khuyến nghị 15", true, function(text)
+State.ConfigControls.ItemRadius = createInput(ItemESPSection, "Bán kính quét (m)", State.ItemESP.RadiusMeters, "Khuyến nghị 15", true, function(text)
     local value = tonumber(text)
     if value then
         State.ItemESP.RadiusMeters = math.clamp(value, 1, 100)
@@ -2826,27 +3643,30 @@ end)
 createButton(ItemESPSection, "Phát hiện ngay", function()
     scanItems(true)
 end, Theme.Accent2)
-createToggle(ItemESPSection, "Tracer", State.ItemESP.Tracer, function(value)
+State.ConfigControls.ItemESPTracer = createToggle(ItemESPSection, "Tracer", State.ItemESP.Tracer, function(value)
     State.ItemESP.Tracer = value
 end)
-createToggle(ItemESPSection, "Khung", State.ItemESP.Box, function(value)
+State.ConfigControls.ItemESPBox = createToggle(ItemESPSection, "Khung", State.ItemESP.Box, function(value)
     State.ItemESP.Box = value
 end)
-createSelector(ItemESPSection, "Kiểu khung", {"2D", "Skin"}, State.ItemESP.BoxMode, function(value)
+State.ConfigControls.ItemESPBoxMode = createSelector(ItemESPSection, "Kiểu khung", {"2D", "Skin"}, State.ItemESP.BoxMode, function(value)
     State.ItemESP.BoxMode = value
 end)
-createToggle(ItemESPSection, "Hiện tên", State.ItemESP.Name, function(value)
+State.ConfigControls.ItemESPName = createToggle(ItemESPSection, "Hiện tên", State.ItemESP.Name, function(value)
     State.ItemESP.Name = value
 end)
-createToggle(ItemESPSection, "Hiện HP / độ bền nếu có", State.ItemESP.Health, function(value)
+State.ConfigControls.ItemESPHealth = createToggle(ItemESPSection, "Hiện HP / độ bền nếu có", State.ItemESP.Health, function(value)
     State.ItemESP.Health = value
 end)
-createToggle(ItemESPSection, "Hiện khoảng cách", State.ItemESP.Distance, function(value)
+State.ConfigControls.ItemESPDistanceToggle = createToggle(ItemESPSection, "Hiện khoảng cách", State.ItemESP.Distance, function(value)
     State.ItemESP.Distance = value
 end)
 
+end
+
+do
 local SkySection = createSection(VisionPage, "Sky", "ClockTime 1–24 được khoá phía client để game không tự ghi đè.")
-createInput(SkySection, "Giờ bầu trời", string.format("%.1f", Lighting.ClockTime), "1 - 24", true, function(text)
+State.ConfigControls.ClockTime = createInput(SkySection, "Giờ bầu trời", string.format("%.1f", Lighting.ClockTime), "1 - 24", true, function(text)
     local value = tonumber(text)
     if value then
         State.ClockTime = math.clamp(value, 1, 24)
@@ -2858,38 +3678,54 @@ createButton(SkySection, "Khôi phục giờ gốc", function()
     notify("Đã khôi phục ClockTime.", Theme.Success)
 end, Theme.SurfaceLight)
 
-local FogSection = createSection(VisionPage, "Fog & hiệu ứng", "Tắt Fog, Atmosphere, Blur, ColorCorrection, DepthOfField, Bloom, SunRays và hiệu ứng mới được game thêm vào.")
-createToggle(FogSection, "Xoá mọi hiệu ứng tối / mờ", false, function(value)
+end
+
+do
+local EnhancedVisionSection = createSection(VisionPage, "Full Bright + No Fog", "Một cơ chế chung: xoá Fog, Atmosphere và PostEffect; Ambient trắng giúp map sáng ngay cả khi mức Brightness bằng 0.")
+local EnhancedVisionToggle
+EnhancedVisionToggle = createToggle(EnhancedVisionSection, "Bật Full Bright + No Fog", false, function(value)
     State.RemoveEffects = value
     if value then
+        if State.FullBrightLevel == nil then
+            State.FullBrightLevel = 0
+        end
         applyNoEffects()
+        applyFullBright()
     else
+        State.FullBrightLevel = nil
         restoreEffects()
+        restoreLightingVisuals()
+        if State.FPSBoostApplied then
+            Lighting.GlobalShadows = false
+        end
     end
 end)
-
-local BrightSection = createSection(VisionPage, "Full Bright", "Nhập mức sáng để kích hoạt ngay. Ambient và OutdoorAmbient được chuyển sang trắng.")
-createInput(BrightSection, "Mức sáng", string.format("%.1f", Lighting.Brightness), "0 - 20", true, function(text)
+State.ConfigControls.FullBrightEnabled = EnhancedVisionToggle
+State.ConfigControls.FullBrightLevel = createInput(EnhancedVisionSection, "Mức Brightness", 0, "0 - 20", true, function(text)
     local value = tonumber(text)
     if value then
         State.FullBrightLevel = math.clamp(value, 0, 20)
+        State.RemoveEffects = true
+        EnhancedVisionToggle.Set(true, false)
+        applyNoEffects()
         applyFullBright()
     end
 end)
-createButton(BrightSection, "Khôi phục ánh sáng gốc", function()
-    State.FullBrightLevel = nil
-    restoreLightingVisuals()
-    if State.RemoveEffects then
-        applyNoEffects()
-    end
-    notify("Đã khôi phục ánh sáng gốc.", Theme.Success)
+createButton(EnhancedVisionSection, "Khôi phục môi trường gốc", function()
+    EnhancedVisionToggle.Set(false, true)
+    notify("Đã khôi phục Fog, hiệu ứng và ánh sáng gốc.", Theme.Success)
 end, Theme.SurfaceLight)
 
+end
+
+do
 local XRaySection = createSection(VisionPage, "X-Ray", "Hybrid kết hợp Highlight AlwaysOnTop và làm trong chính vật cản nằm giữa camera với mục tiêu. Outline không thay đổi tường.")
-createToggle(XRaySection, "Bật X-Ray mục tiêu", false, function(value)
+State.ConfigControls.XRay = createToggle(XRaySection, "Bật X-Ray mục tiêu", false, function(value)
     State.XRay = value
     if value then
-        task.spawn(rescanMobs)
+        if next(MobCache) == nil then
+            task.spawn(rescanMobs)
+        end
         task.spawn(function()
             scanItems(false)
         end)
@@ -2900,27 +3736,30 @@ createToggle(XRaySection, "Bật X-Ray mục tiêu", false, function(value)
         if not State.ItemESP.Enabled then removeAllVisuals("Item") end
     end
 end)
-createSelector(XRaySection, "Phương thức X-Ray", {"Hybrid", "Outline", "Wall Transparency"}, State.XRayMethod, function(value)
+State.ConfigControls.XRayMethod = createSelector(XRaySection, "Phương thức X-Ray", {"Hybrid", "Outline", "Wall Transparency"}, State.XRayMethod, function(value)
     State.XRayMethod = value
     if value == "Outline" then
         restoreXRayOccluders()
     end
 end)
-createInput(XRaySection, "Độ trong vật cản", State.XRayWallTransparency, "0.1 - 0.95", true, function(text)
+State.ConfigControls.XRayTransparency = createInput(XRaySection, "Độ trong vật cản", State.XRayWallTransparency, "0.1 - 0.95", true, function(text)
     local value = tonumber(text)
     if value then
         State.XRayWallTransparency = math.clamp(value, 0.1, 0.95)
     end
 end)
 
+end
+
+do
 local CameraSection = createSection(VisionPage, "Camera", "Các tuỳ chọn bổ sung không thay đổi vật thể trong map.")
-createInput(CameraSection, "Field of View", string.format("%.1f", Camera.FieldOfView), "1 - 120", true, function(text)
+State.ConfigControls.CameraFov = createInput(CameraSection, "Field of View", string.format("%.1f", Camera.FieldOfView), "1 - 120", true, function(text)
     local value = tonumber(text)
     if value then
         State.CameraFov = math.clamp(value, 1, 120)
     end
 end)
-createToggle(CameraSection, "Mở khoá zoom xa", false, function(value)
+State.ConfigControls.UnlockZoom = createToggle(CameraSection, "Mở khoá zoom xa", false, function(value)
     State.UnlockZoom = value
     if value then
         LocalPlayer.CameraMinZoomDistance = 0.5
@@ -2931,25 +3770,62 @@ createToggle(CameraSection, "Mở khoá zoom xa", false, function(value)
     end
 end)
 
+end
+
+do
 local PlayerTeleSection = createSection(TelePage, "Tele Player", "Hỗ trợ username, display name và tìm kiếm một phần tên.")
 local TeleportPlayerName = ""
 createInput(PlayerTeleSection, "Tên người chơi", "", "Username hoặc DisplayName", false, function(text)
     TeleportPlayerName = string.gsub(text, "^%s*(.-)%s*$", "%1")
 end)
-createButton(PlayerTeleSection, "Tele đến người chơi", function()
+State.ConfigControls.TelePlayerMode = createSelector(PlayerTeleSection, "Cách di chuyển", {"Instant", "Fly"}, State.TelePlayerMode, function(value)
+    State.TelePlayerMode = value
+end)
+createButton(PlayerTeleSection, "Di chuyển đến người chơi", function()
     local targetPlayer = findPlayer(TeleportPlayerName)
     if not targetPlayer then
         notify("Không tìm thấy người chơi phù hợp.", Theme.Danger)
         return
     end
     local targetRoot = targetPlayer.Character and (targetPlayer.Character:FindFirstChild("HumanoidRootPart") or targetPlayer.Character.PrimaryPart)
-    if targetRoot and safeTeleport(targetRoot.CFrame + Vector3.new(0, 3, 0)) then
-        notify("Đã tele đến " .. targetPlayer.Name .. ".", Theme.Success)
+    if targetRoot then
+        local targetCFrame = targetRoot.CFrame + Vector3.new(0, 3, 0)
+        if travelToCFrame(targetCFrame, State.TelePlayerMode) and State.TelePlayerMode == "Instant" then
+            notify("Đã tele đến " .. targetPlayer.Name .. ".", Theme.Success)
+        end
     else
         notify("Nhân vật mục tiêu chưa sẵn sàng.", Theme.Warning)
     end
 end)
 
+end
+
+do
+local ItemTeleSection = createSection(TelePage, "Tele Item", "Tìm item/model có tên chính xác trên toàn Workspace, ưu tiên kết quả gần nhất.")
+local TeleportItemName = ""
+createInput(ItemTeleSection, "Tên item chính xác", "", "Ví dụ: Key, Chest, AmmoBox", false, function(text)
+    TeleportItemName = string.gsub(text, "^%s*(.-)%s*$", "%1")
+end)
+State.ConfigControls.TeleItemMode = createSelector(ItemTeleSection, "Cách di chuyển", {"Instant", "Fly"}, State.TeleItemMode, function(value)
+    State.TeleItemMode = value
+end)
+createButton(ItemTeleSection, "Di chuyển đến item", function()
+    task.spawn(function()
+        local item, itemRoot = findClosestNamedWorldObject(TeleportItemName)
+        if not item or not itemRoot then
+            notify("Không tìm thấy item tên chính xác “" .. TeleportItemName .. "”.", Theme.Danger)
+            return
+        end
+        local targetCFrame = itemRoot.CFrame + Vector3.new(0, 3, 0)
+        if travelToCFrame(targetCFrame, State.TeleItemMode) and State.TeleItemMode == "Instant" then
+            notify("Đã tele đến item " .. item.Name .. ".", Theme.Success)
+        end
+    end)
+end, Theme.Accent2)
+
+end
+
+do
 local CoordinateTeleSection = createSection(TelePage, "Tele toạ độ", "Nhập ba giá trị X, Y, Z; hỗ trợ cả định dạng CFrame.new(X, Y, Z).")
 local CoordinateTeleportText = ""
 createInput(CoordinateTeleSection, "Toạ độ đích", "", "Ví dụ: 120, 35, -450", false, function(text)
@@ -2972,7 +3848,10 @@ createButton(CoordinateTeleSection, "Tele đến toạ độ", function()
     end
 end, Theme.Accent2)
 
-local JoinServerSection = createSection(TelePage, "Join Server ID", "Dùng Job ID thuộc cùng Place ID hiện tại. Có thể double-tap Job ID trong tab Info để copy.")
+end
+
+do
+local JoinServerSection = createSection(MiscPage, "Join Server ID", "Dùng Job ID thuộc cùng Place ID hiện tại. Có thể double-tap Job ID trong tab Info để copy.")
 local TargetJobId = ""
 createInput(JoinServerSection, "Job ID server", "", "Dán Job ID", false, function(text)
     TargetJobId = string.gsub(text, "^%s*(.-)%s*$", "%1")
@@ -2991,7 +3870,10 @@ createButton(JoinServerSection, "Join server bằng ID", function()
     end
 end, Theme.Accent)
 
-local SpectateSection = createSection(TelePage, "Theo dõi Player", "Camera bám Humanoid mục tiêu và vẫn cho phép xoay 360°. Nhấn nút lần nữa để trở về nhân vật của Ngài.")
+end
+
+do
+local SpectateSection = createSection(MiscPage, "Theo dõi Player", "Camera bám Humanoid mục tiêu và vẫn cho phép xoay 360°. Nhấn nút lần nữa để trở về nhân vật của Ngài.")
 local SpectatePlayerName = ""
 createInput(SpectateSection, "Tên người chơi", "", "Username hoặc DisplayName", false, function(text)
     SpectatePlayerName = string.gsub(text, "^%s*(.-)%s*$", "%1")
@@ -3012,8 +3894,11 @@ State.SpectateButton = createButton(SpectateSection, "Bắt đầu theo dõi", f
     end
 end, Theme.SurfaceLight)
 
+end
+
+do
 local SavedTeleSection = createSection(TelePage, "Tele đã lưu", "Lưu CFrame hiện tại và tạo một nút kéo-thả bên ngoài menu để tele nhanh.")
-createInput(SavedTeleSection, "Tên nút nổi", State.SavedButtonName, "Tên nút", false, function(text)
+State.ConfigControls.SavedButtonName = createInput(SavedTeleSection, "Tên nút nổi", State.SavedButtonName, "Tên nút", false, function(text)
     local trimmed = string.gsub(text, "^%s*(.-)%s*$", "%1")
     State.SavedButtonName = trimmed ~= "" and trimmed or "Về điểm lưu"
     if FloatingSavedButton then
@@ -3037,6 +3922,9 @@ end, "Tele về", function()
 end, Theme.Accent, Theme.Accent2)
 createDualButtons(SavedTeleSection, "Tạo / cập nhật nút nổi", createFloatingSavedButton, "Xoá nút nổi", removeFloatingSavedButton, Theme.SurfaceLight, Theme.Danger)
 
+end
+
+do
 local TouchTeleSection = createSection(TelePage, "Tele cảm ứng", "Nhấn nút bên dưới, sau đó chạm đúng một lần vào bề mặt trong thế giới.")
 createButton(TouchTeleSection, "Bật tele cho lần chạm kế tiếp", function()
     State.TouchTeleportArmed = false
@@ -3052,8 +3940,80 @@ createButton(TouchTeleSection, "Huỷ tele cảm ứng", function()
     notify("Đã huỷ tele cảm ứng.", Theme.Success)
 end, Theme.SurfaceLight)
 
+end
+
+do
+local TravelSettingsSection = createSection(TelePage, "Thiết lập di chuyển", "Tốc độ dùng cho chế độ Fly của Tele Player và Tele Item.")
+State.ConfigControls.TravelSpeed = createInput(TravelSettingsSection, "Tốc độ bay (stud/s)", State.TravelSpeed, "10 - 1000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.TravelSpeed = math.clamp(value, 10, 1000)
+    end
+end)
+createButton(TravelSettingsSection, "Huỷ hành trình đang bay", function()
+    if State.ActiveTravelTween then
+        cancelActiveTravel()
+        notify("Đã huỷ hành trình bay.", Theme.Success)
+    else
+        notify("Không có hành trình đang hoạt động.", Theme.Warning)
+    end
+end, Theme.Danger)
+
+end
+
+do
+local MobFilterSection = createSection(MiscPage, "Bộ lọc ESP Quái", "Quét Broad trong phạm vi, đưa tên phát hiện vào danh sách cách nhau bằng dấu phẩy. Xoá tên props không phải quái rồi nhấn Áp dụng.")
+State.MobFilterToggle = createToggle(MobFilterSection, "Dùng danh sách lọc thủ công", false, function(value)
+    State.MobManualFilterEnabled = value
+    removeAllVisuals("Mob")
+end)
+State.ConfigControls.MobFilterEnabled = State.MobFilterToggle
+State.MobFilterBox = createInput(MobFilterSection, "Tên quái được phép", "", "Boss, Zombie, Enemy...", false, function(text)
+    local count = parseMobManualNames(text)
+    notify("Danh sách lọc có " .. count .. " tên.", count > 0 and Theme.Success or Theme.Warning)
+end)
+State.MobFilterBox.Parent.Size = UDim2.new(1, 0, 0, 94)
+State.MobFilterBox.Size = UDim2.new(1, 0, 0, 72)
+State.MobFilterBox.MultiLine = true
+State.MobFilterBox.TextWrapped = true
+State.MobFilterBox.TextYAlignment = Enum.TextYAlignment.Top
+State.ConfigControls.MobFilterRadius = createInput(MobFilterSection, "Phạm vi quét tên (m)", State.MobFilterScanRadiusMeters, "10 - 5000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.MobFilterScanRadiusMeters = math.clamp(value, 10, 5000)
+    end
+end)
+createButton(MobFilterSection, "Quét tên Model trong phạm vi", function()
+    task.spawn(function()
+        rescanMobs()
+        while State.MobScanRunning do
+            task.wait(0.05)
+        end
+        local names, count = collectMobNamesInRadius()
+        local text = table.concat(names, ", ")
+        State.MobFilterBox.Text = text
+        parseMobManualNames(text)
+        State.MobFilterToggle.Set(true, true)
+        notify("Đã đưa " .. count .. " tên vào danh sách. Xoá tên không phải quái rồi áp dụng.", count > 0 and Theme.Success or Theme.Warning)
+    end)
+end, Theme.Accent2)
+createDualButtons(MobFilterSection, "Áp dụng danh sách", function()
+    local count = parseMobManualNames(State.MobFilterBox.Text)
+    State.MobFilterToggle.Set(true, true)
+    removeAllVisuals("Mob")
+    notify("Đã áp dụng " .. count .. " tên quái.", count > 0 and Theme.Success or Theme.Warning)
+end, "Xoá bộ lọc", function()
+    State.MobFilterBox.Text = ""
+    parseMobManualNames("")
+    State.MobFilterToggle.Set(false, true)
+    notify("Đã xoá bộ lọc; ESP Quái trở về Broad.", Theme.Success)
+end, Theme.Accent, Theme.Danger)
+
+end
+
+do
 local NoVoidSection = createSection(MiscPage, "No Void", "Ghi nhớ bề mặt đứng an toàn gần nhất. Khi xuống sát FallenPartsDestroyHeight, nhân vật được đưa trở lại trước khi auto-die.")
-createToggle(NoVoidSection, "Bật No Void", false, function(value)
+State.ConfigControls.NoVoid = createToggle(NoVoidSection, "Bật No Void", false, function(value)
     State.NoVoid = value
     if value then
         local _, humanoid, root = getCharacter()
@@ -3062,13 +4022,16 @@ createToggle(NoVoidSection, "Bật No Void", false, function(value)
         end
     end
 end)
-createInput(NoVoidSection, "Khoảng an toàn trên đáy (stud)", State.NoVoidMargin, "5 - 200", true, function(text)
+State.ConfigControls.NoVoidMargin = createInput(NoVoidSection, "Khoảng an toàn trên đáy (stud)", State.NoVoidMargin, "5 - 200", true, function(text)
     local value = tonumber(text)
     if value then
         State.NoVoidMargin = math.clamp(value, 5, 200)
     end
 end)
 
+end
+
+do
 local ServerSection = createSection(MiscPage, "Server", "Quét tối đa bốn trang server, loại server hiện tại và server đầy.")
 createDualButtons(ServerSection, "Hop ít người", function()
     hopServer(true)
@@ -3083,11 +4046,30 @@ createButton(ServerSection, "Rejoin server hiện tại", function()
     end
 end, Theme.SurfaceLight)
 
+end
+
+do
+local ConfigSection = createSection(MiscPage, "Lưu Config", "Lưu thiết lập vào bộ nhớ DeltaX và áp dụng lại khi cần. File: RaphaelSovereign/V6_4_Config.json")
+State.ConfigControls.ConfigAutoLoad = createToggle(ConfigSection, "Tự áp dụng config khi mở script", State.ConfigAutoLoad, function(value)
+    State.ConfigAutoLoad = value
+end)
+createDualButtons(ConfigSection, "Lưu config", function()
+    Extensions.SaveConfig()
+end, "Áp dụng config", function()
+    Extensions.LoadConfig(false)
+end, Theme.Accent, Theme.Accent2)
+createButton(ConfigSection, "Xoá config đã lưu", function()
+    Extensions.DeleteConfig()
+end, Theme.Danger)
+end
+
+
+do
 local UtilitySection = createSection(MiscPage, "Tiện ích", "Các chức năng nền được dừng và khôi phục khi đóng Raphael.")
-createToggle(UtilitySection, "Anti AFK", false, function(value)
+State.ConfigControls.AntiAFK = createToggle(UtilitySection, "Anti AFK", false, function(value)
     State.AntiAFK = value
 end)
-createToggle(UtilitySection, "Anti Ragdoll", false, function(value)
+State.ConfigControls.AntiRagdoll = createToggle(UtilitySection, "Anti Ragdoll", false, function(value)
     State.AntiRagdoll = value
     local _, humanoid = getCharacter()
     if humanoid and not value then
@@ -3097,7 +4079,10 @@ createToggle(UtilitySection, "Anti Ragdoll", false, function(value)
         end)
     end
 end)
-createToggle(UtilitySection, "FPS Boost", false, setFPSBoost)
+State.ConfigControls.FPSBoost = createToggle(UtilitySection, "FPS Boost", false, setFPSBoost)
+State.ConfigControls.ESPRefreshMode = createSelector(UtilitySection, "Nhịp cập nhật ESP", {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode, function(value)
+    State.ESPRefreshMode = value
+end)
 createDualButtons(UtilitySection, "Copy toạ độ", function()
     local _, _, root = getCharacter()
     if not root then
@@ -3119,6 +4104,7 @@ end, "Reset nhân vật", function()
 end, Theme.SurfaceLight, Theme.Danger)
 end
 
+do
 local ProfileSection = createSection(InfoPage, "Hồ sơ", "Thông tin client hiện tại.")
 local ProfileCard = Instance.new("Frame")
 ProfileCard.Size = UDim2.new(1, 0, 0, 76)
@@ -3168,6 +4154,8 @@ AccountAgeLabel.Font = Enum.Font.Gotham
 AccountAgeLabel.TextSize = 9
 AccountAgeLabel.TextXAlignment = Enum.TextXAlignment.Left
 AccountAgeLabel.Parent = ProfileCard
+
+end
 
 local RuntimeSection = createSection(InfoPage, "Game & Runtime", "Dữ liệu được làm mới mỗi giây.")
 local GameNameValue = createInfoRow(RuntimeSection, "Game", "Đang tải...")
@@ -3304,15 +4292,6 @@ end
 local MeasuredFPS = 0
 local FrameCounter = 0
 local FrameTimer = os.clock()
-connect(RunService.RenderStepped, function()
-    FrameCounter = FrameCounter + 1
-    local now = os.clock()
-    if now - FrameTimer >= 0.5 then
-        MeasuredFPS = math.floor(FrameCounter / (now - FrameTimer) + 0.5)
-        FrameCounter = 0
-        FrameTimer = now
-    end
-end)
 
 refreshInfo = function()
     PlayersValue.Text = #Players:GetPlayers() .. "/" .. Players.MaxPlayers
@@ -3332,14 +4311,16 @@ refreshInfo = function()
     end)
     PingValue.Text = pingText
 
-    local executorText = "DeltaX / Unknown"
-    if identifyexecutor then
-        local success, name, version = pcall(identifyexecutor)
-        if success and name then
-            executorText = tostring(name) .. (version and (" " .. tostring(version)) or "")
+    if not State.ExecutorText then
+        State.ExecutorText = "DeltaX / Unknown"
+        if identifyexecutor then
+            local success, name, version = pcall(identifyexecutor)
+            if success and name then
+                State.ExecutorText = tostring(name) .. (version and (" " .. tostring(version)) or "")
+            end
         end
     end
-    ExecutorValue.Text = executorText
+    ExecutorValue.Text = State.ExecutorText
 end
 
 connect(Players.PlayerAdded, function()
@@ -3428,7 +4409,7 @@ local LastXRayUpdate = 0
 local LastESPUpdate = 0
 
 connect(RunService.Stepped, function()
-    if not State.Running then
+    if not State.Running or not State.Noclip and not State.AntiRagdoll then
         return
     end
     local character, humanoid, root = getCharacter()
@@ -3438,21 +4419,18 @@ connect(RunService.Stepped, function()
     rememberHumanoid(humanoid)
 
     if State.Noclip then
-        local function disableCollision(part)
-            if part and part:IsA("BasePart") then
-                if OriginalCollision[part] == nil then
-                    OriginalCollision[part] = part.CanCollide
-                end
-                part.CanCollide = false
-            end
-        end
-
         if State.NoclipMethod == "Chỉ Root" then
-            disableCollision(root)
+            if OriginalCollision[root] == nil then
+                OriginalCollision[root] = root.CanCollide
+            end
+            root.CanCollide = false
         else
             for _, descendant in ipairs(character:GetDescendants()) do
                 if descendant:IsA("BasePart") then
-                    disableCollision(descendant)
+                    if OriginalCollision[descendant] == nil then
+                        OriginalCollision[descendant] = descendant.CanCollide
+                    end
+                    descendant.CanCollide = false
                 end
             end
             if State.NoclipMethod == "State + Parts" then
@@ -3464,16 +4442,23 @@ connect(RunService.Stepped, function()
     end
 
     if State.AntiRagdoll then
-        pcall(function()
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            if humanoid:GetState() == Enum.HumanoidStateType.FallingDown or humanoid:GetState() == Enum.HumanoidStateType.Ragdoll then
+        local currentState = humanoid:GetState()
+        if currentState == Enum.HumanoidStateType.FallingDown or currentState == Enum.HumanoidStateType.Ragdoll then
+            pcall(function()
                 humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-            end
-        end)
-        for _, descendant in ipairs(character:GetDescendants()) do
-            if descendant:IsA("Motor6D") then
-                descendant.Enabled = true
+            end)
+        end
+        local now = os.clock()
+        if now - State.LastRagdollMaintain >= 0.25 then
+            State.LastRagdollMaintain = now
+            pcall(function()
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            end)
+            for _, descendant in ipairs(character:GetDescendants()) do
+                if descendant:IsA("Motor6D") and not descendant.Enabled then
+                    descendant.Enabled = true
+                end
             end
         end
     end
@@ -3490,15 +4475,22 @@ connect(RunService.Heartbeat, function(deltaTime)
     local original = rememberHumanoid(humanoid)
 
     if State.SpeedMethod == "WalkSpeed" then
-        humanoid.WalkSpeed = State.SpeedValue
+        if humanoid.WalkSpeed ~= State.SpeedValue then
+            humanoid.WalkSpeed = State.SpeedValue
+        end
     elseif State.SpeedMethod == "Velocity" then
-        humanoid.WalkSpeed = 0
+        if humanoid.WalkSpeed ~= 0 then
+            humanoid.WalkSpeed = 0
+        end
         local direction = humanoid.MoveDirection
         local currentVelocity = root.AssemblyLinearVelocity
         root.AssemblyLinearVelocity = Vector3.new(direction.X * State.SpeedValue, currentVelocity.Y, direction.Z * State.SpeedValue)
     elseif State.SpeedMethod == "CFrame" then
         local baseSpeed = original and original.WalkSpeed or 16
-        humanoid.WalkSpeed = math.min(State.SpeedValue, baseSpeed)
+        local targetWalkSpeed = math.min(State.SpeedValue, baseSpeed)
+        if humanoid.WalkSpeed ~= targetWalkSpeed then
+            humanoid.WalkSpeed = targetWalkSpeed
+        end
         local extraSpeed = math.max(State.SpeedValue - baseSpeed, 0)
         if extraSpeed > 0 and humanoid.MoveDirection.Magnitude > 0 then
             root.CFrame = root.CFrame + humanoid.MoveDirection.Unit * extraSpeed * deltaTime
@@ -3506,16 +4498,20 @@ connect(RunService.Heartbeat, function(deltaTime)
     end
 
     if State.JumpMethod == "JumpPower" then
-        humanoid.UseJumpPower = true
-        humanoid.JumpPower = State.JumpValue
+        if not humanoid.UseJumpPower then humanoid.UseJumpPower = true end
+        if humanoid.JumpPower ~= State.JumpValue then humanoid.JumpPower = State.JumpValue end
     elseif State.JumpMethod == "JumpHeight" then
-        humanoid.UseJumpPower = false
-        humanoid.JumpHeight = State.JumpValue
+        if humanoid.UseJumpPower then humanoid.UseJumpPower = false end
+        if humanoid.JumpHeight ~= State.JumpValue then humanoid.JumpHeight = State.JumpValue end
     end
 
-    Workspace.Gravity = State.GravityValue
+    if Workspace.Gravity ~= State.GravityValue then
+        Workspace.Gravity = State.GravityValue
+    end
     Camera = Workspace.CurrentCamera or Camera
-    Camera.FieldOfView = State.CameraFov
+    if Camera.FieldOfView ~= State.CameraFov then
+        Camera.FieldOfView = State.CameraFov
+    end
     if State.SpectatingPlayer then
         local targetHumanoid = State.SpectatingPlayer.Character and State.SpectatingPlayer.Character:FindFirstChildOfClass("Humanoid")
         if targetHumanoid and Camera.CameraSubject ~= targetHumanoid then
@@ -3525,11 +4521,12 @@ connect(RunService.Heartbeat, function(deltaTime)
     end
 
     local now = os.clock()
-    if now - LastXRayUpdate >= 0.16 then
+    local xrayInterval = MeasuredFPS > 0 and MeasuredFPS < 35 and 0.35 or 0.22
+    if State.XRay and State.XRayMethod ~= "Outline" and now - LastXRayUpdate >= xrayInterval then
         LastXRayUpdate = now
         updateXRayOcclusion()
     end
-    if now - LastNoVoidCheck >= 0.1 then
+    if now - LastNoVoidCheck >= 0.2 then
         LastNoVoidCheck = now
         local threshold = Workspace.FallenPartsDestroyHeight + State.NoVoidMargin
         if root.Position.Y > threshold + 8 and humanoid.FloorMaterial ~= Enum.Material.Air then
@@ -3554,7 +4551,7 @@ connect(RunService.Heartbeat, function(deltaTime)
         end
     end
 
-    if now - LastVisionApply >= 0.2 then
+    if now - LastVisionApply >= 0.5 then
         LastVisionApply = now
         if State.ClockTime then
             Lighting.ClockTime = State.ClockTime
@@ -3567,7 +4564,7 @@ connect(RunService.Heartbeat, function(deltaTime)
         end
     end
 
-    local itemScanInterval = State.ItemESP.ExactName ~= "" and 2 or 0.65
+    local itemScanInterval = State.ItemESP.ExactName ~= "" and 15 or 0.9
     if now - LastItemScan >= itemScanInterval then
         LastItemScan = now
         if State.ItemESP.Enabled or State.XRay then
@@ -3577,7 +4574,7 @@ connect(RunService.Heartbeat, function(deltaTime)
         end
     end
 
-    if now - LastMobRescan >= 8 then
+    if now - LastMobRescan >= 120 then
         LastMobRescan = now
         if State.MobESP.Enabled or State.XRay then
             task.spawn(rescanMobs)
@@ -3591,11 +4588,36 @@ connect(RunService.Heartbeat, function(deltaTime)
 end)
 
 connect(RunService.RenderStepped, function()
+    FrameCounter = FrameCounter + 1
+    local now = os.clock()
+    if now - FrameTimer >= 0.5 then
+        MeasuredFPS = math.floor(FrameCounter / (now - FrameTimer) + 0.5)
+        FrameCounter = 0
+        FrameTimer = now
+    end
+
     if not State.Running then
         return
     end
-    local now = os.clock()
-    if now - LastESPUpdate < 0.04 then
+    if not State.PlayerESP.Enabled and not State.MobESP.Enabled and not State.ItemESP.Enabled and not State.XRay then
+        return
+    end
+
+    local refreshInterval
+    if State.ESPRefreshMode == "25 FPS" then
+        refreshInterval = 0.04
+    elseif State.ESPRefreshMode == "15 FPS" then
+        refreshInterval = 0.067
+    elseif State.ESPRefreshMode == "10 FPS" then
+        refreshInterval = 0.1
+    elseif MeasuredFPS > 0 and MeasuredFPS < 30 then
+        refreshInterval = 0.12
+    elseif MeasuredFPS > 0 and MeasuredFPS < 45 then
+        refreshInterval = 0.08
+    else
+        refreshInterval = 0.05
+    end
+    if now - LastESPUpdate < refreshInterval then
         return
     end
     LastESPUpdate = now
@@ -3616,7 +4638,8 @@ connect(RunService.RenderStepped, function()
                 if character and root and humanoid and humanoid.Health > 0 then
                     seen[player] = true
                     local distance = (root.Position - localRoot.Position).Magnitude
-                    updateVisual("Player", player, character, root, player.DisplayName .. " (@" .. player.Name .. ")", getHealthText(humanoid), distance)
+                    local healthText = State.PlayerESP.Enabled and State.PlayerESP.Health and getHealthText(humanoid) or nil
+                    updateVisual("Player", player, character, root, player.DisplayName .. " (@" .. player.Name .. ")", healthText, distance)
                 end
             end
         end
@@ -3630,26 +4653,59 @@ connect(RunService.RenderStepped, function()
 
     if State.MobESP.Enabled or State.XRay then
         local seen = {}
-        for model in pairs(MobCache) do
-            if model and model.Parent and isMobModel(model) then
-                local root = getAdorneeRoot(model)
-                if root then
-                    local humanoid = model:FindFirstChildOfClass("Humanoid")
-                    local healthText = getHealthText(humanoid)
-                    if not healthText then
-                        local health = model:GetAttribute("Health") or model:GetAttribute("HP")
-                        local maximum = model:GetAttribute("MaxHealth") or model:GetAttribute("MaxHP")
-                        if type(health) == "number" then
-                            healthText = maximum and string.format("HP %d/%d", health, maximum) or string.format("HP %d", health)
+        local mobCandidates = {}
+        local maximumStuds = State.MobESP.MaxDistanceMeters / 0.28
+        local maximumDistanceSquared = maximumStuds * maximumStuds
+        for model, classification in pairs(MobCache) do
+            if model and model.Parent and type(classification) == "table" then
+                local root = classification.Root
+                local humanoid = classification.Humanoid
+                local alive = root and root.Parent and (not humanoid or humanoid.Parent and humanoid.Health > 0)
+                if alive then
+                    if isMobAllowedByManualFilter(model, classification) then
+                        local offset = root.Position - localRoot.Position
+                        local distanceSquared = offset:Dot(offset)
+                        if distanceSquared <= maximumDistanceSquared then
+                            table.insert(mobCandidates, {
+                                Model = model,
+                                Data = classification,
+                                Root = root,
+                                DistanceSquared = distanceSquared
+                            })
                         end
                     end
-                    seen[model] = true
-                    updateVisual("Mob", model, model, root, model.Name, healthText, (root.Position - localRoot.Position).Magnitude)
+                else
+                    removeMobFromCache(model)
                 end
             else
-                MobCache[model] = nil
+                removeMobFromCache(model)
             end
         end
+
+        table.sort(mobCandidates, function(left, right)
+            return left.DistanceSquared < right.DistanceSquared
+        end)
+
+        local targetLimit = math.min(#mobCandidates, State.MobESP.MaxTargets)
+        for index = 1, targetLimit do
+            local candidate = mobCandidates[index]
+            local model = candidate.Model
+            local classification = candidate.Data
+            local healthText
+            if State.MobESP.Enabled and State.MobESP.Health then
+                healthText = getHealthText(classification.Humanoid)
+                if not healthText then
+                    local health = model:GetAttribute("Health") or model:GetAttribute("HP")
+                    local maximum = model:GetAttribute("MaxHealth") or model:GetAttribute("MaxHP")
+                    if type(health) == "number" then
+                        healthText = type(maximum) == "number" and string.format("HP %d/%d", health, maximum) or string.format("HP %d", health)
+                    end
+                end
+            end
+            seen[model] = true
+            updateVisual("Mob", model, model, candidate.Root, classification.DisplayName, healthText, math.sqrt(candidate.DistanceSquared))
+        end
+
         for model, visual in pairs(Visuals.Mob) do
             if not seen[model] then
                 destroyVisual(visual)
@@ -3665,7 +4721,8 @@ connect(RunService.RenderStepped, function()
                 local root = getAdorneeRoot(item)
                 if root then
                     seen[item] = true
-                    updateVisual("Item", item, item, root, item.Name, getItemHealthText(item), (root.Position - localRoot.Position).Magnitude)
+                    local healthText = State.ItemESP.Enabled and State.ItemESP.Health and getItemHealthText(item) or nil
+                    updateVisual("Item", item, item, root, item.Name, healthText, (root.Position - localRoot.Position).Magnitude)
                 end
             else
                 ItemCache[item] = nil
@@ -3695,6 +4752,7 @@ cleanup = function()
     end
     State.Running = false
     State.TouchTeleportArmed = false
+    cancelActiveTravel()
 
     restoreCollisions()
     restoreXRayOccluders()
@@ -3714,8 +4772,8 @@ cleanup = function()
     Camera.CameraSubject = humanoid or OriginalCamera.Subject
     restoreHumanoid(humanoid)
 
-    if State.FPSBoost then
-        setFPSBoost(false)
+    if State.FPSBoostApplied then
+        setFPSBoost(false, true)
     end
 
     for _, connection in ipairs(Connections) do
@@ -3747,4 +4805,12 @@ task.spawn(function()
     end)
 end)
 
-notify("Raphael Sovereign V6.2 Golden đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
+notify("Raphael Sovereign V6.4 Optimized đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
+
+task.defer(function()
+    local config = Extensions.ReadConfig(true)
+    if config and config.AutoLoad == true and State.Running then
+        Extensions.ApplyConfig(config, true)
+        notify("Đã tự áp dụng config V6.4.", Theme.Success)
+    end
+end)
