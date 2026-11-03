@@ -1,0 +1,3750 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+local TweenService = game:GetService("TweenService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local CollectionService = game:GetService("CollectionService")
+local CoreGui = game:GetService("CoreGui")
+local Stats = game:GetService("Stats")
+local ContentProvider = game:GetService("ContentProvider")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Camera = Workspace.CurrentCamera
+local RuntimeEnvironment = getgenv and getgenv() or _G
+
+if RuntimeEnvironment.RaphaelSovereignCleanup then
+    pcall(RuntimeEnvironment.RaphaelSovereignCleanup)
+end
+
+local Theme = {
+    Background = Color3.fromRGB(14, 11, 8),
+    Surface = Color3.fromRGB(24, 19, 14),
+    SurfaceLight = Color3.fromRGB(39, 30, 20),
+    Input = Color3.fromRGB(18, 15, 12),
+    Accent = Color3.fromRGB(255, 190, 66),
+    Accent2 = Color3.fromRGB(255, 104, 31),
+    Text = Color3.fromRGB(255, 247, 230),
+    SubText = Color3.fromRGB(190, 172, 146),
+    Success = Color3.fromRGB(87, 224, 137),
+    Warning = Color3.fromRGB(255, 190, 66),
+    Danger = Color3.fromRGB(255, 88, 112),
+    Player = Color3.fromRGB(50, 255, 115),
+    Mob = Color3.fromRGB(255, 65, 75),
+    Item = Color3.fromRGB(190, 75, 255)
+}
+
+local UI = {
+    Icons = {
+        ["sparkles"] = "rbxassetid://138635884129147",
+        ["footprints"] = "rbxassetid://139192589041315",
+        ["scan-eye"] = "rbxassetid://99244790601968",
+        ["sun"] = "rbxassetid://110150589884127",
+        ["map-pin"] = "rbxassetid://84279202219901",
+        ["settings-2"] = "rbxassetid://135684703553372",
+        ["circle-user-round"] = "rbxassetid://95489465399880",
+        ["minus"] = "rbxassetid://118026365011536",
+        ["x"] = "rbxassetid://110786993356448",
+        ["power"] = "rbxassetid://96479131758775",
+        ["check"] = "rbxassetid://93898873302694",
+        ["chevron-down"] = "rbxassetid://134243273101015",
+        ["rotate-ccw"] = "rbxassetid://110116685948665",
+        ["plane"] = "rbxassetid://126985561580989",
+        ["eye"] = "rbxassetid://100033680381365",
+        ["eye-off"] = "rbxassetid://135928786788378",
+        ["trash-2"] = "rbxassetid://109843431391323",
+        ["gauge"] = "rbxassetid://110273524101447",
+        ["rabbit"] = "rbxassetid://98580518804206",
+        ["scan"] = "rbxassetid://123104789658180",
+        ["box"] = "rbxassetid://101768155599700",
+        ["package-search"] = "rbxassetid://95465120894145",
+        ["clock-3"] = "rbxassetid://136385631189327",
+        ["cloud-fog"] = "rbxassetid://76650233148776",
+        ["lightbulb"] = "rbxassetid://103871245626488",
+        ["telescope"] = "rbxassetid://91755049143647",
+        ["user-round-search"] = "rbxassetid://71565774381870",
+        ["bookmark"] = "rbxassetid://121093149326239",
+        ["mouse-pointer-click"] = "rbxassetid://107150227368485",
+        ["shield"] = "rbxassetid://110987169760162",
+        ["server"] = "rbxassetid://92188766517878",
+        ["users-round"] = "rbxassetid://103005444008339",
+        ["refresh-cw"] = "rbxassetid://138133190015277",
+        ["copy"] = "rbxassetid://78979572434545",
+        ["skull"] = "rbxassetid://137726256442333",
+        ["info"] = "rbxassetid://124560466474914",
+        ["rocket"] = "rbxassetid://87412317685854",
+        ["zap"] = "rbxassetid://130551565616516",
+        ["move-3d"] = "rbxassetid://103365982054003",
+        ["person-standing"] = "rbxassetid://125020872044147",
+        ["crosshair"] = "rbxassetid://134242818164054",
+        ["package"] = "rbxassetid://97261141732706",
+        ["wand-sparkles"] = "rbxassetid://82546429942392",
+        ["panel-left"] = "rbxassetid://97419752870313",
+        ["activity"] = "rbxassetid://94212016861936",
+        ["database"] = "rbxassetid://126791525623846",
+        ["map-pinned"] = "rbxassetid://103963788475034",
+        ["monitor-cog"] = "rbxassetid://94345128715799",
+        ["circle-power"] = "rbxassetid://140676030155098"
+    },
+    TabIcons = {
+        Movement = "footprints",
+        ESP = "scan-eye",
+        Vision = "sun",
+        Tele = "map-pin",
+        Misc = "settings-2",
+        Info = "circle-user-round"
+    }
+}
+
+function UI.GetIcon(name)
+    return UI.Icons[name] or UI.Icons.sparkles
+end
+
+function UI.CreateIcon(parent, name, size, color)
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "Icon_" .. tostring(name)
+    icon.Size = UDim2.fromOffset(size or 18, size or 18)
+    icon.BackgroundTransparency = 1
+    icon.Image = UI.GetIcon(name)
+    icon.ImageColor3 = color or Theme.Text
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.Parent = parent
+    return icon
+end
+
+function UI.AddRipple(button, color)
+    button.ClipsDescendants = true
+    button.Activated:Connect(function()
+        if not button.Parent then
+            return
+        end
+        local diameter = math.max(button.AbsoluteSize.X, button.AbsoluteSize.Y) * 1.35
+        local ripple = Instance.new("Frame")
+        ripple.Name = "PremiumRipple"
+        ripple.AnchorPoint = Vector2.new(0.5, 0.5)
+        ripple.Position = UDim2.fromScale(0.5, 0.5)
+        ripple.Size = UDim2.fromOffset(0, 0)
+        ripple.BackgroundColor3 = color or Theme.Text
+        ripple.BackgroundTransparency = 0.76
+        ripple.BorderSizePixel = 0
+        ripple.ZIndex = button.ZIndex + 4
+        ripple.Parent = button
+        Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
+        TweenService:Create(ripple, TweenInfo.new(0.34, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.fromOffset(diameter, diameter),
+            BackgroundTransparency = 1
+        }):Play()
+        task.delay(0.36, function()
+            if ripple then
+                ripple:Destroy()
+            end
+        end)
+    end)
+end
+
+function UI.GetSectionIcon(title)
+    local normalized = string.lower(title)
+    local rules = {
+        {"speed", "gauge"},
+        {"jump", "rabbit"},
+        {"noclip", "move-3d"},
+        {"fly", "plane"},
+        {"movement", "footprints"},
+        {"bảng màu", "wand-sparkles"},
+        {"player", "user-round-search"},
+        {"quái", "skull"},
+        {"item", "package-search"},
+        {"sky", "clock-3"},
+        {"fog", "cloud-fog"},
+        {"bright", "lightbulb"},
+        {"x-ray", "eye"},
+        {"camera", "telescope"},
+        {"đã lưu", "bookmark"},
+        {"cảm ứng", "mouse-pointer-click"},
+        {"void", "shield"},
+        {"server", "server"},
+        {"tiện ích", "settings-2"},
+        {"hồ sơ", "circle-user-round"},
+        {"runtime", "activity"},
+        {"danh sách", "users-round"},
+        {"tele", "map-pin"}
+    }
+    for _, rule in ipairs(rules) do
+        if string.find(normalized, rule[1], 1, true) then
+            return rule[2]
+        end
+    end
+    return "sparkles"
+end
+
+function UI.GetButtonIcon(text)
+    local normalized = string.lower(text)
+    local rules = {
+        {"khôi phục", "rotate-ccw"},
+        {"tải", "rocket"},
+        {"fly", "plane"},
+        {"ẩn", "eye-off"},
+        {"hiện", "eye"},
+        {"xoá", "trash-2"},
+        {"quét", "scan"},
+        {"phát hiện", "package-search"},
+        {"tele", "map-pin"},
+        {"lưu", "bookmark"},
+        {"server", "server"},
+        {"copy", "copy"},
+        {"làm mới", "refresh-cw"},
+        {"reset", "skull"},
+        {"rejoin", "refresh-cw"},
+        {"tạo", "sparkles"},
+        {"huỷ", "x"}
+    }
+    for _, rule in ipairs(rules) do
+        if string.find(normalized, rule[1], 1, true) then
+            return rule[2]
+        end
+    end
+    return "zap"
+end
+
+task.spawn(function()
+    local success, remoteIcons = pcall(function()
+        local source = game:HttpGet("https://raw.githubusercontent.com/StyearX/Icons/main/lucide/dist/Icons.lua")
+        local compiled = loadstring(source)
+        return compiled and compiled() or nil
+    end)
+    if success and type(remoteIcons) == "table" then
+        for name, asset in pairs(remoteIcons) do
+            UI.Icons[name] = asset
+        end
+    end
+end)
+
+local State = {
+    Running = true,
+    SpeedValue = 16,
+    SpeedMethod = "WalkSpeed",
+    JumpValue = 50,
+    JumpMethod = "JumpPower",
+    InfiniteJump = false,
+    Noclip = false,
+    NoclipMethod = "Toàn thân",
+    GravityValue = Workspace.Gravity,
+    FlyLoaded = false,
+    FlyHidden = false,
+    ClockTime = nil,
+    RemoveEffects = false,
+    FullBrightLevel = nil,
+    XRay = false,
+    XRayMethod = "Hybrid",
+    XRayWallTransparency = 0.72,
+    SpectatingPlayer = nil,
+    SpectateButton = nil,
+    CameraFov = Camera.FieldOfView,
+    UnlockZoom = false,
+    TouchTeleportArmed = false,
+    SavedCFrame = nil,
+    SavedButtonName = "Về điểm lưu",
+    NoVoid = false,
+    NoVoidMargin = 35,
+    LastSafeCFrame = nil,
+    AntiAFK = false,
+    AntiRagdoll = false,
+    FPSBoost = false,
+    ItemScanRunning = false,
+    PlayerESP = {
+        Enabled = false,
+        Tracer = true,
+        Box = true,
+        BoxMode = "2D",
+        Name = true,
+        Health = true,
+        Distance = true,
+        MaxDistanceMeters = 1000,
+        Color = Theme.Player
+    },
+    MobESP = {
+        Enabled = false,
+        Tracer = true,
+        Box = true,
+        BoxMode = "Skin",
+        Name = true,
+        Health = true,
+        Distance = true,
+        MaxDistanceMeters = 1000,
+        Color = Theme.Mob
+    },
+    ItemESP = {
+        Enabled = false,
+        Tracer = false,
+        Box = true,
+        BoxMode = "Skin",
+        Name = true,
+        Health = true,
+        Distance = true,
+        RadiusMeters = 15,
+        ExactName = "",
+        Color = Theme.Item
+    }
+}
+
+local Connections = {}
+local OriginalCollision = {}
+local HumanoidOriginals = setmetatable({}, {__mode = "k"})
+local FlyGuiObjects = {}
+local FPSBackup = setmetatable({}, {__mode = "k"})
+local EffectBackup = setmetatable({}, {__mode = "k"})
+local MobCache = setmetatable({}, {__mode = "k"})
+local ItemCache = setmetatable({}, {__mode = "k"})
+local XRayOccluders = setmetatable({}, {__mode = "k"})
+local Visuals = {
+    Player = setmetatable({}, {__mode = "k"}),
+    Mob = setmetatable({}, {__mode = "k"}),
+    Item = setmetatable({}, {__mode = "k"})
+}
+
+local OriginalLighting = {
+    ClockTime = Lighting.ClockTime,
+    Brightness = Lighting.Brightness,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    FogStart = Lighting.FogStart,
+    FogEnd = Lighting.FogEnd,
+    GlobalShadows = Lighting.GlobalShadows,
+    ExposureCompensation = Lighting.ExposureCompensation,
+    EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+    EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale
+}
+
+local OriginalCamera = {
+    FieldOfView = Camera.FieldOfView,
+    MinZoom = LocalPlayer.CameraMinZoomDistance,
+    MaxZoom = LocalPlayer.CameraMaxZoomDistance,
+    Subject = Camera.CameraSubject,
+    Type = Camera.CameraType
+}
+
+local OriginalGravity = Workspace.Gravity
+local StatusLabel
+local ScreenGui
+local MainFrame
+local FloatingSavedButton
+local cleanup
+local scanItems
+local refreshInfo
+local rebuildPlayerList
+local removeAllVisuals
+
+local function connect(signal, callback)
+    local connection = signal:Connect(callback)
+    table.insert(Connections, connection)
+    return connection
+end
+
+local function clampNumber(value, minimum, maximum, fallback)
+    local number = tonumber(value)
+    if not number then
+        return fallback
+    end
+    return math.clamp(number, minimum, maximum)
+end
+
+local function formatDuration(totalSeconds)
+    local seconds = math.max(0, math.floor(totalSeconds))
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local remaining = seconds % 60
+    return string.format("%02d:%02d:%02d", hours, minutes, remaining)
+end
+
+local function notify(text, color)
+    if StatusLabel and StatusLabel.Parent then
+        StatusLabel.Text = text
+        StatusLabel.TextColor3 = color or Theme.SubText
+    end
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Raphael Sovereign",
+            Text = text,
+            Duration = 3
+        })
+    end)
+end
+
+local function getCharacter()
+    local character = LocalPlayer.Character
+    if not character then
+        return nil, nil, nil
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+    return character, humanoid, root
+end
+
+local function rememberHumanoid(humanoid)
+    if humanoid and not HumanoidOriginals[humanoid] then
+        HumanoidOriginals[humanoid] = {
+            WalkSpeed = humanoid.WalkSpeed,
+            UseJumpPower = humanoid.UseJumpPower,
+            JumpPower = humanoid.JumpPower,
+            JumpHeight = humanoid.JumpHeight
+        }
+    end
+    return humanoid and HumanoidOriginals[humanoid] or nil
+end
+
+local function restoreHumanoid(humanoid)
+    local original = humanoid and HumanoidOriginals[humanoid]
+    if humanoid and original then
+        pcall(function()
+            humanoid.WalkSpeed = original.WalkSpeed
+            humanoid.UseJumpPower = original.UseJumpPower
+            humanoid.JumpPower = original.JumpPower
+            humanoid.JumpHeight = original.JumpHeight
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        end)
+    end
+end
+
+local function resetSpeedSideEffects()
+    local _, humanoid = getCharacter()
+    local original = rememberHumanoid(humanoid)
+    if humanoid and original then
+        humanoid.WalkSpeed = original.WalkSpeed
+    end
+end
+
+do
+    local _, initialHumanoid = getCharacter()
+    if initialHumanoid then
+        rememberHumanoid(initialHumanoid)
+        State.SpeedValue = initialHumanoid.WalkSpeed
+        if initialHumanoid.UseJumpPower then
+            State.JumpMethod = "JumpPower"
+            State.JumpValue = initialHumanoid.JumpPower
+        else
+            State.JumpMethod = "JumpHeight"
+            State.JumpValue = initialHumanoid.JumpHeight
+        end
+    end
+end
+
+local function restoreCollisions()
+    for part, canCollide in pairs(OriginalCollision) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = canCollide
+            end)
+        end
+    end
+    table.clear(OriginalCollision)
+end
+
+local function safeTeleport(targetCFrame)
+    local character, _, root = getCharacter()
+    if not character or not root or not targetCFrame then
+        notify("Không thể dịch chuyển: nhân vật chưa sẵn sàng.", Theme.Danger)
+        return false
+    end
+    pcall(function()
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        character:PivotTo(targetCFrame)
+    end)
+    return true
+end
+
+local function findPlayer(query)
+    local normalized = string.lower(tostring(query or ""))
+    if normalized == "" then
+        return nil
+    end
+    local partialMatch
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local username = string.lower(player.Name)
+            local displayName = string.lower(player.DisplayName)
+            if username == normalized or displayName == normalized then
+                return player
+            end
+            if not partialMatch and (string.find(username, normalized, 1, true) or string.find(displayName, normalized, 1, true)) then
+                partialMatch = player
+            end
+        end
+    end
+    return partialMatch
+end
+
+local function setSpectating(player)
+    Camera = Workspace.CurrentCamera or Camera
+    if not player then
+        State.SpectatingPlayer = nil
+        local _, localHumanoid = getCharacter()
+        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraSubject = localHumanoid or OriginalCamera.Subject
+        if State.SpectateButton and State.SpectateButton.Parent then
+            State.SpectateButton.Text = "Bắt đầu theo dõi"
+        end
+        return true
+    end
+
+    local targetHumanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if not targetHumanoid then
+        notify("Nhân vật cần theo dõi chưa sẵn sàng.", Theme.Warning)
+        return false
+    end
+
+    State.SpectatingPlayer = player
+    Camera.CameraType = Enum.CameraType.Custom
+    Camera.CameraSubject = targetHumanoid
+    if State.SpectateButton and State.SpectateButton.Parent then
+        State.SpectateButton.Text = "Huỷ theo dõi " .. player.Name
+    end
+    return true
+end
+
+local function resolveGuiParent()
+    if gethui then
+        local success, result = pcall(gethui)
+        if success and result then
+            return result
+        end
+    end
+    local success = pcall(function()
+        return CoreGui.Name
+    end)
+    if success then
+        return CoreGui
+    end
+    return PlayerGui
+end
+
+local GuiParent = resolveGuiParent()
+
+for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
+    pcall(function()
+        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden"}) do
+            local staleInterface = guiRoot:FindFirstChild(interfaceName)
+            if staleInterface then
+                staleInterface:Destroy()
+            end
+        end
+    end)
+end
+
+ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "Raphael_Sovereign_V6_2_Golden"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+
+local parented = pcall(function()
+    ScreenGui.Parent = GuiParent
+end)
+if not parented then
+    ScreenGui.Parent = PlayerGui
+    GuiParent = PlayerGui
+end
+
+local Overlay = Instance.new("Frame")
+Overlay.Name = "Overlay"
+Overlay.Size = UDim2.fromScale(1, 1)
+Overlay.BackgroundTransparency = 1
+Overlay.Parent = ScreenGui
+
+MainFrame = Instance.new("Frame")
+MainFrame.Name = "Main"
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Position = UDim2.fromScale(0.5, 0.5)
+MainFrame.BackgroundColor3 = Theme.Background
+MainFrame.BackgroundTransparency = 0.12
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = Overlay
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 15)
+
+local MainShadow = Instance.new("Frame")
+MainShadow.Name = "ShadowCompatibilityLayer"
+MainShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+MainShadow.Position = MainFrame.Position
+MainShadow.Size = MainFrame.Size
+MainShadow.BackgroundTransparency = 1
+MainShadow.BorderSizePixel = 0
+MainShadow.ZIndex = 0
+MainShadow.Parent = Overlay
+
+connect(MainFrame:GetPropertyChangedSignal("Position"), function()
+    MainShadow.Position = MainFrame.Position
+end)
+connect(MainFrame:GetPropertyChangedSignal("Size"), function()
+    MainShadow.Size = MainFrame.Size
+end)
+
+local MainGradient = Instance.new("UIGradient")
+MainGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 14, 9)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 15, 7))
+})
+MainGradient.Rotation = 35
+MainGradient.Parent = MainFrame
+
+local TopAccent = Instance.new("Frame")
+TopAccent.Name = "TopAccent"
+TopAccent.Size = UDim2.new(1, 0, 0, 3)
+TopAccent.BackgroundColor3 = Theme.Accent
+TopAccent.BorderSizePixel = 0
+TopAccent.ZIndex = 8
+TopAccent.Parent = MainFrame
+local TopAccentGradient = Instance.new("UIGradient")
+TopAccentGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Theme.Accent),
+    ColorSequenceKeypoint.new(0.5, Theme.Accent2),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 224, 104))
+})
+TopAccentGradient.Parent = TopAccent
+
+local AmbientGlow = Instance.new("Frame")
+AmbientGlow.Name = "AmbientGlow"
+AmbientGlow.Size = UDim2.fromOffset(220, 220)
+AmbientGlow.Position = UDim2.new(1, -130, 0, -130)
+AmbientGlow.BackgroundColor3 = Theme.Accent2
+AmbientGlow.BackgroundTransparency = 0.91
+AmbientGlow.BorderSizePixel = 0
+AmbientGlow.ZIndex = 0
+AmbientGlow.Parent = MainFrame
+Instance.new("UICorner", AmbientGlow).CornerRadius = UDim.new(1, 0)
+local AmbientGlowGradient = Instance.new("UIGradient")
+AmbientGlowGradient.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 0.1),
+    NumberSequenceKeypoint.new(1, 1)
+})
+AmbientGlowGradient.Rotation = 45
+AmbientGlowGradient.Parent = AmbientGlow
+
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 52)
+Header.BackgroundColor3 = Theme.Surface
+Header.BackgroundTransparency = 0.1
+Header.BorderSizePixel = 0
+Header.Active = true
+Header.Parent = MainFrame
+
+local HeaderGradient = Instance.new("UIGradient")
+HeaderGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(54, 35, 13)),
+    ColorSequenceKeypoint.new(0.55, Color3.fromRGB(30, 21, 14)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(65, 28, 10))
+})
+HeaderGradient.Parent = Header
+
+local BrandMark = Instance.new("Frame")
+BrandMark.Size = UDim2.fromOffset(36, 36)
+BrandMark.Position = UDim2.fromOffset(13, 8)
+BrandMark.BackgroundColor3 = Theme.Accent
+BrandMark.BorderSizePixel = 0
+BrandMark.Parent = Header
+Instance.new("UICorner", BrandMark).CornerRadius = UDim.new(0, 11)
+local BrandMarkGradient = Instance.new("UIGradient")
+BrandMarkGradient.Color = ColorSequence.new(Theme.Accent, Theme.Accent2)
+BrandMarkGradient.Rotation = 45
+BrandMarkGradient.Parent = BrandMark
+local BrandMarkIcon = UI.CreateIcon(BrandMark, "sparkles", 19, Theme.Text)
+BrandMarkIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+BrandMarkIcon.Position = UDim2.fromScale(0.5, 0.5)
+
+local Brand = Instance.new("TextLabel")
+Brand.Size = UDim2.new(1, -168, 0, 27)
+Brand.Position = UDim2.fromOffset(59, 5)
+Brand.BackgroundTransparency = 1
+Brand.Text = "RAPHAEL  ·  SOVEREIGN"
+Brand.TextColor3 = Theme.Text
+Brand.Font = Enum.Font.GothamBlack
+Brand.TextSize = 16
+Brand.TextXAlignment = Enum.TextXAlignment.Left
+Brand.Parent = Header
+
+local Subtitle = Instance.new("TextLabel")
+Subtitle.Size = UDim2.new(1, -168, 0, 17)
+Subtitle.Position = UDim2.fromOffset(59, 29)
+Subtitle.BackgroundTransparency = 1
+Subtitle.Text = "DeltaX · Luau runtime suite"
+Subtitle.TextColor3 = Theme.SubText
+Subtitle.Font = Enum.Font.Gotham
+Subtitle.TextSize = 10
+Subtitle.TextXAlignment = Enum.TextXAlignment.Left
+Subtitle.Parent = Header
+
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Size = UDim2.fromOffset(32, 32)
+MinimizeButton.Position = UDim2.new(1, -78, 0, 10)
+MinimizeButton.BackgroundColor3 = Theme.Warning
+MinimizeButton.Text = ""
+MinimizeButton.AutoButtonColor = false
+MinimizeButton.Parent = Header
+Instance.new("UICorner", MinimizeButton).CornerRadius = UDim.new(0, 10)
+local MinimizeIcon = UI.CreateIcon(MinimizeButton, "minus", 16, Theme.Background)
+MinimizeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+MinimizeIcon.Position = UDim2.fromScale(0.5, 0.5)
+UI.AddRipple(MinimizeButton, Theme.Text)
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.fromOffset(32, 32)
+CloseButton.Position = UDim2.new(1, -40, 0, 10)
+CloseButton.BackgroundColor3 = Theme.Danger
+CloseButton.Text = ""
+CloseButton.AutoButtonColor = false
+CloseButton.Parent = Header
+Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0, 10)
+local CloseIcon = UI.CreateIcon(CloseButton, "x", 16, Theme.Text)
+CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+CloseIcon.Position = UDim2.fromScale(0.5, 0.5)
+UI.AddRipple(CloseButton, Theme.Text)
+
+local Sidebar = Instance.new("ScrollingFrame")
+Sidebar.Name = "Sidebar"
+Sidebar.Position = UDim2.fromOffset(10, 62)
+Sidebar.Size = UDim2.new(0, 126, 1, -92)
+Sidebar.BackgroundColor3 = Theme.Surface
+Sidebar.BackgroundTransparency = 0.18
+Sidebar.BorderSizePixel = 0
+Sidebar.ScrollBarThickness = 0
+Sidebar.CanvasSize = UDim2.new()
+Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Sidebar.Parent = MainFrame
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 11)
+
+local SidebarPadding = Instance.new("UIPadding")
+SidebarPadding.PaddingTop = UDim.new(0, 8)
+SidebarPadding.PaddingBottom = UDim.new(0, 8)
+SidebarPadding.PaddingLeft = UDim.new(0, 7)
+SidebarPadding.PaddingRight = UDim.new(0, 7)
+SidebarPadding.Parent = Sidebar
+
+local SidebarLayout = Instance.new("UIListLayout")
+SidebarLayout.Padding = UDim.new(0, 6)
+SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SidebarLayout.Parent = Sidebar
+
+local Content = Instance.new("Frame")
+Content.Name = "Content"
+Content.Position = UDim2.fromOffset(146, 62)
+Content.Size = UDim2.new(1, -156, 1, -92)
+Content.BackgroundTransparency = 1
+Content.Parent = MainFrame
+
+local StatusBar = Instance.new("Frame")
+StatusBar.Position = UDim2.new(0, 10, 1, -24)
+StatusBar.Size = UDim2.new(1, -20, 0, 18)
+StatusBar.BackgroundTransparency = 1
+StatusBar.Parent = MainFrame
+
+local StatusDot = Instance.new("Frame")
+StatusDot.Size = UDim2.fromOffset(7, 7)
+StatusDot.Position = UDim2.fromOffset(0, 5)
+StatusDot.BackgroundColor3 = Theme.Success
+StatusDot.BorderSizePixel = 0
+StatusDot.Parent = StatusBar
+Instance.new("UICorner", StatusDot).CornerRadius = UDim.new(1, 0)
+
+StatusLabel = Instance.new("TextLabel")
+StatusLabel.Position = UDim2.fromOffset(13, 0)
+StatusLabel.Size = UDim2.new(1, -13, 1, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Hệ thống sẵn sàng."
+StatusLabel.TextColor3 = Theme.SubText
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 10
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.TextTruncate = Enum.TextTruncate.AtEnd
+StatusLabel.Parent = StatusBar
+
+local Pages = {}
+local TabButtons = {}
+local ActiveTab
+
+local function tween(instance, properties, duration)
+    local animation = TweenService:Create(instance, TweenInfo.new(duration or 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
+    animation:Play()
+    return animation
+end
+
+local function createTab(name, order)
+    local button = Instance.new("TextButton")
+    button.Name = name .. "Tab"
+    button.Size = UDim2.new(1, 0, 0, 37)
+    button.BackgroundColor3 = Theme.SurfaceLight
+    button.BackgroundTransparency = 0.45
+    button.BorderSizePixel = 0
+    button.Text = name
+    button.TextColor3 = Theme.SubText
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 12
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.AutoButtonColor = false
+    button.LayoutOrder = order
+    button.Parent = Sidebar
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 10)
+    local buttonPadding = Instance.new("UIPadding")
+    buttonPadding.PaddingLeft = UDim.new(0, 39)
+    buttonPadding.Parent = button
+
+    local tabGradient = Instance.new("UIGradient")
+    tabGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Theme.Accent),
+        ColorSequenceKeypoint.new(1, Theme.Accent2)
+    })
+    tabGradient.Rotation = 15
+    tabGradient.Enabled = false
+    tabGradient.Parent = button
+
+    local tabIcon = UI.CreateIcon(button, UI.TabIcons[name] or "sparkles", 17, Theme.SubText)
+    tabIcon.AnchorPoint = Vector2.new(0, 0.5)
+    tabIcon.Position = UDim2.new(0, -29, 0.5, 0)
+    tabIcon.ZIndex = button.ZIndex + 2
+
+    local accent = Instance.new("Frame")
+    accent.Size = UDim2.fromOffset(6, 6)
+    accent.AnchorPoint = Vector2.new(0.5, 0.5)
+    accent.Position = UDim2.new(1, -10, 0.5, 0)
+    accent.BackgroundColor3 = Theme.Text
+    accent.BackgroundTransparency = 1
+    accent.BorderSizePixel = 0
+    accent.Parent = button
+    Instance.new("UICorner", accent).CornerRadius = UDim.new(1, 0)
+    UI.AddRipple(button, Theme.Text)
+
+    local page = Instance.new("ScrollingFrame")
+    page.Name = name .. "Page"
+    page.Size = UDim2.fromScale(1, 1)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = Theme.Accent
+    page.CanvasSize = UDim2.new()
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = false
+    page.Parent = Content
+
+    local pagePadding = Instance.new("UIPadding")
+    pagePadding.PaddingRight = UDim.new(0, 7)
+    pagePadding.PaddingBottom = UDim.new(0, 8)
+    pagePadding.Parent = page
+
+    local pageLayout = Instance.new("UIListLayout")
+    pageLayout.Padding = UDim.new(0, 10)
+    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pageLayout.Parent = page
+
+    Pages[name] = page
+    TabButtons[name] = {Button = button, Accent = accent, Icon = tabIcon, Gradient = tabGradient}
+
+    connect(button.Activated, function()
+        ActiveTab = name
+        for tabName, tabPage in pairs(Pages) do
+            tabPage.Visible = tabName == name
+        end
+        for tabName, data in pairs(TabButtons) do
+            local selected = tabName == name
+            data.Gradient.Enabled = selected
+            tween(data.Button, {
+                BackgroundTransparency = selected and 0 or 0.45,
+                BackgroundColor3 = selected and Theme.Accent or Theme.SurfaceLight,
+                TextColor3 = selected and Theme.Text or Theme.SubText
+            })
+            tween(data.Icon, {ImageColor3 = selected and Theme.Text or Theme.SubText})
+            tween(data.Accent, {BackgroundTransparency = selected and 0.16 or 1})
+        end
+    end)
+
+    return page
+end
+
+local function createSection(parent, title, description)
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(1, 0, 0, 0)
+    section.AutomaticSize = Enum.AutomaticSize.Y
+    section.BackgroundColor3 = Theme.Surface
+    section.BackgroundTransparency = 0.16
+    section.BorderSizePixel = 0
+    section.Parent = parent
+    Instance.new("UICorner", section).CornerRadius = UDim.new(0, 13)
+
+    local surfaceGradient = Instance.new("UIGradient")
+    surfaceGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Theme.Surface),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(36, 20, 10))
+    })
+    surfaceGradient.Rotation = 28
+    surfaceGradient.Parent = section
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 11)
+    padding.PaddingBottom = UDim.new(0, 11)
+    padding.PaddingLeft = UDim.new(0, 12)
+    padding.PaddingRight = UDim.new(0, 12)
+    padding.Parent = section
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 8)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = section
+
+    local titleHolder = Instance.new("Frame")
+    titleHolder.Size = UDim2.new(1, 0, 0, 22)
+    titleHolder.BackgroundTransparency = 1
+    titleHolder.Parent = section
+
+    local sectionIconHolder = Instance.new("Frame")
+    sectionIconHolder.Size = UDim2.fromOffset(22, 22)
+    sectionIconHolder.BackgroundColor3 = Theme.Accent
+    sectionIconHolder.BackgroundTransparency = 0.82
+    sectionIconHolder.BorderSizePixel = 0
+    sectionIconHolder.Parent = titleHolder
+    Instance.new("UICorner", sectionIconHolder).CornerRadius = UDim.new(0, 7)
+
+    local sectionIcon = UI.CreateIcon(sectionIconHolder, UI.GetSectionIcon(title), 12, Theme.Accent)
+    sectionIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    sectionIcon.Position = UDim2.fromScale(0.5, 0.5)
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Position = UDim2.fromOffset(30, 0)
+    titleLabel.Size = UDim2.new(1, -30, 1, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = string.upper(title)
+    titleLabel.TextColor3 = Theme.Accent
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 11
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = titleHolder
+
+    if description and description ~= "" then
+        local descriptionLabel = Instance.new("TextLabel")
+        descriptionLabel.Size = UDim2.new(1, 0, 0, 0)
+        descriptionLabel.AutomaticSize = Enum.AutomaticSize.Y
+        descriptionLabel.BackgroundTransparency = 1
+        descriptionLabel.Text = description
+        descriptionLabel.TextColor3 = Theme.SubText
+        descriptionLabel.Font = Enum.Font.Gotham
+        descriptionLabel.TextSize = 10
+        descriptionLabel.TextWrapped = true
+        descriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
+        descriptionLabel.Parent = section
+    end
+
+    return section
+end
+
+local function createToggle(parent, text, defaultValue, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 38)
+    row.BackgroundTransparency = 1
+    row.Parent = parent
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -54, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Theme.Text
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextTruncate = Enum.TextTruncate.AtEnd
+    label.Parent = row
+
+    local glow = Instance.new("Frame")
+    glow.Size = UDim2.fromOffset(38, 38)
+    glow.Position = UDim2.new(1, -38, 0.5, -19)
+    glow.BackgroundColor3 = Theme.Accent2
+    glow.BackgroundTransparency = defaultValue and 0.76 or 1
+    glow.BorderSizePixel = 0
+    glow.Parent = row
+    Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 13)
+
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.fromOffset(32, 32)
+    button.Position = UDim2.new(1, -35, 0.5, -16)
+    button.BackgroundColor3 = defaultValue and Theme.Accent or Theme.SurfaceLight
+    button.BorderSizePixel = 0
+    button.Text = ""
+    button.AutoButtonColor = false
+    button.Parent = row
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 10)
+
+    local buttonGradient = Instance.new("UIGradient")
+    buttonGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Theme.Accent),
+        ColorSequenceKeypoint.new(1, Theme.Accent2)
+    })
+    buttonGradient.Rotation = 45
+    buttonGradient.Enabled = defaultValue
+    buttonGradient.Parent = button
+
+    local stateIcon = UI.CreateIcon(button, defaultValue and "check" or "power", 15, defaultValue and Theme.Text or Theme.SubText)
+    stateIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    stateIcon.Position = UDim2.fromScale(0.5, 0.5)
+    stateIcon.ZIndex = button.ZIndex + 2
+    UI.AddRipple(button, Theme.Text)
+
+    local value = defaultValue
+    local function setValue(newValue, invoke)
+        value = not not newValue
+        buttonGradient.Enabled = value
+        stateIcon.Image = UI.GetIcon(value and "check" or "power")
+        tween(button, {
+            BackgroundColor3 = value and Theme.Accent or Theme.SurfaceLight,
+            Rotation = value and 0 or -4
+        })
+        tween(stateIcon, {
+            ImageColor3 = value and Theme.Text or Theme.SubText,
+            Rotation = value and 0 or -12
+        })
+        tween(glow, {BackgroundTransparency = value and 0.76 or 1})
+        if invoke ~= false and callback then
+            callback(value)
+        end
+    end
+
+    connect(button.Activated, function()
+        tween(button, {Size = UDim2.fromOffset(28, 28), Position = UDim2.new(1, -33, 0.5, -14)}, 0.06)
+        task.delay(0.07, function()
+            if button.Parent then
+                tween(button, {Size = UDim2.fromOffset(32, 32), Position = UDim2.new(1, -35, 0.5, -16)}, 0.1)
+            end
+        end)
+        setValue(not value, true)
+    end)
+
+    return {
+        Set = setValue,
+        Get = function()
+            return value
+        end,
+        Instance = row
+    }
+end
+
+local function createInput(parent, labelText, defaultText, placeholder, live, callback)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, 0, 0, 52)
+    holder.BackgroundTransparency = 1
+    holder.Parent = parent
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 17)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Theme.SubText
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = holder
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, 0, 0, 31)
+    box.Position = UDim2.fromOffset(0, 20)
+    box.BackgroundColor3 = Theme.Input
+    box.BorderSizePixel = 0
+    box.ClearTextOnFocus = false
+    box.PlaceholderText = placeholder or ""
+    box.PlaceholderColor3 = Color3.fromRGB(122, 102, 75)
+    box.Text = tostring(defaultText or "")
+    box.TextColor3 = Theme.Text
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 12
+    box.TextXAlignment = Enum.TextXAlignment.Left
+    box.Parent = holder
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
+
+    local boxPadding = Instance.new("UIPadding")
+    boxPadding.PaddingLeft = UDim.new(0, 10)
+    boxPadding.PaddingRight = UDim.new(0, 10)
+    boxPadding.Parent = box
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(91, 66, 37)
+    stroke.Transparency = 0.5
+    stroke.Parent = box
+
+    connect(box.Focused, function()
+        tween(stroke, {Color = Theme.Accent, Transparency = 0})
+    end)
+    connect(box.FocusLost, function()
+        tween(stroke, {Color = Color3.fromRGB(91, 66, 37), Transparency = 0.5})
+        if not live and callback then
+            callback(box.Text, box)
+        end
+    end)
+    if live then
+        connect(box:GetPropertyChangedSignal("Text"), function()
+            if callback then
+                callback(box.Text, box)
+            end
+        end)
+    end
+
+    return box
+end
+
+local function createButton(parent, text, callback, color)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 34)
+    button.BackgroundColor3 = color or Theme.Accent
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = Theme.Text
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 11
+    button.AutoButtonColor = false
+    button.Parent = parent
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 9)
+
+    local actionIcon = UI.CreateIcon(button, UI.GetButtonIcon(text), 14, Theme.Text)
+    actionIcon.AnchorPoint = Vector2.new(0, 0.5)
+    actionIcon.Position = UDim2.new(0, 11, 0.5, 0)
+    actionIcon.ZIndex = button.ZIndex + 2
+    UI.AddRipple(button, Theme.Text)
+
+    connect(button.MouseEnter, function()
+        tween(button, {BackgroundTransparency = 0.16})
+    end)
+    connect(button.MouseLeave, function()
+        tween(button, {BackgroundTransparency = 0})
+    end)
+    connect(button.Activated, function()
+        tween(button, {Size = UDim2.new(1, -4, 0, 32)}, 0.06)
+        task.delay(0.07, function()
+            if button and button.Parent then
+                tween(button, {Size = UDim2.new(1, 0, 0, 34)}, 0.08)
+            end
+        end)
+        if callback then
+            callback()
+        end
+    end)
+    return button
+end
+
+local function createDualButtons(parent, leftText, leftCallback, rightText, rightCallback, leftColor, rightColor)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, 0, 0, 34)
+    holder.BackgroundTransparency = 1
+    holder.Parent = parent
+
+    local left = Instance.new("TextButton")
+    left.Size = UDim2.new(0.5, -4, 1, 0)
+    left.BackgroundColor3 = leftColor or Theme.Accent
+    left.BorderSizePixel = 0
+    left.Text = leftText
+    left.TextColor3 = Theme.Text
+    left.Font = Enum.Font.GothamBold
+    left.TextSize = 10
+    left.AutoButtonColor = false
+    left.Parent = holder
+    Instance.new("UICorner", left).CornerRadius = UDim.new(0, 9)
+    local leftIcon = UI.CreateIcon(left, UI.GetButtonIcon(leftText), 13, Theme.Text)
+    leftIcon.AnchorPoint = Vector2.new(0, 0.5)
+    leftIcon.Position = UDim2.new(0, 9, 0.5, 0)
+    leftIcon.ZIndex = left.ZIndex + 2
+    UI.AddRipple(left, Theme.Text)
+
+    local right = Instance.new("TextButton")
+    right.Size = UDim2.new(0.5, -4, 1, 0)
+    right.Position = UDim2.new(0.5, 4, 0, 0)
+    right.BackgroundColor3 = rightColor or Theme.Accent2
+    right.BorderSizePixel = 0
+    right.Text = rightText
+    right.TextColor3 = Theme.Text
+    right.Font = Enum.Font.GothamBold
+    right.TextSize = 10
+    right.AutoButtonColor = false
+    right.Parent = holder
+    Instance.new("UICorner", right).CornerRadius = UDim.new(0, 9)
+    local rightIcon = UI.CreateIcon(right, UI.GetButtonIcon(rightText), 13, Theme.Text)
+    rightIcon.AnchorPoint = Vector2.new(0, 0.5)
+    rightIcon.Position = UDim2.new(0, 9, 0.5, 0)
+    rightIcon.ZIndex = right.ZIndex + 2
+    UI.AddRipple(right, Theme.Text)
+
+    connect(left.Activated, function()
+        if leftCallback then
+            leftCallback()
+        end
+    end)
+    connect(right.Activated, function()
+        if rightCallback then
+            rightCallback()
+        end
+    end)
+
+    return left, right
+end
+
+local function createSelector(parent, labelText, options, defaultValue, callback)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, 0, 0, 52)
+    holder.BackgroundTransparency = 1
+    holder.Parent = parent
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 17)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Theme.SubText
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = holder
+
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 31)
+    button.Position = UDim2.fromOffset(0, 20)
+    button.BackgroundColor3 = Theme.Input
+    button.BorderSizePixel = 0
+    button.TextColor3 = Theme.Text
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 11
+    button.AutoButtonColor = false
+    button.Parent = holder
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
+
+    local chevronIcon = UI.CreateIcon(button, "chevron-down", 14, Theme.SubText)
+    chevronIcon.AnchorPoint = Vector2.new(1, 0.5)
+    chevronIcon.Position = UDim2.new(1, -10, 0.5, 0)
+    chevronIcon.ZIndex = button.ZIndex + 2
+    UI.AddRipple(button, Theme.Accent)
+
+    local index = table.find(options, defaultValue) or 1
+    button.Text = options[index]
+
+    connect(button.Activated, function()
+        index = index % #options + 1
+        button.Text = options[index]
+        chevronIcon.Rotation = 180
+        tween(chevronIcon, {Rotation = 0}, 0.2)
+        tween(button, {BackgroundColor3 = Theme.SurfaceLight}, 0.08)
+        task.delay(0.09, function()
+            if button.Parent then
+                tween(button, {BackgroundColor3 = Theme.Input}, 0.12)
+            end
+        end)
+        if callback then
+            callback(options[index])
+        end
+    end)
+
+    return {
+        Get = function()
+            return options[index]
+        end,
+        Set = function(value, invoke)
+            local found = table.find(options, value)
+            if found then
+                index = found
+                button.Text = options[index]
+                if invoke ~= false and callback then
+                    callback(options[index])
+                end
+            end
+        end
+    }
+end
+
+local function createInfoRow(parent, keyText, valueText)
+    local row = Instance.new("TextButton")
+    row.Size = UDim2.new(1, 0, 0, 24)
+    row.BackgroundColor3 = Theme.Accent
+    row.BackgroundTransparency = 1
+    row.BorderSizePixel = 0
+    row.Text = ""
+    row.AutoButtonColor = false
+    row.Parent = parent
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+    local key = Instance.new("TextLabel")
+    key.Size = UDim2.new(0.38, 0, 1, 0)
+    key.BackgroundTransparency = 1
+    key.Text = keyText
+    key.TextColor3 = Theme.SubText
+    key.Font = Enum.Font.Gotham
+    key.TextSize = 10
+    key.TextXAlignment = Enum.TextXAlignment.Left
+    key.Parent = row
+
+    local value = Instance.new("TextLabel")
+    value.Position = UDim2.new(0.38, 0, 0, 0)
+    value.Size = UDim2.new(0.62, 0, 1, 0)
+    value.BackgroundTransparency = 1
+    value.Text = valueText
+    value.TextColor3 = Theme.Text
+    value.Font = Enum.Font.GothamMedium
+    value.TextSize = 10
+    value.TextXAlignment = Enum.TextXAlignment.Right
+    value.TextTruncate = Enum.TextTruncate.AtEnd
+    value.Parent = row
+
+    local lastActivation = 0
+    row.Activated:Connect(function()
+        local now = os.clock()
+        if now - lastActivation <= 0.38 then
+            local copied = false
+            if setclipboard then
+                copied = pcall(setclipboard, value.Text)
+            end
+            notify(copied and ("Đã copy " .. keyText .. ".") or (keyText .. ": " .. value.Text), copied and Theme.Success or Theme.Warning)
+            lastActivation = 0
+        else
+            lastActivation = now
+            tween(row, {BackgroundTransparency = 0.88}, 0.08)
+            task.delay(0.18, function()
+                if row.Parent then
+                    tween(row, {BackgroundTransparency = 1}, 0.15)
+                end
+            end)
+        end
+    end)
+
+    return value
+end
+
+local function createColorLegend(parent)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, 0, 0, 38)
+    holder.BackgroundColor3 = Theme.Input
+    holder.BorderSizePixel = 0
+    holder.Parent = parent
+    Instance.new("UICorner", holder).CornerRadius = UDim.new(0, 8)
+
+    local entries = {
+        {"Player", Theme.Player},
+        {"Quái", Theme.Mob},
+        {"Item", Theme.Item}
+    }
+    for index, entry in ipairs(entries) do
+        local xScale = (index - 1) / 3
+        local cell = Instance.new("Frame")
+        cell.Position = UDim2.new(xScale, 0, 0, 0)
+        cell.Size = UDim2.new(1 / 3, 0, 1, 0)
+        cell.BackgroundTransparency = 1
+        cell.Parent = holder
+
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(9, 9)
+        dot.Position = UDim2.new(0, 9, 0.5, -4)
+        dot.BackgroundColor3 = entry[2]
+        dot.BorderSizePixel = 0
+        dot.Parent = cell
+        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+
+        local text = Instance.new("TextLabel")
+        text.Position = UDim2.fromOffset(23, 0)
+        text.Size = UDim2.new(1, -25, 1, 0)
+        text.BackgroundTransparency = 1
+        text.Text = entry[1]
+        text.TextColor3 = Theme.Text
+        text.Font = Enum.Font.GothamMedium
+        text.TextSize = 9
+        text.TextXAlignment = Enum.TextXAlignment.Left
+        text.Parent = cell
+    end
+end
+
+local MovementPage = createTab("Movement", 1)
+local ESPPage = createTab("ESP", 2)
+local VisionPage = createTab("Vision", 3)
+local TelePage = createTab("Tele", 4)
+local MiscPage = createTab("Misc", 5)
+local InfoPage = createTab("Info", 6)
+
+local function resizeInterface()
+    Camera = Workspace.CurrentCamera or Camera
+    local viewport = Camera.ViewportSize
+    local width = math.clamp(viewport.X - 20, 320, 820)
+    local height = math.clamp(viewport.Y - 28, 330, 570)
+    MainFrame.Size = UDim2.fromOffset(width, height)
+    if width < 520 then
+        Sidebar.Size = UDim2.new(0, 102, 1, -92)
+        Content.Position = UDim2.fromOffset(121, 62)
+        Content.Size = UDim2.new(1, -131, 1, -92)
+        for _, data in pairs(TabButtons) do
+            data.Button.TextSize = 10
+        end
+    else
+        Sidebar.Size = UDim2.new(0, 126, 1, -92)
+        Content.Position = UDim2.fromOffset(146, 62)
+        Content.Size = UDim2.new(1, -156, 1, -92)
+        for _, data in pairs(TabButtons) do
+            data.Button.TextSize = 12
+        end
+    end
+end
+
+resizeInterface()
+connect(Camera:GetPropertyChangedSignal("ViewportSize"), resizeInterface)
+connect(Workspace:GetPropertyChangedSignal("CurrentCamera"), function()
+    Camera = Workspace.CurrentCamera or Camera
+    resizeInterface()
+end)
+
+local draggingMain = false
+local mainDragStart
+local mainStartPosition
+connect(Header.InputBegan, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingMain = true
+        mainDragStart = input.Position
+        mainStartPosition = MainFrame.Position
+    end
+end)
+connect(UserInputService.InputChanged, function(input)
+    if draggingMain and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - mainDragStart
+        MainFrame.Position = UDim2.new(mainStartPosition.X.Scale, mainStartPosition.X.Offset + delta.X, mainStartPosition.Y.Scale, mainStartPosition.Y.Offset + delta.Y)
+    end
+end)
+connect(UserInputService.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingMain = false
+    end
+end)
+
+local RestoreOrb = Instance.new("TextButton")
+RestoreOrb.Name = "RestoreOrb"
+RestoreOrb.Size = UDim2.fromOffset(48, 48)
+RestoreOrb.Position = UDim2.new(1, -62, 0, 18)
+RestoreOrb.BackgroundColor3 = Theme.Accent
+RestoreOrb.BorderSizePixel = 0
+RestoreOrb.Text = ""
+RestoreOrb.Visible = false
+RestoreOrb.AutoButtonColor = false
+RestoreOrb.Parent = Overlay
+Instance.new("UICorner", RestoreOrb).CornerRadius = UDim.new(0, 15)
+local OrbGradient = Instance.new("UIGradient")
+OrbGradient.Color = ColorSequence.new(Theme.Accent, Theme.Accent2)
+OrbGradient.Rotation = 45
+OrbGradient.Parent = RestoreOrb
+local OrbIcon = UI.CreateIcon(RestoreOrb, "sparkles", 22, Theme.Text)
+OrbIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+OrbIcon.Position = UDim2.fromScale(0.5, 0.5)
+OrbIcon.ZIndex = RestoreOrb.ZIndex + 2
+UI.AddRipple(RestoreOrb, Theme.Text)
+
+local draggingOrb = false
+local orbMoved = false
+local orbDragStart
+local orbStartPosition
+connect(RestoreOrb.InputBegan, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingOrb = true
+        orbMoved = false
+        orbDragStart = input.Position
+        orbStartPosition = RestoreOrb.Position
+    end
+end)
+connect(UserInputService.InputChanged, function(input)
+    if draggingOrb and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - orbDragStart
+        if delta.Magnitude > 4 then
+            orbMoved = true
+        end
+        RestoreOrb.Position = UDim2.new(orbStartPosition.X.Scale, orbStartPosition.X.Offset + delta.X, orbStartPosition.Y.Scale, orbStartPosition.Y.Offset + delta.Y)
+    end
+end)
+connect(UserInputService.InputEnded, function(input)
+    if draggingOrb and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        draggingOrb = false
+    end
+end)
+connect(RestoreOrb.Activated, function()
+    if not orbMoved then
+        MainFrame.Visible = true
+        MainShadow.Visible = true
+        RestoreOrb.Visible = false
+    end
+end)
+connect(MinimizeButton.Activated, function()
+    MainFrame.Visible = false
+    MainShadow.Visible = false
+    RestoreOrb.Visible = true
+end)
+connect(CloseButton.Activated, function()
+    if cleanup then
+        cleanup()
+    end
+end)
+connect(UserInputService.InputBegan, function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.RightShift then
+        MainFrame.Visible = not MainFrame.Visible
+        MainShadow.Visible = MainFrame.Visible
+        RestoreOrb.Visible = not MainFrame.Visible
+    end
+end)
+
+local function getGuiRoots()
+    local roots = {}
+    local seen = {}
+    local candidates = {PlayerGui, CoreGui, GuiParent}
+    for _, root in ipairs(candidates) do
+        if root and not seen[root] then
+            seen[root] = true
+            table.insert(roots, root)
+        end
+    end
+    return roots
+end
+
+local function loadFlyGui()
+    local before = {}
+    for _, root in ipairs(getGuiRoots()) do
+        for _, child in ipairs(root:GetDescendants()) do
+            if child:IsA("ScreenGui") then
+                before[child] = true
+            end
+        end
+    end
+
+    local success, result = pcall(function()
+        local source = game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt")
+        local compiled, compileError = loadstring(source)
+        if not compiled then
+            error(compileError or "Không thể biên dịch FlyGuiV3")
+        end
+        return compiled()
+    end)
+
+    if not success then
+        notify("FlyGuiV3 lỗi: " .. tostring(result), Theme.Danger)
+        return
+    end
+
+    task.wait(0.6)
+    table.clear(FlyGuiObjects)
+    for _, root in ipairs(getGuiRoots()) do
+        for _, child in ipairs(root:GetDescendants()) do
+            if child:IsA("ScreenGui") and (not before[child] or string.find(string.lower(child.Name), "fly", 1, true)) and child ~= ScreenGui then
+                FlyGuiObjects[child] = true
+            end
+        end
+    end
+    if typeof(result) == "Instance" then
+        FlyGuiObjects[result] = true
+    end
+    State.FlyLoaded = true
+    State.FlyHidden = false
+    notify("Đã tải FlyGuiV3.", Theme.Success)
+end
+
+local function setFlyHidden(hidden)
+    local changed = false
+    for instance in pairs(FlyGuiObjects) do
+        if instance and instance.Parent then
+            changed = true
+            pcall(function()
+                if instance:IsA("LayerCollector") then
+                    instance.Enabled = not hidden
+                elseif instance:IsA("GuiObject") then
+                    instance.Visible = not hidden
+                end
+            end)
+        end
+    end
+    State.FlyHidden = hidden
+    if changed then
+        notify(hidden and "Đã ẩn giao diện Fly." or "Đã hiện giao diện Fly.", Theme.Success)
+    else
+        notify("Không tìm thấy giao diện Fly đang hoạt động.", Theme.Warning)
+    end
+end
+
+local function deleteFlyGui()
+    local removed = 0
+    for instance in pairs(FlyGuiObjects) do
+        if instance and instance.Parent then
+            removed = removed + 1
+            pcall(function()
+                instance:Destroy()
+            end)
+        end
+    end
+    table.clear(FlyGuiObjects)
+    State.FlyLoaded = false
+    State.FlyHidden = false
+    notify(removed > 0 and "Đã xoá giao diện Fly." or "Không có giao diện Fly để xoá.", removed > 0 and Theme.Success or Theme.Warning)
+end
+
+local function captureEffect(instance)
+    if EffectBackup[instance] then
+        return
+    end
+    if instance:IsA("PostEffect") then
+        EffectBackup[instance] = {Type = "PostEffect", Enabled = instance.Enabled}
+    elseif instance:IsA("Atmosphere") then
+        EffectBackup[instance] = {
+            Type = "Atmosphere",
+            Density = instance.Density,
+            Haze = instance.Haze,
+            Glare = instance.Glare,
+            Offset = instance.Offset,
+            Color = instance.Color,
+            Decay = instance.Decay
+        }
+    end
+end
+
+local function suppressEffect(instance)
+    captureEffect(instance)
+    pcall(function()
+        if instance:IsA("PostEffect") then
+            instance.Enabled = false
+        elseif instance:IsA("Atmosphere") then
+            instance.Density = 0
+            instance.Haze = 0
+            instance.Glare = 0
+            instance.Offset = 0
+        end
+    end)
+end
+
+local function applyNoEffects()
+    Lighting.FogStart = 1000000
+    Lighting.FogEnd = 1000000
+    for _, instance in ipairs(Lighting:GetDescendants()) do
+        suppressEffect(instance)
+    end
+end
+
+local function restoreEffects()
+    for instance, values in pairs(EffectBackup) do
+        if instance and instance.Parent then
+            pcall(function()
+                if values.Type == "PostEffect" then
+                    instance.Enabled = values.Enabled
+                elseif values.Type == "Atmosphere" then
+                    instance.Density = values.Density
+                    instance.Haze = values.Haze
+                    instance.Glare = values.Glare
+                    instance.Offset = values.Offset
+                    instance.Color = values.Color
+                    instance.Decay = values.Decay
+                end
+            end)
+        end
+    end
+    Lighting.FogStart = OriginalLighting.FogStart
+    Lighting.FogEnd = OriginalLighting.FogEnd
+end
+
+local function applyFullBright()
+    if State.FullBrightLevel == nil then
+        return
+    end
+    Lighting.Brightness = State.FullBrightLevel
+    Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+    Lighting.GlobalShadows = false
+    Lighting.ExposureCompensation = math.clamp(State.FullBrightLevel * 0.2, 0, 5)
+    Lighting.EnvironmentDiffuseScale = 1
+    Lighting.EnvironmentSpecularScale = 1
+end
+
+local function restoreLightingVisuals()
+    Lighting.Brightness = OriginalLighting.Brightness
+    Lighting.Ambient = OriginalLighting.Ambient
+    Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+    Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+    Lighting.ExposureCompensation = OriginalLighting.ExposureCompensation
+    Lighting.EnvironmentDiffuseScale = OriginalLighting.EnvironmentDiffuseScale
+    Lighting.EnvironmentSpecularScale = OriginalLighting.EnvironmentSpecularScale
+end
+
+connect(Lighting.DescendantAdded, function(instance)
+    if State.RemoveEffects then
+        task.defer(function()
+            if instance.Parent then
+                suppressEffect(instance)
+            end
+        end)
+    end
+end)
+
+local DrawingLibrary = rawget(RuntimeEnvironment, "Drawing") or rawget(_G, "Drawing")
+local DrawingSupported = DrawingLibrary and type(DrawingLibrary.new) == "function"
+
+local function newDrawing(className)
+    if not DrawingSupported then
+        return nil
+    end
+    local success, object = pcall(function()
+        return DrawingLibrary.new(className)
+    end)
+    if success then
+        return object
+    end
+    DrawingSupported = false
+    return nil
+end
+
+local function destroyDrawing(object)
+    if object then
+        pcall(function()
+            object:Remove()
+        end)
+    end
+end
+
+local function setDrawingVisible(object, visible)
+    if object then
+        pcall(function()
+            object.Visible = visible
+        end)
+    end
+end
+
+local function getCategoryConfig(category)
+    if category == "Player" then
+        return State.PlayerESP
+    elseif category == "Mob" then
+        return State.MobESP
+    end
+    return State.ItemESP
+end
+
+local function createVisual(category, key)
+    local config = getCategoryConfig(category)
+    local visual = {
+        Key = key,
+        Category = category
+    }
+
+    if DrawingSupported then
+        visual.Box = newDrawing("Square")
+        visual.Tracer = newDrawing("Line")
+        visual.Name = newDrawing("Text")
+        visual.Health = newDrawing("Text")
+        visual.Distance = newDrawing("Text")
+
+        if visual.Box then
+            visual.Box.Color = config.Color
+            visual.Box.Thickness = 1.5
+            visual.Box.Filled = false
+            visual.Box.Transparency = 1
+        end
+        if visual.Tracer then
+            visual.Tracer.Color = config.Color
+            visual.Tracer.Thickness = 1.2
+            visual.Tracer.Transparency = 0.9
+        end
+        for _, textObject in ipairs({visual.Name, visual.Health, visual.Distance}) do
+            if textObject then
+                textObject.Center = true
+                textObject.Outline = true
+                textObject.OutlineColor = Color3.fromRGB(0, 0, 0)
+                textObject.Font = 2
+                textObject.Size = 13
+                textObject.Color = config.Color
+                textObject.Transparency = 1
+            end
+        end
+    end
+
+    visual.Highlight = Instance.new("Highlight")
+    visual.Highlight.Name = "Raphael_" .. category
+    visual.Highlight.FillColor = config.Color
+    visual.Highlight.OutlineColor = config.Color
+    visual.Highlight.FillTransparency = 1
+    visual.Highlight.OutlineTransparency = 0
+    visual.Highlight.Enabled = false
+    visual.Highlight.Parent = Workspace
+
+    if not DrawingSupported then
+        visual.Billboard = Instance.new("BillboardGui")
+        visual.Billboard.Name = "Raphael_Label_" .. category
+        visual.Billboard.Size = UDim2.fromOffset(210, 72)
+        visual.Billboard.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
+        visual.Billboard.AlwaysOnTop = true
+        visual.Billboard.Enabled = false
+        visual.Billboard.Parent = ScreenGui
+
+        visual.BillboardText = Instance.new("TextLabel")
+        visual.BillboardText.Size = UDim2.fromScale(1, 1)
+        visual.BillboardText.BackgroundTransparency = 1
+        visual.BillboardText.TextColor3 = config.Color
+        visual.BillboardText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        visual.BillboardText.TextStrokeTransparency = 0
+        visual.BillboardText.Font = Enum.Font.GothamBold
+        visual.BillboardText.TextSize = 13
+        visual.BillboardText.TextWrapped = true
+        visual.BillboardText.Parent = visual.Billboard
+    end
+
+    Visuals[category][key] = visual
+    return visual
+end
+
+local function hideVisual(visual)
+    setDrawingVisible(visual.Box, false)
+    setDrawingVisible(visual.Tracer, false)
+    setDrawingVisible(visual.Name, false)
+    setDrawingVisible(visual.Health, false)
+    setDrawingVisible(visual.Distance, false)
+    if visual.Highlight then
+        visual.Highlight.Enabled = false
+    end
+    if visual.Billboard then
+        visual.Billboard.Enabled = false
+    end
+end
+
+local function destroyVisual(visual)
+    if not visual then
+        return
+    end
+    destroyDrawing(visual.Box)
+    destroyDrawing(visual.Tracer)
+    destroyDrawing(visual.Name)
+    destroyDrawing(visual.Health)
+    destroyDrawing(visual.Distance)
+    if visual.Highlight then
+        visual.Highlight:Destroy()
+    end
+    if visual.Billboard then
+        visual.Billboard:Destroy()
+    end
+end
+
+removeAllVisuals = function(category)
+    local categories = category and {category} or {"Player", "Mob", "Item"}
+    for _, categoryName in ipairs(categories) do
+        for key, visual in pairs(Visuals[categoryName]) do
+            destroyVisual(visual)
+            Visuals[categoryName][key] = nil
+        end
+    end
+end
+
+local function getAdorneeRoot(instance)
+    if not instance or not instance.Parent then
+        return nil
+    end
+    if instance:IsA("BasePart") then
+        return instance
+    end
+    if instance:IsA("Tool") then
+        return instance:FindFirstChild("Handle") or instance:FindFirstChildWhichIsA("BasePart", true)
+    end
+    if instance:IsA("Model") then
+        return instance:FindFirstChild("HumanoidRootPart")
+            or instance:FindFirstChild("UpperTorso")
+            or instance:FindFirstChild("Torso")
+            or instance:FindFirstChild("Head")
+            or instance.PrimaryPart
+            or instance:FindFirstChildWhichIsA("BasePart", true)
+    end
+    return instance:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function getBoundingData(instance)
+    if not instance or not instance.Parent then
+        return nil, nil
+    end
+    if instance:IsA("Model") then
+        local success, boundingCFrame, boundingSize = pcall(instance.GetBoundingBox, instance)
+        if success then
+            return boundingCFrame, boundingSize
+        end
+    elseif instance:IsA("BasePart") then
+        return instance.CFrame, instance.Size
+    elseif instance:IsA("Tool") then
+        local handle = instance:FindFirstChild("Handle") or instance:FindFirstChildWhichIsA("BasePart", true)
+        if handle then
+            return handle.CFrame, handle.Size
+        end
+    end
+    local root = getAdorneeRoot(instance)
+    if root then
+        return root.CFrame, root.Size
+    end
+    return nil, nil
+end
+
+local function getScreenBounds(instance)
+    local boundingCFrame, size = getBoundingData(instance)
+    if not boundingCFrame or not size then
+        return nil
+    end
+
+    size = Vector3.new(math.max(size.X, 1), math.max(size.Y, 1), math.max(size.Z, 1))
+    local minimumX = math.huge
+    local minimumY = math.huge
+    local maximumX = -math.huge
+    local maximumY = -math.huge
+    local positiveDepth = 0
+
+    for x = -1, 1, 2 do
+        for y = -1, 1, 2 do
+            for z = -1, 1, 2 do
+                local worldPoint = (boundingCFrame * CFrame.new(size.X * x * 0.5, size.Y * y * 0.5, size.Z * z * 0.5)).Position
+                local screenPoint = Camera:WorldToViewportPoint(worldPoint)
+                if screenPoint.Z > 0 then
+                    positiveDepth = positiveDepth + 1
+                    minimumX = math.min(minimumX, screenPoint.X)
+                    minimumY = math.min(minimumY, screenPoint.Y)
+                    maximumX = math.max(maximumX, screenPoint.X)
+                    maximumY = math.max(maximumY, screenPoint.Y)
+                end
+            end
+        end
+    end
+
+    if positiveDepth == 0 then
+        return nil
+    end
+
+    local viewport = Camera.ViewportSize
+    if maximumX < 0 or minimumX > viewport.X or maximumY < 0 or minimumY > viewport.Y then
+        return nil
+    end
+
+    local width = math.clamp(maximumX - minimumX, 8, viewport.X * 1.5)
+    local height = math.clamp(maximumY - minimumY, 12, viewport.Y * 1.5)
+    return Vector2.new(minimumX, minimumY), Vector2.new(width, height)
+end
+
+local function getHealthText(humanoid)
+    if humanoid and humanoid.Health > 0 then
+        return string.format("HP %d/%d", math.floor(humanoid.Health + 0.5), math.floor(humanoid.MaxHealth + 0.5))
+    end
+    return nil
+end
+
+local function getItemHealthText(item)
+    local currentNames = {"Health", "HP", "Durability", "Amount"}
+    local maximumNames = {"MaxHealth", "MaxHP", "MaxDurability", "MaxAmount"}
+    local current
+    local maximum
+
+    for _, name in ipairs(currentNames) do
+        local attribute = item:GetAttribute(name)
+        if type(attribute) == "number" then
+            current = attribute
+            break
+        end
+        local valueObject = item:FindFirstChild(name, true)
+        if valueObject and (valueObject:IsA("NumberValue") or valueObject:IsA("IntValue")) then
+            current = valueObject.Value
+            break
+        end
+    end
+
+    for _, name in ipairs(maximumNames) do
+        local attribute = item:GetAttribute(name)
+        if type(attribute) == "number" then
+            maximum = attribute
+            break
+        end
+        local valueObject = item:FindFirstChild(name, true)
+        if valueObject and (valueObject:IsA("NumberValue") or valueObject:IsA("IntValue")) then
+            maximum = valueObject.Value
+            break
+        end
+    end
+
+    if current and maximum then
+        return string.format("HP %d/%d", math.floor(current + 0.5), math.floor(maximum + 0.5))
+    elseif current then
+        return string.format("Giá trị %d", math.floor(current + 0.5))
+    end
+    return nil
+end
+
+local function updateVisual(category, key, target, root, displayName, healthText, distanceStuds)
+    local config = getCategoryConfig(category)
+    local espEnabled = config.Enabled
+    local xrayEnabled = State.XRay
+    if (not espEnabled and not xrayEnabled) or not target or not root then
+        local existing = Visuals[category][key]
+        if existing then
+            hideVisual(existing)
+        end
+        return
+    end
+
+    local distanceMeters = distanceStuds * 0.28
+    local exactItemGlobal = category == "Item" and State.ItemESP.ExactName ~= ""
+    local maximumMeters = category == "Item" and (exactItemGlobal and math.huge or config.RadiusMeters) or config.MaxDistanceMeters
+    if distanceMeters > maximumMeters then
+        local existing = Visuals[category][key]
+        if existing then
+            hideVisual(existing)
+        end
+        return
+    end
+
+    local visual = Visuals[category][key] or createVisual(category, key)
+    local outlineXRay = xrayEnabled and State.XRayMethod ~= "Wall Transparency"
+    local highlightEnabled = (espEnabled and config.Box and config.BoxMode == "Skin") or outlineXRay or (espEnabled and not DrawingSupported)
+    local highlightTarget = target
+    if not target:IsA("Model") and not target:IsA("BasePart") then
+        highlightTarget = root
+    end
+    if visual.Highlight.Parent ~= Workspace then
+        visual.Highlight.Parent = Workspace
+    end
+    visual.Highlight.Adornee = highlightTarget
+    visual.Highlight.FillColor = config.Color
+    visual.Highlight.OutlineColor = config.Color
+    visual.Highlight.DepthMode = outlineXRay and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+    visual.Highlight.FillTransparency = outlineXRay and 0.68 or 1
+    visual.Highlight.OutlineTransparency = (espEnabled and config.Box or outlineXRay) and 0 or 1
+    visual.Highlight.Enabled = highlightEnabled
+
+    if visual.Billboard then
+        visual.Billboard.Adornee = root
+        local lines = {}
+        if espEnabled and config.Name then
+            table.insert(lines, displayName)
+        end
+        if espEnabled and config.Health and healthText then
+            table.insert(lines, healthText)
+        end
+        if espEnabled and config.Distance then
+            table.insert(lines, string.format("%.1f m", distanceMeters))
+        end
+        visual.BillboardText.Text = table.concat(lines, "\n")
+        visual.Billboard.Enabled = espEnabled and #lines > 0
+        return
+    end
+
+    local topLeft, boxSize = getScreenBounds(target)
+    if not topLeft or not boxSize then
+        setDrawingVisible(visual.Box, false)
+        setDrawingVisible(visual.Tracer, false)
+        setDrawingVisible(visual.Name, false)
+        setDrawingVisible(visual.Health, false)
+        setDrawingVisible(visual.Distance, false)
+        return
+    end
+
+    local centerX = topLeft.X + boxSize.X * 0.5
+    local topY = topLeft.Y
+    local bottomY = topLeft.Y + boxSize.Y
+
+    if visual.Box then
+        visual.Box.Color = config.Color
+        visual.Box.Position = topLeft
+        visual.Box.Size = boxSize
+        visual.Box.Visible = espEnabled and config.Box and config.BoxMode == "2D"
+    end
+
+    if visual.Tracer then
+        visual.Tracer.Color = config.Color
+        visual.Tracer.From = Camera.ViewportSize * 0.5
+        visual.Tracer.To = Vector2.new(centerX, topLeft.Y + boxSize.Y * 0.5)
+        visual.Tracer.Visible = espEnabled and config.Tracer
+    end
+
+    if visual.Name then
+        visual.Name.Color = config.Color
+        visual.Name.Text = displayName
+        visual.Name.Position = Vector2.new(centerX, topY - 17)
+        visual.Name.Visible = espEnabled and config.Name
+    end
+
+    if visual.Health then
+        visual.Health.Color = config.Color
+        visual.Health.Text = healthText or ""
+        visual.Health.Position = Vector2.new(centerX, bottomY + 2)
+        visual.Health.Visible = espEnabled and config.Health and healthText ~= nil
+    end
+
+    if visual.Distance then
+        visual.Distance.Color = config.Color
+        visual.Distance.Text = string.format("[ %.1f m ]", distanceMeters)
+        visual.Distance.Position = Vector2.new(centerX, bottomY + (config.Health and healthText and 17 or 2))
+        visual.Distance.Visible = espEnabled and config.Distance
+    end
+end
+
+local function restoreXRayOccluders(keepSet)
+    for part, originalTransparency in pairs(XRayOccluders) do
+        if not keepSet or not keepSet[part] then
+            if part and part.Parent then
+                pcall(function()
+                    part.LocalTransparencyModifier = originalTransparency
+                end)
+            end
+            XRayOccluders[part] = nil
+        end
+    end
+end
+
+local function updateXRayOcclusion()
+    if not State.XRay or State.XRayMethod == "Outline" then
+        restoreXRayOccluders()
+        return
+    end
+
+    Camera = Workspace.CurrentCamera or Camera
+    local localCharacter = LocalPlayer.Character
+    local cameraPosition = Camera.CFrame.Position
+    local candidates = {}
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local root = getAdorneeRoot(player.Character)
+            if root then
+                table.insert(candidates, {
+                    Target = player.Character,
+                    Root = root,
+                    Distance = (root.Position - cameraPosition).Magnitude
+                })
+            end
+        end
+    end
+
+    for model in pairs(MobCache) do
+        if model and model.Parent then
+            local root = getAdorneeRoot(model)
+            if root then
+                table.insert(candidates, {
+                    Target = model,
+                    Root = root,
+                    Distance = (root.Position - cameraPosition).Magnitude
+                })
+            end
+        end
+    end
+
+    for item in pairs(ItemCache) do
+        if item and item.Parent then
+            local root = getAdorneeRoot(item)
+            if root then
+                table.insert(candidates, {
+                    Target = item,
+                    Root = root,
+                    Distance = (root.Position - cameraPosition).Magnitude
+                })
+            end
+        end
+    end
+
+    table.sort(candidates, function(left, right)
+        return left.Distance < right.Distance
+    end)
+
+    local currentOccluders = {}
+    local candidateLimit = math.min(#candidates, 24)
+    for index = 1, candidateLimit do
+        local candidate = candidates[index]
+        local excluded = {candidate.Target}
+        if localCharacter then
+            table.insert(excluded, localCharacter)
+        end
+
+        for _ = 1, 7 do
+            local direction = candidate.Root.Position - cameraPosition
+            if direction.Magnitude < 1 then
+                break
+            end
+            local parameters = RaycastParams.new()
+            parameters.FilterType = Enum.RaycastFilterType.Exclude
+            parameters.FilterDescendantsInstances = excluded
+            parameters.IgnoreWater = true
+            local result = Workspace:Raycast(cameraPosition, direction, parameters)
+            if not result then
+                break
+            end
+            local part = result.Instance
+            if not part or not part:IsA("BasePart") then
+                break
+            end
+            if XRayOccluders[part] == nil then
+                XRayOccluders[part] = part.LocalTransparencyModifier
+            end
+            currentOccluders[part] = true
+            part.LocalTransparencyModifier = State.XRayWallTransparency
+            table.insert(excluded, part)
+        end
+    end
+
+    restoreXRayOccluders(currentOccluders)
+end
+
+local EnemyHints = {"enemy", "enemies", "mob", "mobs", "monster", "monsters", "npc", "boss", "zombie", "creature", "bot"}
+
+local function textHasHint(text, hints)
+    local lower = string.lower(tostring(text or ""))
+    for _, hint in ipairs(hints) do
+        if string.find(lower, hint, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function hasEnemyMetadata(model)
+    for _, tag in ipairs(CollectionService:GetTags(model)) do
+        if textHasHint(tag, EnemyHints) then
+            return true
+        end
+    end
+    local attributes = {"Enemy", "IsEnemy", "Mob", "IsMob", "NPC", "IsNPC", "Monster", "EntityType", "Faction"}
+    for _, attributeName in ipairs(attributes) do
+        local value = model:GetAttribute(attributeName)
+        if value == true or type(value) == "string" and textHasHint(value, EnemyHints) then
+            return true
+        end
+    end
+    local ancestor = model.Parent
+    local depth = 0
+    while ancestor and ancestor ~= Workspace and depth < 4 do
+        if textHasHint(ancestor.Name, EnemyHints) then
+            return true
+        end
+        ancestor = ancestor.Parent
+        depth = depth + 1
+    end
+    return textHasHint(model.Name, EnemyHints)
+end
+
+local function isMobModel(model)
+    if not model or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then
+        return false
+    end
+    if Players:GetPlayerFromCharacter(model) or model == LocalPlayer.Character then
+        return false
+    end
+
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        return humanoid.Health > 0 and getAdorneeRoot(model) ~= nil
+    end
+
+    local controller = model:FindFirstChildOfClass("AnimationController")
+    if controller and hasEnemyMetadata(model) then
+        return getAdorneeRoot(model) ~= nil
+    end
+
+    if hasEnemyMetadata(model) then
+        local health = model:GetAttribute("Health") or model:GetAttribute("HP")
+        return getAdorneeRoot(model) ~= nil and (health == nil or type(health) ~= "number" or health > 0)
+    end
+
+    return false
+end
+
+local function considerMob(instance)
+    local model
+    if instance:IsA("Model") then
+        model = instance
+    elseif instance:IsA("Humanoid") or instance:IsA("AnimationController") then
+        model = instance.Parent
+    else
+        model = instance:FindFirstAncestorOfClass("Model")
+    end
+    if model and isMobModel(model) then
+        MobCache[model] = true
+    end
+end
+
+local function rescanMobs()
+    local descendants = Workspace:GetDescendants()
+    for index, instance in ipairs(descendants) do
+        if instance:IsA("Model") then
+            considerMob(instance)
+        end
+        if index % 1200 == 0 then
+            task.wait()
+        end
+    end
+end
+
+connect(Workspace.DescendantAdded, function(instance)
+    task.defer(function()
+        if instance.Parent then
+            considerMob(instance)
+        end
+    end)
+end)
+connect(Workspace.DescendantRemoving, function(instance)
+    if MobCache[instance] then
+        MobCache[instance] = nil
+        local visual = Visuals.Mob[instance]
+        if visual then
+            destroyVisual(visual)
+            Visuals.Mob[instance] = nil
+        end
+    end
+    if ItemCache[instance] then
+        ItemCache[instance] = nil
+        local visual = Visuals.Item[instance]
+        if visual then
+            destroyVisual(visual)
+            Visuals.Item[instance] = nil
+        end
+    end
+end)
+
+task.spawn(rescanMobs)
+
+local ItemHints = {"item", "pickup", "drop", "loot", "collect", "coin", "chest", "fruit", "weapon", "key", "potion", "gem", "ore", "crate"}
+
+local function isCharacterDescendant(instance)
+    local model = instance:FindFirstAncestorOfClass("Model")
+    if not model then
+        return false
+    end
+    if Players:GetPlayerFromCharacter(model) then
+        return true
+    end
+    return model:FindFirstChildOfClass("Humanoid") ~= nil
+end
+
+local function hasItemMetadata(instance)
+    for _, tag in ipairs(CollectionService:GetTags(instance)) do
+        if textHasHint(tag, ItemHints) then
+            return true
+        end
+    end
+    local attributes = {"Item", "IsItem", "Pickup", "IsPickup", "Collectible", "Loot", "Drop"}
+    for _, name in ipairs(attributes) do
+        local value = instance:GetAttribute(name)
+        if value == true or type(value) == "string" and textHasHint(value, ItemHints) then
+            return true
+        end
+    end
+    return textHasHint(instance.Name, ItemHints)
+end
+
+local function findExactAncestor(part, exactLower)
+    local current = part
+    local depth = 0
+    while current and current ~= Workspace and depth < 8 do
+        if string.lower(current.Name) == exactLower and (current:IsA("Model") or current:IsA("Tool") or current:IsA("BasePart")) then
+            return current
+        end
+        current = current.Parent
+        depth = depth + 1
+    end
+    return nil
+end
+
+local function findAutomaticItem(part)
+    local tool = part:FindFirstAncestorOfClass("Tool")
+    if tool and tool:IsDescendantOf(Workspace) then
+        return tool
+    end
+
+    if isCharacterDescendant(part) then
+        return nil
+    end
+
+    local current = part
+    local best
+    local depth = 0
+    while current and current ~= Workspace and depth < 6 do
+        if current:IsA("Model") or current:IsA("BasePart") then
+            if hasItemMetadata(current) then
+                best = current
+            end
+            if current:FindFirstChildWhichIsA("ProximityPrompt", false) or current:FindFirstChildWhichIsA("ClickDetector", false) then
+                best = current:IsA("BasePart") and (current:FindFirstAncestorOfClass("Model") or current) or current
+            end
+        end
+        current = current.Parent
+        depth = depth + 1
+    end
+    return best
+end
+
+scanItems = function(forceNotification)
+    if State.ItemScanRunning then
+        return 0
+    end
+    State.ItemScanRunning = true
+
+    local character, _, root = getCharacter()
+    if not root then
+        State.ItemScanRunning = false
+        if forceNotification then
+            notify("Không thể quét item: nhân vật chưa sẵn sàng.", Theme.Danger)
+        end
+        return 0
+    end
+
+    local exactLower = string.lower(State.ItemESP.ExactName)
+    local found = {}
+
+    if exactLower ~= "" then
+        local descendants = Workspace:GetDescendants()
+        for index, instance in ipairs(descendants) do
+            if string.lower(instance.Name) == exactLower and (instance:IsA("Model") or instance:IsA("Tool") or instance:IsA("BasePart")) then
+                if instance:IsDescendantOf(Workspace) and not isCharacterDescendant(instance) then
+                    found[instance] = true
+                end
+            end
+            if index % 1600 == 0 then
+                task.wait()
+            end
+        end
+    else
+        local radiusStuds = State.ItemESP.RadiusMeters / 0.28
+        local overlap = OverlapParams.new()
+        overlap.FilterType = Enum.RaycastFilterType.Exclude
+        overlap.FilterDescendantsInstances = character and {character} or {}
+        overlap.MaxParts = 600
+
+        local success, parts = pcall(function()
+            return Workspace:GetPartBoundsInRadius(root.Position, radiusStuds, overlap)
+        end)
+        if not success then
+            parts = {}
+        end
+
+        for _, part in ipairs(parts) do
+            local item = findAutomaticItem(part)
+            if item and item:IsDescendantOf(Workspace) and not isCharacterDescendant(item) then
+                found[item] = true
+            end
+        end
+    end
+
+    for item in pairs(ItemCache) do
+        if not found[item] then
+            ItemCache[item] = nil
+            local visual = Visuals.Item[item]
+            if visual then
+                destroyVisual(visual)
+                Visuals.Item[item] = nil
+            end
+        end
+    end
+    for item in pairs(found) do
+        ItemCache[item] = true
+    end
+
+    local count = 0
+    for _ in pairs(found) do
+        count = count + 1
+    end
+    State.ItemScanRunning = false
+
+    if forceNotification then
+        if exactLower ~= "" then
+            notify("Đã phát hiện " .. count .. " item tên chính xác “" .. State.ItemESP.ExactName .. "” trên toàn bản đồ.", count > 0 and Theme.Success or Theme.Warning)
+        else
+            notify("Đã phát hiện " .. count .. " item trong " .. State.ItemESP.RadiusMeters .. " m.", count > 0 and Theme.Success or Theme.Warning)
+        end
+    end
+    return count
+end
+
+local function createFloatingSavedButton()
+    if FloatingSavedButton and FloatingSavedButton.Parent then
+        FloatingSavedButton.Text = State.SavedButtonName
+        notify("Đã cập nhật nút tele nổi.", Theme.Success)
+        return
+    end
+
+    FloatingSavedButton = Instance.new("TextButton")
+    FloatingSavedButton.Name = "SavedTeleportButton"
+    FloatingSavedButton.Size = UDim2.fromOffset(118, 40)
+    FloatingSavedButton.Position = UDim2.new(0, 18, 0.72, 0)
+    FloatingSavedButton.BackgroundColor3 = Theme.Accent2
+    FloatingSavedButton.BorderSizePixel = 0
+    FloatingSavedButton.Text = State.SavedButtonName
+    FloatingSavedButton.TextColor3 = Theme.Text
+    FloatingSavedButton.Font = Enum.Font.GothamBold
+    FloatingSavedButton.TextSize = 10
+    FloatingSavedButton.TextWrapped = true
+    FloatingSavedButton.AutoButtonColor = false
+    FloatingSavedButton.Parent = Overlay
+    Instance.new("UICorner", FloatingSavedButton).CornerRadius = UDim.new(0, 10)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Theme.Text
+    stroke.Transparency = 0.65
+    stroke.Parent = FloatingSavedButton
+
+    local dragging = false
+    local moved = false
+    local dragStart
+    local startPosition
+    connect(FloatingSavedButton.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            moved = false
+            dragStart = input.Position
+            startPosition = FloatingSavedButton.Position
+        end
+    end)
+    connect(UserInputService.InputChanged, function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 5 then
+                moved = true
+            end
+            FloatingSavedButton.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end
+    end)
+    connect(UserInputService.InputEnded, function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+            dragging = false
+        end
+    end)
+    connect(FloatingSavedButton.Activated, function()
+        if not moved then
+            if State.SavedCFrame then
+                safeTeleport(State.SavedCFrame + Vector3.new(0, 3, 0))
+            else
+                notify("Chưa có vị trí đã lưu.", Theme.Warning)
+            end
+        end
+    end)
+    notify("Đã tạo nút tele nổi. Có thể kéo để đổi vị trí.", Theme.Success)
+end
+
+local function removeFloatingSavedButton()
+    if FloatingSavedButton then
+        FloatingSavedButton:Destroy()
+        FloatingSavedButton = nil
+        notify("Đã xoá nút tele nổi.", Theme.Success)
+    end
+end
+
+local function teleportAtScreenPoint(screenPosition)
+    local character = LocalPlayer.Character
+    if not character then
+        return false
+    end
+    Camera = Workspace.CurrentCamera or Camera
+    local ray = Camera:ScreenPointToRay(screenPosition.X, screenPosition.Y)
+    local parameters = RaycastParams.new()
+    parameters.FilterType = Enum.RaycastFilterType.Exclude
+    parameters.FilterDescendantsInstances = {character}
+    parameters.IgnoreWater = false
+    local result = Workspace:Raycast(ray.Origin, ray.Direction * 5000, parameters)
+    if result then
+        return safeTeleport(CFrame.new(result.Position + result.Normal * 3))
+    end
+    notify("Không phát hiện bề mặt tại điểm chạm.", Theme.Warning)
+    return false
+end
+
+connect(UserInputService.TouchTapInWorld, function(positions, processed)
+    if not State.TouchTeleportArmed or processed then
+        return
+    end
+    local position = positions
+    if typeof(positions) == "table" then
+        position = positions[1]
+    end
+    if typeof(position) == "Vector2" then
+        State.TouchTeleportArmed = false
+        if teleportAtScreenPoint(position) then
+            notify("Tele cảm ứng hoàn tất.", Theme.Success)
+        end
+    end
+end)
+
+local function fetchServerCandidates(sortOrder)
+    local servers = {}
+    local cursor = nil
+    for _ = 1, 4 do
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=" .. sortOrder .. "&excludeFullGames=true&limit=100"
+        if cursor then
+            url = url .. "&cursor=" .. HttpService:UrlEncode(cursor)
+        end
+        local success, response = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        if not success or type(response) ~= "table" then
+            break
+        end
+        for _, server in ipairs(response.data or {}) do
+            if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                table.insert(servers, server)
+            end
+        end
+        cursor = response.nextPageCursor
+        if not cursor then
+            break
+        end
+    end
+    return servers
+end
+
+local function hopServer(preferFew)
+    task.spawn(function()
+        notify(preferFew and "Đang tìm server ít người..." or "Đang tìm server đông người...", Theme.Warning)
+        local servers = fetchServerCandidates(preferFew and "Asc" or "Desc")
+        if #servers == 0 then
+            notify("Không tìm thấy server phù hợp.", Theme.Danger)
+            return
+        end
+        table.sort(servers, function(left, right)
+            if preferFew then
+                return left.playing < right.playing
+            end
+            return left.playing > right.playing
+        end)
+        local chosen = servers[1]
+        notify("Đang vào server " .. chosen.playing .. "/" .. chosen.maxPlayers .. " người.", Theme.Success)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, LocalPlayer)
+    end)
+end
+
+local function setFPSBoost(enabled)
+    State.FPSBoost = enabled
+    if enabled then
+        for _, instance in ipairs(Workspace:GetDescendants()) do
+            if instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles") then
+                if FPSBackup[instance] == nil then
+                    FPSBackup[instance] = instance.Enabled
+                end
+                instance.Enabled = false
+            end
+        end
+        Lighting.GlobalShadows = false
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        end)
+        pcall(function()
+            sethiddenproperty(Workspace.Terrain, "Decoration", false)
+        end)
+        notify("FPS Boost đã bật.", Theme.Success)
+    else
+        for instance, enabledValue in pairs(FPSBackup) do
+            if instance and instance.Parent then
+                pcall(function()
+                    instance.Enabled = enabledValue
+                end)
+            end
+        end
+        table.clear(FPSBackup)
+        if State.FullBrightLevel == nil then
+            Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+        end
+        pcall(function()
+            sethiddenproperty(Workspace.Terrain, "Decoration", true)
+        end)
+        notify("FPS Boost đã tắt.", Theme.Success)
+    end
+end
+
+connect(Workspace.DescendantAdded, function(instance)
+    if State.FPSBoost and (instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles")) then
+        FPSBackup[instance] = instance.Enabled
+        instance.Enabled = false
+    end
+end)
+
+do
+local SpeedSection = createSection(MovementPage, "Speed", "Giá trị được áp dụng ngay khi nhập; không cần công tắc bật/tắt.")
+createInput(SpeedSection, "Tốc độ", State.SpeedValue, "1 - 1000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.SpeedValue = math.clamp(value, 0, 1000)
+    end
+end)
+createSelector(SpeedSection, "Phương thức", {"WalkSpeed", "Velocity", "CFrame"}, State.SpeedMethod, function(value)
+    resetSpeedSideEffects()
+    State.SpeedMethod = value
+    notify("Speed Method: " .. value, Theme.Success)
+end)
+createButton(SpeedSection, "Khôi phục tốc độ mặc định", function()
+    local _, humanoid = getCharacter()
+    local original = rememberHumanoid(humanoid)
+    State.SpeedValue = original and original.WalkSpeed or 16
+    resetSpeedSideEffects()
+    notify("Đã khôi phục tốc độ nhân vật.", Theme.Success)
+end, Theme.SurfaceLight)
+
+local JumpSection = createSection(MovementPage, "Jump", "JumpPower và JumpHeight được duy trì phía client. Velocity phù hợp game ghi đè thuộc tính Humanoid.")
+createInput(JumpSection, "Lực/độ cao nhảy", State.JumpValue, "1 - 1000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.JumpValue = math.clamp(value, 0, 1000)
+        local _, humanoid = getCharacter()
+        if humanoid then
+            rememberHumanoid(humanoid)
+            if State.JumpMethod == "JumpPower" then
+                humanoid.UseJumpPower = true
+                humanoid.JumpPower = State.JumpValue
+            elseif State.JumpMethod == "JumpHeight" then
+                humanoid.UseJumpPower = false
+                humanoid.JumpHeight = State.JumpValue
+            end
+        end
+    end
+end)
+createSelector(JumpSection, "Phương thức", {"JumpPower", "JumpHeight", "Velocity"}, State.JumpMethod, function(value)
+    State.JumpMethod = value
+    notify("Jump Method: " .. value, Theme.Success)
+end)
+createToggle(JumpSection, "Infinite Jump không delay", false, function(value)
+    State.InfiniteJump = value
+end)
+
+local NoclipSection = createSection(MovementPage, "Noclip", "Chọn cách xử lý phù hợp cấu trúc va chạm của từng game.")
+createToggle(NoclipSection, "Bật Noclip", false, function(value)
+    State.Noclip = value
+    if not value then
+        restoreCollisions()
+    end
+end)
+createSelector(NoclipSection, "Phương thức", {"Toàn thân", "Chỉ Root", "State + Parts"}, State.NoclipMethod, function(value)
+    restoreCollisions()
+    State.NoclipMethod = value
+end)
+
+local FlySection = createSection(MovementPage, "FlyGuiV3", "Tải trực tiếp FlyGuiV3 theo nguồn Ngài chỉ định; có thể ẩn/hiện hoặc xoá giao diện.")
+createButton(FlySection, "Tải và chạy FlyGuiV3", function()
+    task.spawn(loadFlyGui)
+end, Theme.Accent2)
+createDualButtons(FlySection, "Ẩn / Hiện", function()
+    setFlyHidden(not State.FlyHidden)
+end, "Xoá Fly", deleteFlyGui, Theme.SurfaceLight, Theme.Danger)
+
+local GravitySection = createSection(MovementPage, "Movement bổ sung", "Trọng lực chỉ thay đổi ở client và được duy trì liên tục.")
+createInput(GravitySection, "Gravity", string.format("%.1f", Workspace.Gravity), "0 - 1000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.GravityValue = math.clamp(value, 0, 1000)
+    end
+end)
+createButton(GravitySection, "Khôi phục Gravity", function()
+    State.GravityValue = OriginalGravity
+    Workspace.Gravity = OriginalGravity
+    notify("Đã khôi phục Gravity.", Theme.Success)
+end, Theme.SurfaceLight)
+
+local ColorSection = createSection(ESPPage, "Bảng màu phân loại", "Màu cố định giúp không nhầm mục tiêu giữa Player, Quái và Item.")
+createColorLegend(ColorSection)
+
+local PlayerESPSection = createSection(ESPPage, "ESP Player", "Tracer bắt đầu chính xác từ giữa màn hình. Khoảng cách hiển thị theo mét, quy đổi 1 stud ≈ 0.28 m.")
+createToggle(PlayerESPSection, "Bật ESP Player", false, function(value)
+    State.PlayerESP.Enabled = value
+    if not value then
+        removeAllVisuals("Player")
+    end
+end)
+createToggle(PlayerESPSection, "Tracer", State.PlayerESP.Tracer, function(value)
+    State.PlayerESP.Tracer = value
+end)
+createToggle(PlayerESPSection, "Khung", State.PlayerESP.Box, function(value)
+    State.PlayerESP.Box = value
+end)
+createSelector(PlayerESPSection, "Kiểu khung", {"2D", "Skin"}, State.PlayerESP.BoxMode, function(value)
+    State.PlayerESP.BoxMode = value
+end)
+createToggle(PlayerESPSection, "Hiện tên", State.PlayerESP.Name, function(value)
+    State.PlayerESP.Name = value
+end)
+createToggle(PlayerESPSection, "Hiện HP", State.PlayerESP.Health, function(value)
+    State.PlayerESP.Health = value
+end)
+createToggle(PlayerESPSection, "Hiện khoảng cách", State.PlayerESP.Distance, function(value)
+    State.PlayerESP.Distance = value
+end)
+createInput(PlayerESPSection, "Tầm ESP tối đa (m)", State.PlayerESP.MaxDistanceMeters, "1 - 10000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.PlayerESP.MaxDistanceMeters = math.clamp(value, 1, 10000)
+    end
+end)
+
+local MobESPSection = createSection(ESPPage, "ESP Quái", "Bộ dò nhận Humanoid, AnimationController, tag, attribute và cấu trúc folder Enemy/Mob/NPC/Boss; không loại Dummy hoặc NPC.")
+createToggle(MobESPSection, "Bật ESP Quái", false, function(value)
+    State.MobESP.Enabled = value
+    if value then
+        task.spawn(rescanMobs)
+    else
+        removeAllVisuals("Mob")
+    end
+end)
+createToggle(MobESPSection, "Tracer", State.MobESP.Tracer, function(value)
+    State.MobESP.Tracer = value
+end)
+createToggle(MobESPSection, "Khung", State.MobESP.Box, function(value)
+    State.MobESP.Box = value
+end)
+createSelector(MobESPSection, "Kiểu khung", {"2D", "Skin"}, State.MobESP.BoxMode, function(value)
+    State.MobESP.BoxMode = value
+end)
+createToggle(MobESPSection, "Hiện tên", State.MobESP.Name, function(value)
+    State.MobESP.Name = value
+end)
+createToggle(MobESPSection, "Hiện HP", State.MobESP.Health, function(value)
+    State.MobESP.Health = value
+end)
+createToggle(MobESPSection, "Hiện khoảng cách", State.MobESP.Distance, function(value)
+    State.MobESP.Distance = value
+end)
+createInput(MobESPSection, "Tầm ESP tối đa (m)", State.MobESP.MaxDistanceMeters, "1 - 10000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.MobESP.MaxDistanceMeters = math.clamp(value, 1, 10000)
+    end
+end)
+createButton(MobESPSection, "Quét lại toàn bộ quái", function()
+    task.spawn(function()
+        rescanMobs()
+        local count = 0
+        for _ in pairs(MobCache) do
+            count = count + 1
+        end
+        notify("Đã lập chỉ mục " .. count .. " mục tiêu quái.", Theme.Success)
+    end)
+end, Theme.SurfaceLight)
+
+local ItemESPSection = createSection(ESPPage, "ESP Item", "Để trống: tự nhận diện trong bán kính cấu hình. Nhập tên chính xác: quét toàn bộ bản đồ và hiển thị không giới hạn khoảng cách.")
+createToggle(ItemESPSection, "Bật quét Item tự động", false, function(value)
+    State.ItemESP.Enabled = value
+    if value then
+        scanItems(true)
+    else
+        table.clear(ItemCache)
+        removeAllVisuals("Item")
+    end
+end)
+createInput(ItemESPSection, "Tên item chính xác", "", "Để trống = tự phát hiện", false, function(text)
+    State.ItemESP.ExactName = string.gsub(text, "^%s*(.-)%s*$", "%1")
+end)
+createInput(ItemESPSection, "Bán kính quét (m)", State.ItemESP.RadiusMeters, "Khuyến nghị 15", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.ItemESP.RadiusMeters = math.clamp(value, 1, 100)
+    end
+end)
+createButton(ItemESPSection, "Phát hiện ngay", function()
+    scanItems(true)
+end, Theme.Accent2)
+createToggle(ItemESPSection, "Tracer", State.ItemESP.Tracer, function(value)
+    State.ItemESP.Tracer = value
+end)
+createToggle(ItemESPSection, "Khung", State.ItemESP.Box, function(value)
+    State.ItemESP.Box = value
+end)
+createSelector(ItemESPSection, "Kiểu khung", {"2D", "Skin"}, State.ItemESP.BoxMode, function(value)
+    State.ItemESP.BoxMode = value
+end)
+createToggle(ItemESPSection, "Hiện tên", State.ItemESP.Name, function(value)
+    State.ItemESP.Name = value
+end)
+createToggle(ItemESPSection, "Hiện HP / độ bền nếu có", State.ItemESP.Health, function(value)
+    State.ItemESP.Health = value
+end)
+createToggle(ItemESPSection, "Hiện khoảng cách", State.ItemESP.Distance, function(value)
+    State.ItemESP.Distance = value
+end)
+
+local SkySection = createSection(VisionPage, "Sky", "ClockTime 1–24 được khoá phía client để game không tự ghi đè.")
+createInput(SkySection, "Giờ bầu trời", string.format("%.1f", Lighting.ClockTime), "1 - 24", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.ClockTime = math.clamp(value, 1, 24)
+    end
+end)
+createButton(SkySection, "Khôi phục giờ gốc", function()
+    State.ClockTime = nil
+    Lighting.ClockTime = OriginalLighting.ClockTime
+    notify("Đã khôi phục ClockTime.", Theme.Success)
+end, Theme.SurfaceLight)
+
+local FogSection = createSection(VisionPage, "Fog & hiệu ứng", "Tắt Fog, Atmosphere, Blur, ColorCorrection, DepthOfField, Bloom, SunRays và hiệu ứng mới được game thêm vào.")
+createToggle(FogSection, "Xoá mọi hiệu ứng tối / mờ", false, function(value)
+    State.RemoveEffects = value
+    if value then
+        applyNoEffects()
+    else
+        restoreEffects()
+    end
+end)
+
+local BrightSection = createSection(VisionPage, "Full Bright", "Nhập mức sáng để kích hoạt ngay. Ambient và OutdoorAmbient được chuyển sang trắng.")
+createInput(BrightSection, "Mức sáng", string.format("%.1f", Lighting.Brightness), "0 - 20", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.FullBrightLevel = math.clamp(value, 0, 20)
+        applyFullBright()
+    end
+end)
+createButton(BrightSection, "Khôi phục ánh sáng gốc", function()
+    State.FullBrightLevel = nil
+    restoreLightingVisuals()
+    if State.RemoveEffects then
+        applyNoEffects()
+    end
+    notify("Đã khôi phục ánh sáng gốc.", Theme.Success)
+end, Theme.SurfaceLight)
+
+local XRaySection = createSection(VisionPage, "X-Ray", "Hybrid kết hợp Highlight AlwaysOnTop và làm trong chính vật cản nằm giữa camera với mục tiêu. Outline không thay đổi tường.")
+createToggle(XRaySection, "Bật X-Ray mục tiêu", false, function(value)
+    State.XRay = value
+    if value then
+        task.spawn(rescanMobs)
+        task.spawn(function()
+            scanItems(false)
+        end)
+    else
+        restoreXRayOccluders()
+        if not State.PlayerESP.Enabled then removeAllVisuals("Player") end
+        if not State.MobESP.Enabled then removeAllVisuals("Mob") end
+        if not State.ItemESP.Enabled then removeAllVisuals("Item") end
+    end
+end)
+createSelector(XRaySection, "Phương thức X-Ray", {"Hybrid", "Outline", "Wall Transparency"}, State.XRayMethod, function(value)
+    State.XRayMethod = value
+    if value == "Outline" then
+        restoreXRayOccluders()
+    end
+end)
+createInput(XRaySection, "Độ trong vật cản", State.XRayWallTransparency, "0.1 - 0.95", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.XRayWallTransparency = math.clamp(value, 0.1, 0.95)
+    end
+end)
+
+local CameraSection = createSection(VisionPage, "Camera", "Các tuỳ chọn bổ sung không thay đổi vật thể trong map.")
+createInput(CameraSection, "Field of View", string.format("%.1f", Camera.FieldOfView), "1 - 120", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.CameraFov = math.clamp(value, 1, 120)
+    end
+end)
+createToggle(CameraSection, "Mở khoá zoom xa", false, function(value)
+    State.UnlockZoom = value
+    if value then
+        LocalPlayer.CameraMinZoomDistance = 0.5
+        LocalPlayer.CameraMaxZoomDistance = 10000
+    else
+        LocalPlayer.CameraMinZoomDistance = OriginalCamera.MinZoom
+        LocalPlayer.CameraMaxZoomDistance = OriginalCamera.MaxZoom
+    end
+end)
+
+local PlayerTeleSection = createSection(TelePage, "Tele Player", "Hỗ trợ username, display name và tìm kiếm một phần tên.")
+local TeleportPlayerName = ""
+createInput(PlayerTeleSection, "Tên người chơi", "", "Username hoặc DisplayName", false, function(text)
+    TeleportPlayerName = string.gsub(text, "^%s*(.-)%s*$", "%1")
+end)
+createButton(PlayerTeleSection, "Tele đến người chơi", function()
+    local targetPlayer = findPlayer(TeleportPlayerName)
+    if not targetPlayer then
+        notify("Không tìm thấy người chơi phù hợp.", Theme.Danger)
+        return
+    end
+    local targetRoot = targetPlayer.Character and (targetPlayer.Character:FindFirstChild("HumanoidRootPart") or targetPlayer.Character.PrimaryPart)
+    if targetRoot and safeTeleport(targetRoot.CFrame + Vector3.new(0, 3, 0)) then
+        notify("Đã tele đến " .. targetPlayer.Name .. ".", Theme.Success)
+    else
+        notify("Nhân vật mục tiêu chưa sẵn sàng.", Theme.Warning)
+    end
+end)
+
+local CoordinateTeleSection = createSection(TelePage, "Tele toạ độ", "Nhập ba giá trị X, Y, Z; hỗ trợ cả định dạng CFrame.new(X, Y, Z).")
+local CoordinateTeleportText = ""
+createInput(CoordinateTeleSection, "Toạ độ đích", "", "Ví dụ: 120, 35, -450", false, function(text)
+    CoordinateTeleportText = text
+end)
+createButton(CoordinateTeleSection, "Tele đến toạ độ", function()
+    local coordinates = {}
+    for numberText in string.gmatch(CoordinateTeleportText, "[-+]?%d*%.?%d+") do
+        table.insert(coordinates, tonumber(numberText))
+        if #coordinates >= 3 then
+            break
+        end
+    end
+    if #coordinates < 3 then
+        notify("Toạ độ không hợp lệ. Cần đủ X, Y, Z.", Theme.Danger)
+        return
+    end
+    if safeTeleport(CFrame.new(coordinates[1], coordinates[2], coordinates[3])) then
+        notify(string.format("Đã tele đến %.1f, %.1f, %.1f.", coordinates[1], coordinates[2], coordinates[3]), Theme.Success)
+    end
+end, Theme.Accent2)
+
+local JoinServerSection = createSection(TelePage, "Join Server ID", "Dùng Job ID thuộc cùng Place ID hiện tại. Có thể double-tap Job ID trong tab Info để copy.")
+local TargetJobId = ""
+createInput(JoinServerSection, "Job ID server", "", "Dán Job ID", false, function(text)
+    TargetJobId = string.gsub(text, "^%s*(.-)%s*$", "%1")
+end)
+createButton(JoinServerSection, "Join server bằng ID", function()
+    if TargetJobId == "" then
+        notify("Job ID đang trống.", Theme.Warning)
+        return
+    end
+    notify("Đang kết nối Job ID đã nhập...", Theme.Warning)
+    local success, teleportError = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, TargetJobId, LocalPlayer)
+    end)
+    if not success then
+        notify("Không thể join server: " .. tostring(teleportError), Theme.Danger)
+    end
+end, Theme.Accent)
+
+local SpectateSection = createSection(TelePage, "Theo dõi Player", "Camera bám Humanoid mục tiêu và vẫn cho phép xoay 360°. Nhấn nút lần nữa để trở về nhân vật của Ngài.")
+local SpectatePlayerName = ""
+createInput(SpectateSection, "Tên người chơi", "", "Username hoặc DisplayName", false, function(text)
+    SpectatePlayerName = string.gsub(text, "^%s*(.-)%s*$", "%1")
+end)
+State.SpectateButton = createButton(SpectateSection, "Bắt đầu theo dõi", function()
+    if State.SpectatingPlayer then
+        setSpectating(nil)
+        notify("Đã huỷ theo dõi player.", Theme.Success)
+        return
+    end
+    local targetPlayer = findPlayer(SpectatePlayerName)
+    if not targetPlayer then
+        notify("Không tìm thấy player để theo dõi.", Theme.Danger)
+        return
+    end
+    if setSpectating(targetPlayer) then
+        notify("Đang theo dõi " .. targetPlayer.Name .. ". Vuốt màn hình để xoay camera.", Theme.Success)
+    end
+end, Theme.SurfaceLight)
+
+local SavedTeleSection = createSection(TelePage, "Tele đã lưu", "Lưu CFrame hiện tại và tạo một nút kéo-thả bên ngoài menu để tele nhanh.")
+createInput(SavedTeleSection, "Tên nút nổi", State.SavedButtonName, "Tên nút", false, function(text)
+    local trimmed = string.gsub(text, "^%s*(.-)%s*$", "%1")
+    State.SavedButtonName = trimmed ~= "" and trimmed or "Về điểm lưu"
+    if FloatingSavedButton then
+        FloatingSavedButton.Text = State.SavedButtonName
+    end
+end)
+createDualButtons(SavedTeleSection, "Lưu vị trí", function()
+    local _, _, root = getCharacter()
+    if root then
+        State.SavedCFrame = root.CFrame
+        notify("Đã lưu vị trí hiện tại.", Theme.Success)
+    else
+        notify("Không thể lưu vị trí.", Theme.Danger)
+    end
+end, "Tele về", function()
+    if State.SavedCFrame then
+        safeTeleport(State.SavedCFrame + Vector3.new(0, 3, 0))
+    else
+        notify("Chưa có vị trí đã lưu.", Theme.Warning)
+    end
+end, Theme.Accent, Theme.Accent2)
+createDualButtons(SavedTeleSection, "Tạo / cập nhật nút nổi", createFloatingSavedButton, "Xoá nút nổi", removeFloatingSavedButton, Theme.SurfaceLight, Theme.Danger)
+
+local TouchTeleSection = createSection(TelePage, "Tele cảm ứng", "Nhấn nút bên dưới, sau đó chạm đúng một lần vào bề mặt trong thế giới.")
+createButton(TouchTeleSection, "Bật tele cho lần chạm kế tiếp", function()
+    State.TouchTeleportArmed = false
+    task.delay(0.2, function()
+        if State.Running then
+            State.TouchTeleportArmed = true
+            notify("Tele cảm ứng đã sẵn sàng: chạm vào vị trí cần đến.", Theme.Warning)
+        end
+    end)
+end, Theme.Accent2)
+createButton(TouchTeleSection, "Huỷ tele cảm ứng", function()
+    State.TouchTeleportArmed = false
+    notify("Đã huỷ tele cảm ứng.", Theme.Success)
+end, Theme.SurfaceLight)
+
+local NoVoidSection = createSection(MiscPage, "No Void", "Ghi nhớ bề mặt đứng an toàn gần nhất. Khi xuống sát FallenPartsDestroyHeight, nhân vật được đưa trở lại trước khi auto-die.")
+createToggle(NoVoidSection, "Bật No Void", false, function(value)
+    State.NoVoid = value
+    if value then
+        local _, humanoid, root = getCharacter()
+        if humanoid and root and humanoid.FloorMaterial ~= Enum.Material.Air then
+            State.LastSafeCFrame = root.CFrame
+        end
+    end
+end)
+createInput(NoVoidSection, "Khoảng an toàn trên đáy (stud)", State.NoVoidMargin, "5 - 200", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.NoVoidMargin = math.clamp(value, 5, 200)
+    end
+end)
+
+local ServerSection = createSection(MiscPage, "Server", "Quét tối đa bốn trang server, loại server hiện tại và server đầy.")
+createDualButtons(ServerSection, "Hop ít người", function()
+    hopServer(true)
+end, "Hop đông người", function()
+    hopServer(false)
+end, Theme.Accent, Theme.Accent2)
+createButton(ServerSection, "Rejoin server hiện tại", function()
+    if game.JobId ~= "" then
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    else
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+end, Theme.SurfaceLight)
+
+local UtilitySection = createSection(MiscPage, "Tiện ích", "Các chức năng nền được dừng và khôi phục khi đóng Raphael.")
+createToggle(UtilitySection, "Anti AFK", false, function(value)
+    State.AntiAFK = value
+end)
+createToggle(UtilitySection, "Anti Ragdoll", false, function(value)
+    State.AntiRagdoll = value
+    local _, humanoid = getCharacter()
+    if humanoid and not value then
+        pcall(function()
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        end)
+    end
+end)
+createToggle(UtilitySection, "FPS Boost", false, setFPSBoost)
+createDualButtons(UtilitySection, "Copy toạ độ", function()
+    local _, _, root = getCharacter()
+    if not root then
+        notify("Không lấy được toạ độ.", Theme.Danger)
+        return
+    end
+    local text = string.format("CFrame.new(%.3f, %.3f, %.3f)", root.Position.X, root.Position.Y, root.Position.Z)
+    if setclipboard then
+        setclipboard(text)
+        notify("Đã copy toạ độ.", Theme.Success)
+    else
+        notify(text, Theme.Success)
+    end
+end, "Reset nhân vật", function()
+    local _, humanoid = getCharacter()
+    if humanoid then
+        humanoid.Health = 0
+    end
+end, Theme.SurfaceLight, Theme.Danger)
+end
+
+local ProfileSection = createSection(InfoPage, "Hồ sơ", "Thông tin client hiện tại.")
+local ProfileCard = Instance.new("Frame")
+ProfileCard.Size = UDim2.new(1, 0, 0, 76)
+ProfileCard.BackgroundColor3 = Theme.Input
+ProfileCard.BorderSizePixel = 0
+ProfileCard.Parent = ProfileSection
+Instance.new("UICorner", ProfileCard).CornerRadius = UDim.new(0, 10)
+
+local Avatar = Instance.new("ImageLabel")
+Avatar.Size = UDim2.fromOffset(58, 58)
+Avatar.Position = UDim2.fromOffset(9, 9)
+Avatar.BackgroundColor3 = Theme.SurfaceLight
+Avatar.BorderSizePixel = 0
+Avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+Avatar.Parent = ProfileCard
+Instance.new("UICorner", Avatar).CornerRadius = UDim.new(1, 0)
+
+local DisplayNameLabel = Instance.new("TextLabel")
+DisplayNameLabel.Position = UDim2.fromOffset(78, 11)
+DisplayNameLabel.Size = UDim2.new(1, -87, 0, 22)
+DisplayNameLabel.BackgroundTransparency = 1
+DisplayNameLabel.Text = LocalPlayer.DisplayName
+DisplayNameLabel.TextColor3 = Theme.Text
+DisplayNameLabel.Font = Enum.Font.GothamBold
+DisplayNameLabel.TextSize = 15
+DisplayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+DisplayNameLabel.Parent = ProfileCard
+
+local UsernameLabel = Instance.new("TextLabel")
+UsernameLabel.Position = UDim2.fromOffset(78, 33)
+UsernameLabel.Size = UDim2.new(1, -87, 0, 17)
+UsernameLabel.BackgroundTransparency = 1
+UsernameLabel.Text = "@" .. LocalPlayer.Name .. "  ·  ID " .. LocalPlayer.UserId
+UsernameLabel.TextColor3 = Theme.Accent
+UsernameLabel.Font = Enum.Font.GothamMedium
+UsernameLabel.TextSize = 10
+UsernameLabel.TextXAlignment = Enum.TextXAlignment.Left
+UsernameLabel.Parent = ProfileCard
+
+local AccountAgeLabel = Instance.new("TextLabel")
+AccountAgeLabel.Position = UDim2.fromOffset(78, 51)
+AccountAgeLabel.Size = UDim2.new(1, -87, 0, 15)
+AccountAgeLabel.BackgroundTransparency = 1
+AccountAgeLabel.Text = "Tuổi tài khoản: " .. LocalPlayer.AccountAge .. " ngày"
+AccountAgeLabel.TextColor3 = Theme.SubText
+AccountAgeLabel.Font = Enum.Font.Gotham
+AccountAgeLabel.TextSize = 9
+AccountAgeLabel.TextXAlignment = Enum.TextXAlignment.Left
+AccountAgeLabel.Parent = ProfileCard
+
+local RuntimeSection = createSection(InfoPage, "Game & Runtime", "Dữ liệu được làm mới mỗi giây.")
+local GameNameValue = createInfoRow(RuntimeSection, "Game", "Đang tải...")
+local PlaceIdValue = createInfoRow(RuntimeSection, "Place ID", tostring(game.PlaceId))
+local JobIdValue = createInfoRow(RuntimeSection, "Job ID", game.JobId ~= "" and game.JobId or "Studio / N/A")
+local PlayersValue = createInfoRow(RuntimeSection, "Người chơi", #Players:GetPlayers() .. "/" .. Players.MaxPlayers)
+local PingValue = createInfoRow(RuntimeSection, "Ping", "Đang đo...")
+local FPSValue = createInfoRow(RuntimeSection, "FPS", "0")
+local PositionValue = createInfoRow(RuntimeSection, "Toạ độ", "N/A")
+local UptimeValue = createInfoRow(RuntimeSection, "Server uptime", formatDuration(Workspace.DistributedGameTime))
+local ExecutorValue = createInfoRow(RuntimeSection, "Executor", "DeltaX / Unknown")
+local DeviceValue = createInfoRow(RuntimeSection, "Thiết bị", UserInputService.TouchEnabled and "Touch" or "Desktop")
+
+createDualButtons(RuntimeSection, "Copy Job ID", function()
+    if setclipboard then
+        setclipboard(game.JobId)
+        notify("Đã copy Job ID.", Theme.Success)
+    else
+        notify("Executor không hỗ trợ setclipboard.", Theme.Warning)
+    end
+end, "Làm mới", function()
+    if refreshInfo then
+        refreshInfo()
+    end
+end, Theme.SurfaceLight, Theme.Accent)
+
+local PlayerListSection = createSection(InfoPage, "Danh sách người chơi", "Avatar, username, display name và team hiện tại.")
+local PlayerListContainer = Instance.new("Frame")
+PlayerListContainer.Size = UDim2.new(1, 0, 0, 0)
+PlayerListContainer.AutomaticSize = Enum.AutomaticSize.Y
+PlayerListContainer.BackgroundTransparency = 1
+PlayerListContainer.Parent = PlayerListSection
+local PlayerListLayout = Instance.new("UIListLayout")
+PlayerListLayout.Padding = UDim.new(0, 5)
+PlayerListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+PlayerListLayout.Parent = PlayerListContainer
+
+rebuildPlayerList = function()
+    for _, child in ipairs(PlayerListContainer:GetChildren()) do
+        if child:IsA("GuiObject") then
+            child:Destroy()
+        end
+    end
+
+    local playerArray = Players:GetPlayers()
+    table.sort(playerArray, function(left, right)
+        if left == LocalPlayer then
+            return true
+        elseif right == LocalPlayer then
+            return false
+        end
+        return string.lower(left.Name) < string.lower(right.Name)
+    end)
+
+    for index, player in ipairs(playerArray) do
+        local row = Instance.new("TextButton")
+        row.Size = UDim2.new(1, 0, 0, 38)
+        row.BackgroundColor3 = Theme.Input
+        row.BackgroundTransparency = player == LocalPlayer and 0 or 0.22
+        row.BorderSizePixel = 0
+        row.Text = ""
+        row.AutoButtonColor = false
+        row.LayoutOrder = index
+        row.Parent = PlayerListContainer
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+
+        local image = Instance.new("ImageLabel")
+        image.Size = UDim2.fromOffset(30, 30)
+        image.Position = UDim2.fromOffset(4, 4)
+        image.BackgroundTransparency = 1
+        image.Image = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=48&h=48"
+        image.Parent = row
+        Instance.new("UICorner", image).CornerRadius = UDim.new(1, 0)
+
+        local name = Instance.new("TextLabel")
+        name.Position = UDim2.fromOffset(40, 3)
+        name.Size = UDim2.new(1, -125, 0, 17)
+        name.BackgroundTransparency = 1
+        name.Text = player.DisplayName .. (player == LocalPlayer and "  [Ngài]" or "")
+        name.TextColor3 = player == LocalPlayer and Theme.Accent or Theme.Text
+        name.Font = Enum.Font.GothamBold
+        name.TextSize = 10
+        name.TextXAlignment = Enum.TextXAlignment.Left
+        name.TextTruncate = Enum.TextTruncate.AtEnd
+        name.Parent = row
+
+        local username = Instance.new("TextLabel")
+        username.Position = UDim2.fromOffset(40, 19)
+        username.Size = UDim2.new(1, -125, 0, 15)
+        username.BackgroundTransparency = 1
+        username.Text = "@" .. player.Name
+        username.TextColor3 = Theme.SubText
+        username.Font = Enum.Font.Gotham
+        username.TextSize = 9
+        username.TextXAlignment = Enum.TextXAlignment.Left
+        username.TextTruncate = Enum.TextTruncate.AtEnd
+        username.Parent = row
+
+        local team = Instance.new("TextLabel")
+        team.Position = UDim2.new(1, -82, 0, 0)
+        team.Size = UDim2.new(0, 76, 1, 0)
+        team.BackgroundTransparency = 1
+        team.Text = player.Team and player.Team.Name or "No Team"
+        team.TextColor3 = player.TeamColor and player.TeamColor.Color or Theme.SubText
+        team.Font = Enum.Font.GothamMedium
+        team.TextSize = 9
+        team.TextXAlignment = Enum.TextXAlignment.Right
+        team.TextTruncate = Enum.TextTruncate.AtEnd
+        team.Parent = row
+
+        local lastActivation = 0
+        row.Activated:Connect(function()
+            local now = os.clock()
+            if now - lastActivation <= 0.38 then
+                local copied = false
+                if setclipboard then
+                    copied = pcall(setclipboard, player.Name)
+                end
+                notify(copied and ("Đã copy tên " .. player.Name .. ".") or ("Username: " .. player.Name), copied and Theme.Success or Theme.Warning)
+                lastActivation = 0
+            else
+                lastActivation = now
+                tween(row, {BackgroundColor3 = Theme.SurfaceLight}, 0.1)
+                task.delay(0.2, function()
+                    if row.Parent then
+                        tween(row, {BackgroundColor3 = Theme.Input}, 0.15)
+                    end
+                end)
+            end
+        end)
+    end
+end
+
+local MeasuredFPS = 0
+local FrameCounter = 0
+local FrameTimer = os.clock()
+connect(RunService.RenderStepped, function()
+    FrameCounter = FrameCounter + 1
+    local now = os.clock()
+    if now - FrameTimer >= 0.5 then
+        MeasuredFPS = math.floor(FrameCounter / (now - FrameTimer) + 0.5)
+        FrameCounter = 0
+        FrameTimer = now
+    end
+end)
+
+refreshInfo = function()
+    PlayersValue.Text = #Players:GetPlayers() .. "/" .. Players.MaxPlayers
+    FPSValue.Text = tostring(MeasuredFPS)
+    UptimeValue.Text = formatDuration(Workspace.DistributedGameTime)
+
+    local _, _, root = getCharacter()
+    if root then
+        PositionValue.Text = string.format("%.1f, %.1f, %.1f", root.Position.X, root.Position.Y, root.Position.Z)
+    else
+        PositionValue.Text = "N/A"
+    end
+
+    local pingText = "N/A"
+    pcall(function()
+        pingText = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
+    end)
+    PingValue.Text = pingText
+
+    local executorText = "DeltaX / Unknown"
+    if identifyexecutor then
+        local success, name, version = pcall(identifyexecutor)
+        if success and name then
+            executorText = tostring(name) .. (version and (" " .. tostring(version)) or "")
+        end
+    end
+    ExecutorValue.Text = executorText
+end
+
+connect(Players.PlayerAdded, function()
+    task.defer(rebuildPlayerList)
+end)
+connect(Players.PlayerRemoving, function(player)
+    if State.SpectatingPlayer == player then
+        setSpectating(nil)
+        notify("Player đang theo dõi đã rời server.", Theme.Warning)
+    end
+    local visual = Visuals.Player[player]
+    if visual then
+        destroyVisual(visual)
+        Visuals.Player[player] = nil
+    end
+    task.defer(rebuildPlayerList)
+end)
+
+rebuildPlayerList()
+refreshInfo()
+task.spawn(function()
+    local success, productInfo = pcall(function()
+        return MarketplaceService:GetProductInfo(game.PlaceId)
+    end)
+    if success and productInfo then
+        GameNameValue.Text = productInfo.Name
+    else
+        GameNameValue.Text = game.Name
+    end
+end)
+
+connect(UserInputService.JumpRequest, function()
+    local _, humanoid, root = getCharacter()
+    if not humanoid or not root then
+        return
+    end
+    rememberHumanoid(humanoid)
+    local canApply = State.InfiniteJump or humanoid.FloorMaterial ~= Enum.Material.Air
+    if not canApply then
+        return
+    end
+    if State.JumpMethod == "Velocity" then
+        local velocity = root.AssemblyLinearVelocity
+        root.AssemblyLinearVelocity = Vector3.new(velocity.X, State.JumpValue, velocity.Z)
+    else
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        if State.InfiniteJump then
+            local velocity = root.AssemblyLinearVelocity
+            local minimumVelocity = State.JumpMethod == "JumpHeight" and math.sqrt(2 * Workspace.Gravity * State.JumpValue) or State.JumpValue
+            root.AssemblyLinearVelocity = Vector3.new(velocity.X, math.max(velocity.Y, minimumVelocity), velocity.Z)
+        end
+    end
+end)
+
+connect(LocalPlayer.Idled, function()
+    if State.AntiAFK then
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new(0, 0), Camera.CFrame)
+        end)
+    end
+end)
+
+connect(LocalPlayer.CharacterAdded, function(character)
+    table.clear(OriginalCollision)
+    State.LastSafeCFrame = nil
+    task.spawn(function()
+        local humanoid = character:WaitForChild("Humanoid", 10)
+        local root = character:WaitForChild("HumanoidRootPart", 10)
+        if humanoid then
+            rememberHumanoid(humanoid)
+        end
+        if root then
+            task.wait(0.5)
+            State.LastSafeCFrame = root.CFrame
+        end
+    end)
+end)
+
+local LastItemScan = 0
+local LastMobRescan = 0
+local LastInfoRefresh = 0
+local LastVisionApply = 0
+local LastNoVoidCheck = 0
+local LastXRayUpdate = 0
+local LastESPUpdate = 0
+
+connect(RunService.Stepped, function()
+    if not State.Running then
+        return
+    end
+    local character, humanoid, root = getCharacter()
+    if not character or not humanoid or not root then
+        return
+    end
+    rememberHumanoid(humanoid)
+
+    if State.Noclip then
+        local function disableCollision(part)
+            if part and part:IsA("BasePart") then
+                if OriginalCollision[part] == nil then
+                    OriginalCollision[part] = part.CanCollide
+                end
+                part.CanCollide = false
+            end
+        end
+
+        if State.NoclipMethod == "Chỉ Root" then
+            disableCollision(root)
+        else
+            for _, descendant in ipairs(character:GetDescendants()) do
+                if descendant:IsA("BasePart") then
+                    disableCollision(descendant)
+                end
+            end
+            if State.NoclipMethod == "State + Parts" then
+                pcall(function()
+                    humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+                end)
+            end
+        end
+    end
+
+    if State.AntiRagdoll then
+        pcall(function()
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            if humanoid:GetState() == Enum.HumanoidStateType.FallingDown or humanoid:GetState() == Enum.HumanoidStateType.Ragdoll then
+                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end)
+        for _, descendant in ipairs(character:GetDescendants()) do
+            if descendant:IsA("Motor6D") then
+                descendant.Enabled = true
+            end
+        end
+    end
+end)
+
+connect(RunService.Heartbeat, function(deltaTime)
+    if not State.Running then
+        return
+    end
+    local character, humanoid, root = getCharacter()
+    if not character or not humanoid or not root then
+        return
+    end
+    local original = rememberHumanoid(humanoid)
+
+    if State.SpeedMethod == "WalkSpeed" then
+        humanoid.WalkSpeed = State.SpeedValue
+    elseif State.SpeedMethod == "Velocity" then
+        humanoid.WalkSpeed = 0
+        local direction = humanoid.MoveDirection
+        local currentVelocity = root.AssemblyLinearVelocity
+        root.AssemblyLinearVelocity = Vector3.new(direction.X * State.SpeedValue, currentVelocity.Y, direction.Z * State.SpeedValue)
+    elseif State.SpeedMethod == "CFrame" then
+        local baseSpeed = original and original.WalkSpeed or 16
+        humanoid.WalkSpeed = math.min(State.SpeedValue, baseSpeed)
+        local extraSpeed = math.max(State.SpeedValue - baseSpeed, 0)
+        if extraSpeed > 0 and humanoid.MoveDirection.Magnitude > 0 then
+            root.CFrame = root.CFrame + humanoid.MoveDirection.Unit * extraSpeed * deltaTime
+        end
+    end
+
+    if State.JumpMethod == "JumpPower" then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = State.JumpValue
+    elseif State.JumpMethod == "JumpHeight" then
+        humanoid.UseJumpPower = false
+        humanoid.JumpHeight = State.JumpValue
+    end
+
+    Workspace.Gravity = State.GravityValue
+    Camera = Workspace.CurrentCamera or Camera
+    Camera.FieldOfView = State.CameraFov
+    if State.SpectatingPlayer then
+        local targetHumanoid = State.SpectatingPlayer.Character and State.SpectatingPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if targetHumanoid and Camera.CameraSubject ~= targetHumanoid then
+            Camera.CameraType = Enum.CameraType.Custom
+            Camera.CameraSubject = targetHumanoid
+        end
+    end
+
+    local now = os.clock()
+    if now - LastXRayUpdate >= 0.16 then
+        LastXRayUpdate = now
+        updateXRayOcclusion()
+    end
+    if now - LastNoVoidCheck >= 0.1 then
+        LastNoVoidCheck = now
+        local threshold = Workspace.FallenPartsDestroyHeight + State.NoVoidMargin
+        if root.Position.Y > threshold + 8 and humanoid.FloorMaterial ~= Enum.Material.Air then
+            State.LastSafeCFrame = root.CFrame
+        end
+        if State.NoVoid and root.Position.Y <= threshold then
+            local rescueCFrame = State.LastSafeCFrame
+            if not rescueCFrame then
+                local parameters = RaycastParams.new()
+                parameters.FilterType = Enum.RaycastFilterType.Exclude
+                parameters.FilterDescendantsInstances = {character}
+                local rayOrigin = Vector3.new(root.Position.X, math.max(root.Position.Y + 1000, 2000), root.Position.Z)
+                local result = Workspace:Raycast(rayOrigin, Vector3.new(0, -5000, 0), parameters)
+                if result then
+                    rescueCFrame = CFrame.new(result.Position + Vector3.new(0, 4, 0))
+                end
+            end
+            if rescueCFrame then
+                safeTeleport(rescueCFrame + Vector3.new(0, 3, 0))
+                notify("No Void đã đưa Ngài về vị trí an toàn.", Theme.Warning)
+            end
+        end
+    end
+
+    if now - LastVisionApply >= 0.2 then
+        LastVisionApply = now
+        if State.ClockTime then
+            Lighting.ClockTime = State.ClockTime
+        end
+        if State.RemoveEffects then
+            applyNoEffects()
+        end
+        if State.FullBrightLevel ~= nil then
+            applyFullBright()
+        end
+    end
+
+    local itemScanInterval = State.ItemESP.ExactName ~= "" and 2 or 0.65
+    if now - LastItemScan >= itemScanInterval then
+        LastItemScan = now
+        if State.ItemESP.Enabled or State.XRay then
+            task.spawn(function()
+                scanItems(false)
+            end)
+        end
+    end
+
+    if now - LastMobRescan >= 8 then
+        LastMobRescan = now
+        if State.MobESP.Enabled or State.XRay then
+            task.spawn(rescanMobs)
+        end
+    end
+
+    if now - LastInfoRefresh >= 1 then
+        LastInfoRefresh = now
+        refreshInfo()
+    end
+end)
+
+connect(RunService.RenderStepped, function()
+    if not State.Running then
+        return
+    end
+    local now = os.clock()
+    if now - LastESPUpdate < 0.04 then
+        return
+    end
+    LastESPUpdate = now
+
+    Camera = Workspace.CurrentCamera or Camera
+    local _, _, localRoot = getCharacter()
+    if not localRoot then
+        return
+    end
+
+    if State.PlayerESP.Enabled or State.XRay then
+        local seen = {}
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local character = player.Character
+                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                local root = character and getAdorneeRoot(character)
+                if character and root and humanoid and humanoid.Health > 0 then
+                    seen[player] = true
+                    local distance = (root.Position - localRoot.Position).Magnitude
+                    updateVisual("Player", player, character, root, player.DisplayName .. " (@" .. player.Name .. ")", getHealthText(humanoid), distance)
+                end
+            end
+        end
+        for player, visual in pairs(Visuals.Player) do
+            if not seen[player] then
+                destroyVisual(visual)
+                Visuals.Player[player] = nil
+            end
+        end
+    end
+
+    if State.MobESP.Enabled or State.XRay then
+        local seen = {}
+        for model in pairs(MobCache) do
+            if model and model.Parent and isMobModel(model) then
+                local root = getAdorneeRoot(model)
+                if root then
+                    local humanoid = model:FindFirstChildOfClass("Humanoid")
+                    local healthText = getHealthText(humanoid)
+                    if not healthText then
+                        local health = model:GetAttribute("Health") or model:GetAttribute("HP")
+                        local maximum = model:GetAttribute("MaxHealth") or model:GetAttribute("MaxHP")
+                        if type(health) == "number" then
+                            healthText = maximum and string.format("HP %d/%d", health, maximum) or string.format("HP %d", health)
+                        end
+                    end
+                    seen[model] = true
+                    updateVisual("Mob", model, model, root, model.Name, healthText, (root.Position - localRoot.Position).Magnitude)
+                end
+            else
+                MobCache[model] = nil
+            end
+        end
+        for model, visual in pairs(Visuals.Mob) do
+            if not seen[model] then
+                destroyVisual(visual)
+                Visuals.Mob[model] = nil
+            end
+        end
+    end
+
+    if State.ItemESP.Enabled or State.XRay then
+        local seen = {}
+        for item in pairs(ItemCache) do
+            if item and item.Parent and item:IsDescendantOf(Workspace) then
+                local root = getAdorneeRoot(item)
+                if root then
+                    seen[item] = true
+                    updateVisual("Item", item, item, root, item.Name, getItemHealthText(item), (root.Position - localRoot.Position).Magnitude)
+                end
+            else
+                ItemCache[item] = nil
+            end
+        end
+        for item, visual in pairs(Visuals.Item) do
+            if not seen[item] then
+                destroyVisual(visual)
+                Visuals.Item[item] = nil
+            end
+        end
+    end
+end)
+
+ActiveTab = "Movement"
+Pages.Movement.Visible = true
+TabButtons.Movement.Button.BackgroundColor3 = Theme.Accent
+TabButtons.Movement.Button.BackgroundTransparency = 0
+TabButtons.Movement.Button.TextColor3 = Theme.Text
+TabButtons.Movement.Icon.ImageColor3 = Theme.Text
+TabButtons.Movement.Gradient.Enabled = true
+TabButtons.Movement.Accent.BackgroundTransparency = 0.16
+
+cleanup = function()
+    if not State.Running then
+        return
+    end
+    State.Running = false
+    State.TouchTeleportArmed = false
+
+    restoreCollisions()
+    restoreXRayOccluders()
+    removeAllVisuals()
+    restoreEffects()
+    restoreLightingVisuals()
+    Lighting.ClockTime = OriginalLighting.ClockTime
+    Workspace.Gravity = OriginalGravity
+    Camera = Workspace.CurrentCamera or Camera
+    Camera.FieldOfView = OriginalCamera.FieldOfView
+    LocalPlayer.CameraMinZoomDistance = OriginalCamera.MinZoom
+    LocalPlayer.CameraMaxZoomDistance = OriginalCamera.MaxZoom
+
+    local _, humanoid = getCharacter()
+    State.SpectatingPlayer = nil
+    Camera.CameraType = OriginalCamera.Type
+    Camera.CameraSubject = humanoid or OriginalCamera.Subject
+    restoreHumanoid(humanoid)
+
+    if State.FPSBoost then
+        setFPSBoost(false)
+    end
+
+    for _, connection in ipairs(Connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(Connections)
+
+    RuntimeEnvironment.RaphaelSovereignCleanup = nil
+    if ScreenGui then
+        ScreenGui:Destroy()
+    end
+end
+
+RuntimeEnvironment.RaphaelSovereignCleanup = cleanup
+
+task.spawn(function()
+    local imageObjects = {}
+    for _, instance in ipairs(ScreenGui:GetDescendants()) do
+        if instance:IsA("ImageLabel") or instance:IsA("ImageButton") then
+            if instance.Image ~= "" then
+                table.insert(imageObjects, instance)
+            end
+        end
+    end
+    pcall(function()
+        ContentProvider:PreloadAsync(imageObjects)
+    end)
+end)
+
+notify("Raphael Sovereign V6.2 Golden đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
