@@ -98,9 +98,100 @@ local UI = {
         Vision = "sun",
         Tele = "map-pin",
         Misc = "settings-2",
+        Aimbot = "crosshair",
         Info = "circle-user-round"
     }
 }
+
+UI.Motion = {
+    Fast = 0.07,
+    Normal = 0.16,
+    Slow = 0.24
+}
+
+function UI.Motion.GetScale(instance)
+    if not instance or not instance.Parent then
+        return nil
+    end
+    local scale = instance:FindFirstChild("RaphaelMotionScale")
+    if not scale then
+        scale = Instance.new("UIScale")
+        scale.Name = "RaphaelMotionScale"
+        scale.Scale = 1
+        scale.Parent = instance
+    end
+    return scale
+end
+
+function UI.Motion.Press(instance)
+    local scale = UI.Motion.GetScale(instance)
+    if not scale then
+        return
+    end
+    local token = (instance:GetAttribute("RaphaelMotionToken") or 0) + 1
+    instance:SetAttribute("RaphaelMotionToken", token)
+    TweenService:Create(scale, TweenInfo.new(UI.Motion.Fast, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 0.93}):Play()
+    task.delay(UI.Motion.Fast, function()
+        if instance.Parent and instance:GetAttribute("RaphaelMotionToken") == token then
+            TweenService:Create(scale, TweenInfo.new(UI.Motion.Normal, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        end
+    end)
+end
+
+function UI.Motion.Pop(instance)
+    local scale = UI.Motion.GetScale(instance)
+    if not scale then
+        return
+    end
+    instance:SetAttribute("RaphaelHideToken", (instance:GetAttribute("RaphaelHideToken") or 0) + 1)
+    instance.Rotation = 0
+    scale.Scale = 0.88
+    TweenService:Create(scale, TweenInfo.new(UI.Motion.Slow, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end
+
+function UI.Motion.Hide(instance, completion)
+    local scale = UI.Motion.GetScale(instance)
+    if not scale then
+        if completion then
+            completion()
+        end
+        return
+    end
+    local token = (instance:GetAttribute("RaphaelHideToken") or 0) + 1
+    instance:SetAttribute("RaphaelHideToken", token)
+    instance.Rotation = 0
+    TweenService:Create(scale, TweenInfo.new(UI.Motion.Normal, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Scale = 0.82}):Play()
+    task.delay(UI.Motion.Normal, function()
+        if instance.Parent and instance:GetAttribute("RaphaelHideToken") == token then
+            instance.Visible = false
+            instance.Rotation = 0
+            scale.Scale = 1
+            if completion then
+                completion()
+            end
+        end
+    end)
+end
+
+function UI.Motion.Shake(instance)
+    if not instance or not instance.Parent then
+        return
+    end
+    local token = (instance:GetAttribute("RaphaelShakeToken") or 0) + 1
+    local originalRotation = instance.Rotation
+    instance:SetAttribute("RaphaelShakeToken", token)
+    TweenService:Create(instance, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {Rotation = originalRotation - 3}):Play()
+    task.delay(0.05, function()
+        if instance.Parent and instance:GetAttribute("RaphaelShakeToken") == token then
+            TweenService:Create(instance, TweenInfo.new(0.07, Enum.EasingStyle.Linear), {Rotation = originalRotation + 3}):Play()
+        end
+    end)
+    task.delay(0.12, function()
+        if instance.Parent and instance:GetAttribute("RaphaelShakeToken") == token then
+            TweenService:Create(instance, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Rotation = originalRotation}):Play()
+        end
+    end)
+end
 
 function UI.GetIcon(name)
     return UI.Icons[name] or UI.Icons.sparkles
@@ -124,6 +215,7 @@ function UI.AddRipple(button, color)
         if not button.Parent then
             return
         end
+        UI.Motion.Press(button)
         local diameter = math.max(button.AbsoluteSize.X, button.AbsoluteSize.Y) * 1.35
         local ripple = Instance.new("Frame")
         ripple.Name = "PremiumRipple"
@@ -156,6 +248,8 @@ function UI.GetSectionIcon(title)
         {"noclip", "move-3d"},
         {"fly", "plane"},
         {"movement", "footprints"},
+        {"aimbot", "crosshair"},
+        {"fov", "crosshair"},
         {"bảng màu", "wand-sparkles"},
         {"player", "user-round-search"},
         {"quái", "skull"},
@@ -202,7 +296,8 @@ function UI.GetButtonIcon(text)
         {"reset", "skull"},
         {"rejoin", "refresh-cw"},
         {"tạo", "sparkles"},
-        {"huỷ", "x"}
+        {"huỷ", "x"},
+        {"bỏ aim", "crosshair"}
     }
     for _, rule in ipairs(rules) do
         if string.find(normalized, rule[1], 1, true) then
@@ -227,6 +322,7 @@ end)
 
 local State = {
     Running = true,
+    InterfaceVisible = true,
     SpeedValue = 16,
     SpeedMethod = "WalkSpeed",
     JumpValue = 50,
@@ -266,19 +362,58 @@ local State = {
     NoVoidMargin = 35,
     LastSafeCFrame = nil,
     AntiAFK = false,
-    AntiRagdoll = false,
+    AntiStun = false,
     FPSBoost = false,
     FPSBoostApplied = false,
     RenderQualityBackup = nil,
     TerrainDecorationBackup = nil,
+    TerrainWaterBackup = nil,
+    ScreenBlankEnabled = false,
+    ScreenBlankColor = "Đen",
+    ScreenBlankFrame = nil,
     ItemScanRunning = false,
     MobScanRunning = false,
     ExecutorText = nil,
     ESPRefreshMode = "Adaptive",
-    LastRagdollMaintain = 0,
+    LastAntiStunMaintain = 0,
+    LastJumpRequest = 0,
+    AntiStunMarkerNames = {"Stunned", "Stun", "Frozen", "Freeze", "Slowed", "Slow", "Rooted", "Knocked", "Knockback", "Ragdolled", "StunTime", "SlowTime", "stunned", "stun", "frozen", "freeze", "slowed", "slow", "rooted", "knocked", "knockback", "ragdolled"},
     ItemHealthCurrentNames = {"Health", "HP", "Durability", "Amount"},
     ItemHealthMaximumNames = {"MaxHealth", "MaxHP", "MaxDurability", "MaxAmount"},
     MobDisplayAttributeNames = {"DisplayName", "EnemyName", "MobName", "NPCName", "Title"},
+    Aimbot = {
+        Enabled = false,
+        Mode = "Silent Aim (Góc 3)",
+        TargetType = "Player",
+        FOVRadius = 180,
+        AimPart = "Đầu",
+        TargetModel = nil,
+        TargetPlayer = nil,
+        TargetHumanoid = nil,
+        TargetPart = nil,
+        TargetLabel = "Không có mục tiêu",
+        LastScan = 0,
+        LastStickyCheck = 0,
+        RenderBound = false,
+        ReleasedModel = nil,
+        ReleasedPlayer = nil,
+        WallCheck = false,
+        StickyEnabled = false,
+        StickyUsername = "",
+        StickyPlayer = nil,
+        BlacklistText = "",
+        BlacklistNames = {},
+        RaycastParams = RaycastParams.new(),
+        AutoRotateBackup = setmetatable({}, {__mode = "k"}),
+        CameraModeBackup = nil,
+        CameraTypeBackup = nil,
+        CameraSubjectBackup = nil,
+        FOVDrawing = nil,
+        FOVGui = nil,
+        ReleaseButton = nil,
+        ReleaseButtonVisible = false,
+        StatusValue = nil
+    },
     PlayerESP = {
         Enabled = false,
         Tracer = true,
@@ -288,6 +423,8 @@ local State = {
         Health = true,
         Distance = true,
         MaxDistanceMeters = 1000,
+        LookDirection = false,
+        LookLength = 15,
         Color = Theme.Player
     },
     MobESP = {
@@ -296,10 +433,11 @@ local State = {
         Box = true,
         BoxMode = "Skin",
         Name = true,
-        Health = true,
         Distance = true,
         MaxTargets = 25,
         MaxDistanceMeters = 1000,
+        LookDirection = false,
+        LookLength = 15,
         Color = Theme.Mob
     },
     ItemESP = {
@@ -390,6 +528,9 @@ local function notify(text, color)
     if StatusLabel and StatusLabel.Parent then
         StatusLabel.Text = text
         StatusLabel.TextColor3 = color or Theme.SubText
+        if color == Theme.Warning or color == Theme.Danger then
+            UI.Motion.Shake(StatusLabel)
+        end
     end
     pcall(function()
         StarterGui:SetCore("SendNotification", {
@@ -430,8 +571,10 @@ local function restoreHumanoid(humanoid)
             humanoid.UseJumpPower = original.UseJumpPower
             humanoid.JumpPower = original.JumpPower
             humanoid.JumpHeight = original.JumpHeight
+            humanoid.PlatformStand = false
             humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
         end)
     end
 end
@@ -618,7 +761,7 @@ local GuiParent = resolveGuiParent()
 
 for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
     pcall(function()
-        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden", "Raphael_Sovereign_V6_3_SmartMob", "Raphael_Sovereign_V6_4_ManualMob", "Raphael_Sovereign_V6_4_1_Stable", "Raphael_Sovereign_V6_4_2_RegisterFix", "Raphael_Sovereign_V6_4_Final", "Raphael_Sovereign_V6_4_Enhanced", "Raphael_Sovereign_V6_4_Enhanced_2", "Raphael_Sovereign_V6_4_Enhanced_3", "Raphael_Sovereign_V6_4_Enhanced_4", "Raphael_Sovereign_V6_4_Enhanced_5", "Raphael_Sovereign_V6_4_FinalSkin", "Raphael_Sovereign_V6_4_Optimized"}) do
+        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden", "Raphael_Sovereign_V6_3_SmartMob", "Raphael_Sovereign_V6_4_ManualMob", "Raphael_Sovereign_V6_4_1_Stable", "Raphael_Sovereign_V6_4_2_RegisterFix", "Raphael_Sovereign_V6_4_Final", "Raphael_Sovereign_V6_4_Enhanced", "Raphael_Sovereign_V6_4_Enhanced_2", "Raphael_Sovereign_V6_4_Enhanced_3", "Raphael_Sovereign_V6_4_Enhanced_4", "Raphael_Sovereign_V6_4_Enhanced_5", "Raphael_Sovereign_V6_4_FinalSkin", "Raphael_Sovereign_V6_4_Optimized", "Raphael_Sovereign_V6_5_Aimbot", "Raphael_Sovereign_V6_5_1_HealthFix", "Raphael_Sovereign_V6_6_AimbotRefined", "Raphael_Sovereign_V6_7_MobilityVisual", "Raphael_Sovereign_V6_7_1_UIClipFix"}) do
             local staleInterface = guiRoot:FindFirstChild(interfaceName)
             if staleInterface then
                 staleInterface:Destroy()
@@ -628,7 +771,7 @@ for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
 end
 
 ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "Raphael_Sovereign_V6_4_Optimized"
+ScreenGui.Name = "Raphael_Sovereign_V6_7_1_UIClipFix"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -674,6 +817,16 @@ connect(MainFrame:GetPropertyChangedSignal("Position"), function()
 end)
 connect(MainFrame:GetPropertyChangedSignal("Size"), function()
     MainShadow.Size = MainFrame.Size
+end)
+connect(MainFrame:GetPropertyChangedSignal("Rotation"), function()
+    if MainFrame.Rotation ~= 0 then
+        MainFrame.Rotation = 0
+    end
+end)
+connect(MainFrame:GetPropertyChangedSignal("ClipsDescendants"), function()
+    if not MainFrame.ClipsDescendants then
+        MainFrame.ClipsDescendants = true
+    end
 end)
 
 local MainGradient = Instance.new("UIGradient")
@@ -805,8 +958,11 @@ Sidebar.BackgroundColor3 = Theme.Surface
 Sidebar.BackgroundTransparency = 0.18
 Sidebar.BorderSizePixel = 0
 Sidebar.ScrollBarThickness = 0
+Sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
+Sidebar.ElasticBehavior = Enum.ElasticBehavior.Never
+Sidebar.ClipsDescendants = true
 Sidebar.CanvasSize = UDim2.new()
-Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.None
 Sidebar.Parent = MainFrame
 Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 11)
 
@@ -821,12 +977,16 @@ local SidebarLayout = Instance.new("UIListLayout")
 SidebarLayout.Padding = UDim.new(0, 6)
 SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
 SidebarLayout.Parent = Sidebar
+connect(SidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+    Sidebar.CanvasSize = UDim2.fromOffset(0, SidebarLayout.AbsoluteContentSize.Y + 16)
+end)
 
 local Content = Instance.new("Frame")
 Content.Name = "Content"
 Content.Position = UDim2.fromOffset(146, 62)
 Content.Size = UDim2.new(1, -156, 1, -92)
 Content.BackgroundTransparency = 1
+Content.ClipsDescendants = true
 Content.Parent = MainFrame
 
 local StatusBar = Instance.new("Frame")
@@ -875,7 +1035,7 @@ local function createTab(name, order)
     button.Text = name
     button.TextColor3 = Theme.SubText
     button.Font = Enum.Font.GothamBold
-    button.TextSize = 12
+    button.TextSize = 10
     button.TextXAlignment = Enum.TextXAlignment.Left
     button.AutoButtonColor = false
     button.LayoutOrder = order
@@ -917,8 +1077,11 @@ local function createTab(name, order)
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
     page.ScrollBarImageColor3 = Theme.Accent
+    page.ScrollingDirection = Enum.ScrollingDirection.Y
+    page.ElasticBehavior = Enum.ElasticBehavior.Never
+    page.ClipsDescendants = true
     page.CanvasSize = UDim2.new()
-    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.AutomaticCanvasSize = Enum.AutomaticSize.None
     page.Visible = false
     page.Parent = Content
 
@@ -931,6 +1094,9 @@ local function createTab(name, order)
     pageLayout.Padding = UDim.new(0, 10)
     pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
     pageLayout.Parent = page
+    connect(pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+        page.CanvasSize = UDim2.fromOffset(0, pageLayout.AbsoluteContentSize.Y + 8)
+    end)
 
     Pages[name] = page
     TabButtons[name] = {Button = button, Accent = accent, Icon = tabIcon, Gradient = tabGradient}
@@ -951,6 +1117,13 @@ local function createTab(name, order)
             tween(data.Icon, {ImageColor3 = selected and Theme.Text or Theme.SubText})
             tween(data.Accent, {BackgroundTransparency = selected and 0.16 or 1})
         end
+        page.Rotation = 0
+        page.ClipsDescendants = true
+        local pageScale = page:FindFirstChild("RaphaelMotionScale")
+        if pageScale then
+            pageScale.Scale = 1
+        end
+        task.defer(Extensions.RepairInterfaceGeometry)
     end)
 
     return page
@@ -1447,10 +1620,11 @@ end
 
 local MovementPage = createTab("Movement", 1)
 local ESPPage = createTab("ESP", 2)
-local VisionPage = createTab("Vision", 3)
-local TelePage = createTab("Tele", 4)
-local MiscPage = createTab("Misc", 5)
-local InfoPage = createTab("Info", 6)
+local AimbotPage = createTab("Aimbot", 3)
+local VisionPage = createTab("Vision", 4)
+local TelePage = createTab("Tele", 5)
+local MiscPage = createTab("Misc", 6)
+local InfoPage = createTab("Info", 7)
 
 local function resizeInterface()
     Camera = Workspace.CurrentCamera or Camera
@@ -1473,6 +1647,10 @@ local function resizeInterface()
             data.Button.TextSize = 12
         end
     end
+    MainFrame.Rotation = 0
+    MainFrame.ClipsDescendants = true
+    Content.ClipsDescendants = true
+    Sidebar.ClipsDescendants = true
 end
 
 resizeInterface()
@@ -1551,17 +1729,112 @@ connect(UserInputService.InputEnded, function(input)
         draggingOrb = false
     end
 end)
-connect(RestoreOrb.Activated, function()
-    if not orbMoved then
+function Extensions.RepairInterfaceGeometry()
+    MainFrame.Rotation = 0
+    MainFrame.ClipsDescendants = true
+    Content.Rotation = 0
+    Content.ClipsDescendants = true
+    Sidebar.Rotation = 0
+    Sidebar.ClipsDescendants = true
+    Sidebar.ElasticBehavior = Enum.ElasticBehavior.Never
+    Sidebar.CanvasSize = UDim2.fromOffset(0, SidebarLayout.AbsoluteContentSize.Y + 16)
+    for _, page in pairs(Pages) do
+        page.Rotation = 0
+        page.ClipsDescendants = true
+        page.ElasticBehavior = Enum.ElasticBehavior.Never
+        local layout = page:FindFirstChildOfClass("UIListLayout")
+        if layout then
+            page.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 8)
+        end
+        local pageScale = page:FindFirstChild("RaphaelMotionScale")
+        if pageScale then
+            pageScale.Scale = 1
+        end
+        pcall(function()
+            local maximumY = math.max(page.AbsoluteCanvasSize.Y - page.AbsoluteWindowSize.Y, 0)
+            page.CanvasPosition = Vector2.new(0, math.clamp(page.CanvasPosition.Y, 0, maximumY))
+        end)
+    end
+end
+
+function Extensions.SetInterfaceVisible(visible)
+    visible = not not visible
+    State.InterfaceVisible = visible
+    Extensions.RepairInterfaceGeometry()
+    if visible then
+        MainFrame:SetAttribute("RaphaelHideToken", (MainFrame:GetAttribute("RaphaelHideToken") or 0) + 1)
+        MainFrame.Rotation = 0
         MainFrame.Visible = true
         MainShadow.Visible = true
         RestoreOrb.Visible = false
+        UI.Motion.Pop(MainFrame)
+        task.defer(Extensions.RepairInterfaceGeometry)
+        return
+    end
+    if not MainFrame.Visible then
+        MainShadow.Visible = false
+        RestoreOrb.Visible = true
+        return
+    end
+    RestoreOrb.Visible = false
+    UI.Motion.Hide(MainFrame, function()
+        if State.Running and not State.InterfaceVisible then
+            MainFrame.Rotation = 0
+            MainShadow.Visible = false
+            RestoreOrb.Visible = true
+            UI.Motion.Pop(RestoreOrb)
+        end
+    end)
+end
+
+function Extensions.EnsureScreenBlank()
+    if State.ScreenBlankFrame and State.ScreenBlankFrame.Parent then
+        return State.ScreenBlankFrame
+    end
+    local frame = Instance.new("TextButton")
+    frame.Name = "ScreenWhiteBlack"
+    frame.Size = UDim2.fromScale(1, 1)
+    frame.Position = UDim2.fromScale(0, 0)
+    frame.BorderSizePixel = 0
+    frame.Text = ""
+    frame.AutoButtonColor = false
+    frame.Active = true
+    frame.Modal = true
+    frame.Visible = false
+    frame.ZIndex = 950
+    frame.Parent = ScreenGui
+    connect(frame.Activated, function()
+        Extensions.SetScreenBlank(false, false)
+    end)
+    State.ScreenBlankFrame = frame
+    return frame
+end
+
+function Extensions.SetScreenBlank(enabled, silent)
+    State.ScreenBlankEnabled = not not enabled
+    local frame = Extensions.EnsureScreenBlank()
+    local white = State.ScreenBlankColor == "Trắng"
+    frame.BackgroundColor3 = white and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+    frame.Visible = State.ScreenBlankEnabled
+    pcall(function()
+        RunService:Set3dRenderingEnabled(not State.ScreenBlankEnabled)
+    end)
+    local control = State.ConfigControls.ScreenBlankEnabled
+    if control and control.Set then
+        control.Set(State.ScreenBlankEnabled, false)
+    end
+    if not silent then
+        notify(State.ScreenBlankEnabled and ("Đã phủ màn hình màu " .. string.lower(tostring(State.ScreenBlankColor)) .. ". Chạm bất kỳ vị trí nào để khôi phục.") or "Đã khôi phục hiển thị game.", Theme.Success)
+    end
+end
+
+connect(RestoreOrb.Activated, function()
+    if not orbMoved then
+        Extensions.SetInterfaceVisible(true)
     end
 end)
 connect(MinimizeButton.Activated, function()
-    MainFrame.Visible = false
-    MainShadow.Visible = false
-    RestoreOrb.Visible = true
+    Extensions.SetInterfaceVisible(false)
 end)
 connect(CloseButton.Activated, function()
     if not ScreenGui or ScreenGui:FindFirstChild("ShutdownConfirmation") then
@@ -1587,6 +1860,7 @@ connect(CloseButton.Activated, function()
     confirmationCard.ZIndex = 1001
     confirmationCard.Parent = confirmationOverlay
     Instance.new("UICorner", confirmationCard).CornerRadius = UDim.new(0, 14)
+    UI.Motion.Pop(confirmationCard)
 
     local confirmationConstraint = Instance.new("UISizeConstraint")
     confirmationConstraint.MinSize = Vector2.new(280, 178)
@@ -1664,9 +1938,7 @@ connect(CloseButton.Activated, function()
 end)
 connect(UserInputService.InputBegan, function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.RightShift then
-        MainFrame.Visible = not MainFrame.Visible
-        MainShadow.Visible = MainFrame.Visible
-        RestoreOrb.Visible = not MainFrame.Visible
+        Extensions.SetInterfaceVisible(not State.InterfaceVisible)
     end
 end)
 
@@ -1846,7 +2118,111 @@ local function restoreLightingVisuals()
     Lighting.EnvironmentSpecularScale = OriginalLighting.EnvironmentSpecularScale
 end
 
+function Extensions.ApplyFPSOptimization(instance)
+    if not State.FPSBoostApplied or not instance or instance:GetAttribute("RaphaelOwned") then
+        return
+    end
+    local toggled = instance:IsA("ParticleEmitter")
+        or instance:IsA("Trail")
+        or instance:IsA("Beam")
+        or instance:IsA("Smoke")
+        or instance:IsA("Fire")
+        or instance:IsA("Sparkles")
+        or instance:IsA("PostEffect")
+        or instance:IsA("PointLight")
+        or instance:IsA("SpotLight")
+        or instance:IsA("SurfaceLight")
+        or instance:IsA("Clouds")
+        or instance:IsA("BillboardGui")
+        or instance:IsA("SurfaceGui")
+    local atmosphere = instance:IsA("Atmosphere")
+    local basePart = instance:IsA("BasePart")
+    local surfaceImage = instance:IsA("Decal") or instance:IsA("Texture")
+    local meshPart = instance:IsA("MeshPart")
+    if not toggled and not atmosphere and not basePart and not surfaceImage and not meshPart then
+        return
+    end
+    local backup = FPSBackup[instance]
+    if not backup then
+        backup = {}
+        FPSBackup[instance] = backup
+    end
+
+    if toggled then
+        if backup.Enabled == nil then
+            backup.Enabled = instance.Enabled
+        end
+        pcall(function()
+            instance.Enabled = false
+        end)
+    end
+
+    if instance:IsA("Atmosphere") then
+        if backup.Density == nil then
+            backup.Density = instance.Density
+            backup.Haze = instance.Haze
+            backup.Glare = instance.Glare
+        end
+        pcall(function()
+            instance.Density = 0
+            instance.Haze = 0
+            instance.Glare = 0
+        end)
+    end
+
+    if instance:IsA("BasePart") then
+        if backup.CastShadow == nil then
+            backup.CastShadow = instance.CastShadow
+            backup.Material = instance.Material
+            backup.Reflectance = instance.Reflectance
+        end
+        pcall(function()
+            instance.CastShadow = false
+            instance.Material = Enum.Material.SmoothPlastic
+            instance.Reflectance = 0
+        end)
+    end
+
+    if instance:IsA("Decal") or instance:IsA("Texture") then
+        if backup.Transparency == nil then
+            backup.Transparency = instance.Transparency
+        end
+        pcall(function()
+            instance.Transparency = 1
+        end)
+    end
+
+    if instance:IsA("MeshPart") then
+        if backup.RenderFidelity == nil then
+            pcall(function()
+                backup.RenderFidelity = instance.RenderFidelity
+                backup.TextureID = instance.TextureID
+            end)
+        end
+        pcall(function()
+            instance.RenderFidelity = Enum.RenderFidelity.Performance
+            instance.TextureID = ""
+        end)
+    end
+end
+
+function Extensions.RestoreFPSOptimizations()
+    for instance, values in pairs(FPSBackup) do
+        if instance and instance.Parent then
+            for property, value in pairs(values) do
+                pcall(function()
+                    instance[property] = value
+                end)
+            end
+        end
+    end
+    table.clear(FPSBackup)
+end
+
 connect(Lighting.DescendantAdded, function(instance)
+    if State.FPSBoostApplied then
+        Extensions.ApplyFPSOptimization(instance)
+    end
     if State.RemoveEffects then
         task.defer(function()
             if instance.Parent then
@@ -1908,6 +2284,7 @@ local function createVisual(category, key)
     if DrawingSupported then
         visual.Box = newDrawing("Square")
         visual.Tracer = newDrawing("Line")
+        visual.LookLine = newDrawing("Line")
         visual.Name = newDrawing("Text")
         visual.Health = newDrawing("Text")
         visual.Distance = newDrawing("Text")
@@ -1922,6 +2299,11 @@ local function createVisual(category, key)
             visual.Tracer.Color = config.Color
             visual.Tracer.Thickness = 1.2
             visual.Tracer.Transparency = 0.9
+        end
+        if visual.LookLine then
+            visual.LookLine.Color = config.Color
+            visual.LookLine.Thickness = 2
+            visual.LookLine.Transparency = 1
         end
         for _, textObject in ipairs({visual.Name, visual.Health, visual.Distance}) do
             if textObject then
@@ -1973,6 +2355,7 @@ end
 local function hideVisual(visual)
     setDrawingVisible(visual.Box, false)
     setDrawingVisible(visual.Tracer, false)
+    setDrawingVisible(visual.LookLine, false)
     setDrawingVisible(visual.Name, false)
     setDrawingVisible(visual.Health, false)
     setDrawingVisible(visual.Distance, false)
@@ -1982,6 +2365,9 @@ local function hideVisual(visual)
     if visual.Billboard then
         visual.Billboard.Enabled = false
     end
+    if visual.LookBeam then
+        visual.LookBeam.Enabled = false
+    end
 end
 
 local function destroyVisual(visual)
@@ -1990,6 +2376,7 @@ local function destroyVisual(visual)
     end
     destroyDrawing(visual.Box)
     destroyDrawing(visual.Tracer)
+    destroyDrawing(visual.LookLine)
     destroyDrawing(visual.Name)
     destroyDrawing(visual.Health)
     destroyDrawing(visual.Distance)
@@ -1998,6 +2385,15 @@ local function destroyVisual(visual)
     end
     if visual.Billboard then
         visual.Billboard:Destroy()
+    end
+    if visual.LookBeam then
+        visual.LookBeam:Destroy()
+    end
+    if visual.LookStart then
+        visual.LookStart:Destroy()
+    end
+    if visual.LookEnd then
+        visual.LookEnd:Destroy()
     end
 end
 
@@ -2199,13 +2595,50 @@ local function updateVisual(category, key, target, root, displayName, healthText
         end
         visual.BillboardText.Text = table.concat(lines, "\n")
         visual.Billboard.Enabled = espEnabled and #lines > 0
+        local lookPart = target:IsA("Model") and (target:FindFirstChild("Head") or root) or root
+        local lookEnabled = espEnabled and category ~= "Item" and config.LookDirection and lookPart and lookPart:IsA("BasePart")
+        if lookEnabled then
+            if visual.LookAdornee ~= lookPart or not visual.LookBeam or not visual.LookBeam.Parent then
+                if visual.LookBeam then visual.LookBeam:Destroy() end
+                if visual.LookStart then visual.LookStart:Destroy() end
+                if visual.LookEnd then visual.LookEnd:Destroy() end
+                visual.LookStart = Instance.new("Attachment")
+                visual.LookEnd = Instance.new("Attachment")
+                visual.LookBeam = Instance.new("Beam")
+                visual.LookStart.Name = "RaphaelLookStart"
+                visual.LookEnd.Name = "RaphaelLookEnd"
+                visual.LookBeam.Name = "RaphaelLookDirection"
+                visual.LookStart:SetAttribute("RaphaelOwned", true)
+                visual.LookEnd:SetAttribute("RaphaelOwned", true)
+                visual.LookBeam:SetAttribute("RaphaelOwned", true)
+                visual.LookStart.Parent = lookPart
+                visual.LookEnd.Parent = lookPart
+                visual.LookBeam.Attachment0 = visual.LookStart
+                visual.LookBeam.Attachment1 = visual.LookEnd
+                visual.LookBeam.FaceCamera = true
+                visual.LookBeam.Width0 = 0.07
+                visual.LookBeam.Width1 = 0.035
+                visual.LookBeam.LightEmission = 1
+                visual.LookBeam.Segments = 1
+                visual.LookBeam.Parent = lookPart
+                visual.LookAdornee = lookPart
+            end
+            local verticalOffset = lookPart.Size.Y * 0.55 + 0.15
+            visual.LookStart.Position = Vector3.new(0, verticalOffset, 0)
+            visual.LookEnd.Position = Vector3.new(0, verticalOffset, -config.LookLength)
+            visual.LookBeam.Color = ColorSequence.new(config.Color)
+            visual.LookBeam.Enabled = true
+        elseif visual.LookBeam then
+            visual.LookBeam.Enabled = false
+        end
         return
     end
 
-    local needsScreenDrawing = espEnabled and ((config.Box and config.BoxMode == "2D") or config.Tracer or config.Name or (config.Health and healthText ~= nil) or config.Distance)
+    local needsScreenDrawing = espEnabled and ((config.Box and config.BoxMode == "2D") or config.Tracer or config.Name or (config.Health and healthText ~= nil) or config.Distance or (category ~= "Item" and config.LookDirection))
     if not needsScreenDrawing then
         setDrawingVisible(visual.Box, false)
         setDrawingVisible(visual.Tracer, false)
+        setDrawingVisible(visual.LookLine, false)
         setDrawingVisible(visual.Name, false)
         setDrawingVisible(visual.Health, false)
         setDrawingVisible(visual.Distance, false)
@@ -2216,6 +2649,7 @@ local function updateVisual(category, key, target, root, displayName, healthText
     if not topLeft or not boxSize then
         setDrawingVisible(visual.Box, false)
         setDrawingVisible(visual.Tracer, false)
+        setDrawingVisible(visual.LookLine, false)
         setDrawingVisible(visual.Name, false)
         setDrawingVisible(visual.Health, false)
         setDrawingVisible(visual.Distance, false)
@@ -2225,6 +2659,23 @@ local function updateVisual(category, key, target, root, displayName, healthText
     local centerX = topLeft.X + boxSize.X * 0.5
     local topY = topLeft.Y
     local bottomY = topLeft.Y + boxSize.Y
+
+    if visual.LookLine then
+        local lookPart = target:IsA("Model") and (target:FindFirstChild("Head") or root) or root
+        local lookEnabled = espEnabled and category ~= "Item" and config.LookDirection and lookPart and lookPart:IsA("BasePart")
+        if lookEnabled then
+            local startWorld = lookPart.Position + Vector3.new(0, lookPart.Size.Y * 0.55 + 0.15, 0)
+            local endWorld = startWorld + lookPart.CFrame.LookVector * config.LookLength
+            local startPoint = Camera:WorldToViewportPoint(startWorld)
+            local endPoint = Camera:WorldToViewportPoint(endWorld)
+            visual.LookLine.Color = config.Color
+            visual.LookLine.From = Vector2.new(startPoint.X, startPoint.Y)
+            visual.LookLine.To = Vector2.new(endPoint.X, endPoint.Y)
+            visual.LookLine.Visible = startPoint.Z > 0 and endPoint.Z > 0
+        else
+            visual.LookLine.Visible = false
+        end
+    end
 
     if visual.Box then
         visual.Box.Color = config.Color
@@ -2629,7 +3080,7 @@ local function isPlayerCharacterDescendant(instance)
 end
 
 local function findClosestNamedWorldObject(name)
-    local normalized = string.lower(string.gsub(tostring(name or ""), "^%s*(.-)%s*$", "%1"))
+    local normalized = string.lower((string.gsub(tostring(name or ""), "^%s*(.-)%s*$", "%1")))
     if normalized == "" then
         return nil, nil
     end
@@ -2722,11 +3173,8 @@ local function findAutomaticItem(part)
 end
 
 connect(Workspace.DescendantAdded, function(instance)
-    if State.FPSBoostApplied and (instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles")) then
-        if FPSBackup[instance] == nil then
-            FPSBackup[instance] = instance.Enabled
-        end
-        instance.Enabled = false
+    if State.FPSBoostApplied then
+        Extensions.ApplyFPSOptimization(instance)
     end
 
     if instance:IsA("Model") or instance:IsA("Humanoid") or instance:IsA("AnimationController") or instance:IsA("BasePart") and instance.Name == "HumanoidRootPart" then
@@ -2827,6 +3275,584 @@ scanItems = function(forceNotification)
         end
     end
     return count
+end
+
+function Extensions.UpdateAimbotStatus(text, color)
+    State.Aimbot.TargetLabel = text or "Không có mục tiêu"
+    local statusValue = State.Aimbot.StatusValue
+    if statusValue and statusValue.Parent then
+        statusValue.Text = State.Aimbot.TargetLabel
+        statusValue.TextColor3 = color or Theme.Text
+    end
+    local releaseButton = State.Aimbot.ReleaseButton
+    if releaseButton and releaseButton.Parent then
+        if State.Aimbot.TargetModel then
+            releaseButton.Text = "BỎ AIM"
+            releaseButton.BackgroundColor3 = Theme.Danger
+        elseif State.Aimbot.Enabled then
+            releaseButton.Text = "ĐANG CHỜ"
+            releaseButton.BackgroundColor3 = Theme.Warning
+        else
+            releaseButton.Text = "AIM OFF"
+            releaseButton.BackgroundColor3 = Theme.SurfaceLight
+        end
+    end
+end
+
+function Extensions.GetAimbotPart(model)
+    if not model or not model.Parent then
+        return nil
+    end
+    if State.Aimbot.AimPart == "Đầu" then
+        local head = model:FindFirstChild("Head")
+        return head and head:IsA("BasePart") and head or nil
+    end
+    local body = model:FindFirstChild("UpperTorso")
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChild("LowerTorso")
+    return body and body:IsA("BasePart") and body or nil
+end
+
+function Extensions.RestoreAimbotCharacterRotation()
+    for humanoid, autoRotate in pairs(State.Aimbot.AutoRotateBackup) do
+        if humanoid and humanoid.Parent then
+            pcall(function()
+                humanoid.AutoRotate = autoRotate
+            end)
+        end
+    end
+    table.clear(State.Aimbot.AutoRotateBackup)
+end
+
+function Extensions.RestoreAimbotCamera()
+    if State.Aimbot.CameraModeBackup == nil then
+        return
+    end
+    pcall(function()
+        LocalPlayer.CameraMode = State.Aimbot.CameraModeBackup
+    end)
+    Camera = Workspace.CurrentCamera or Camera
+    if State.Aimbot.CameraTypeBackup ~= nil then
+        Camera.CameraType = State.Aimbot.CameraTypeBackup
+    end
+    if State.Aimbot.CameraSubjectBackup and State.Aimbot.CameraSubjectBackup.Parent then
+        Camera.CameraSubject = State.Aimbot.CameraSubjectBackup
+    elseif not State.SpectatingPlayer then
+        local _, humanoid = getCharacter()
+        if humanoid then
+            Camera.CameraType = Enum.CameraType.Custom
+            Camera.CameraSubject = humanoid
+        end
+    end
+    State.Aimbot.CameraModeBackup = nil
+    State.Aimbot.CameraTypeBackup = nil
+    State.Aimbot.CameraSubjectBackup = nil
+    if State.UnlockZoom then
+        LocalPlayer.CameraMinZoomDistance = 0.5
+        LocalPlayer.CameraMaxZoomDistance = 10000
+    else
+        LocalPlayer.CameraMinZoomDistance = OriginalCamera.MinZoom
+        LocalPlayer.CameraMaxZoomDistance = OriginalCamera.MaxZoom
+    end
+end
+
+function Extensions.ClearAimbotTarget(restoreCamera)
+    Extensions.RestoreAimbotCharacterRotation()
+    if restoreCamera then
+        Extensions.RestoreAimbotCamera()
+    end
+    State.Aimbot.TargetModel = nil
+    State.Aimbot.TargetPlayer = nil
+    State.Aimbot.TargetHumanoid = nil
+    State.Aimbot.TargetPart = nil
+    State.Aimbot.LastScan = 0
+    Extensions.UpdateAimbotStatus(State.Aimbot.Enabled and "Đang chờ mục tiêu trong FOV" or "Không có mục tiêu", State.Aimbot.Enabled and Theme.Warning or Theme.SubText)
+end
+
+function Extensions.ParseAimbotBlacklist(text)
+    State.Aimbot.BlacklistText = tostring(text or "")
+    table.clear(State.Aimbot.BlacklistNames)
+    for entry in string.gmatch(State.Aimbot.BlacklistText, "[^,;\n]+") do
+        local normalized = string.lower((string.gsub(entry, "^%s*@?%s*(.-)%s*$", "%1")))
+        if normalized ~= "" then
+            State.Aimbot.BlacklistNames[normalized] = true
+        end
+    end
+end
+
+function Extensions.IsAimbotPlayerBlacklisted(player)
+    return player ~= nil and State.Aimbot.BlacklistNames[string.lower(player.Name)] == true
+end
+
+function Extensions.ResolveStickyPlayer()
+    local normalized = string.lower((string.gsub(State.Aimbot.StickyUsername or "", "^%s*@?%s*(.-)%s*$", "%1")))
+    if normalized == "" then
+        State.Aimbot.StickyPlayer = nil
+        return nil
+    end
+    local cached = State.Aimbot.StickyPlayer
+    if cached and cached.Parent == Players and string.lower(cached.Name) == normalized then
+        return cached
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and string.lower(player.Name) == normalized then
+            State.Aimbot.StickyPlayer = player
+            return player
+        end
+    end
+    State.Aimbot.StickyPlayer = nil
+    return nil
+end
+
+function Extensions.IsAimbotPartInFOV(aimPart)
+    if not aimPart or not aimPart.Parent then
+        return false, math.huge
+    end
+    Camera = Workspace.CurrentCamera or Camera
+    local viewportPoint, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
+    if not onScreen or viewportPoint.Z <= 0 then
+        return false, math.huge
+    end
+    local difference = Vector2.new(viewportPoint.X, viewportPoint.Y) - Camera.ViewportSize * 0.5
+    local distanceSquared = difference:Dot(difference)
+    return distanceSquared <= State.Aimbot.FOVRadius * State.Aimbot.FOVRadius, distanceSquared
+end
+
+function Extensions.HasAimbotLineOfSight(model, aimPart)
+    if not State.Aimbot.WallCheck then
+        return true
+    end
+    if not model or not aimPart or not aimPart.Parent then
+        return false
+    end
+    Camera = Workspace.CurrentCamera or Camera
+    local origin = Camera.CFrame.Position
+    local direction = aimPart.Position - origin
+    if direction.Magnitude <= 0.05 then
+        return true
+    end
+    local parameters = State.Aimbot.RaycastParams
+    parameters.FilterType = Enum.RaycastFilterType.Exclude
+    parameters.FilterDescendantsInstances = LocalPlayer.Character and {LocalPlayer.Character} or {}
+    parameters.IgnoreWater = false
+    local result = Workspace:Raycast(origin, direction, parameters)
+    return result == nil or result.Instance and result.Instance:IsDescendantOf(model)
+end
+
+function Extensions.FindAimbotTarget()
+    local bestModel
+    local bestPlayer
+    local bestHumanoid
+    local bestPart
+    local bestLabel
+    local bestDistanceSquared = math.huge
+
+    local function consider(model, player, humanoid, label)
+        if not model or not humanoid or humanoid.Health <= 0 then
+            return
+        end
+        if player and Extensions.IsAimbotPlayerBlacklisted(player) then
+            return
+        end
+        if model == State.Aimbot.ReleasedModel or player == State.Aimbot.ReleasedPlayer then
+            return
+        end
+        local aimPart = Extensions.GetAimbotPart(model)
+        if not aimPart then
+            return
+        end
+        local insideFOV, distanceSquared = Extensions.IsAimbotPartInFOV(aimPart)
+        if not insideFOV or not Extensions.HasAimbotLineOfSight(model, aimPart) then
+            return
+        end
+        if distanceSquared < bestDistanceSquared then
+            bestDistanceSquared = distanceSquared
+            bestModel = model
+            bestPlayer = player
+            bestHumanoid = humanoid
+            bestPart = aimPart
+            bestLabel = label
+        end
+    end
+
+    if State.Aimbot.TargetType == "Player" then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local character = player.Character
+                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                consider(character, player, humanoid, player.DisplayName .. " (@" .. player.Name .. ")")
+            end
+        end
+    else
+        for model, classification in pairs(MobCache) do
+            if model and model.Parent and type(classification) == "table" and isMobAllowedByManualFilter(model, classification) then
+                local humanoid = classification.Humanoid
+                if not humanoid or not humanoid.Parent then
+                    humanoid = model:FindFirstChildOfClass("Humanoid")
+                end
+                if humanoid and not belongsToPlayerCharacter(model) then
+                    consider(model, nil, humanoid, classification.DisplayName or model.Name)
+                end
+            end
+        end
+    end
+
+    return bestModel, bestPlayer, bestHumanoid, bestPart, bestLabel
+end
+
+function Extensions.AcquireAimbotTarget()
+    local model, player, humanoid, aimPart, label = Extensions.FindAimbotTarget()
+    if not model then
+        return false
+    end
+    State.Aimbot.TargetModel = model
+    State.Aimbot.TargetPlayer = player
+    State.Aimbot.TargetHumanoid = humanoid
+    State.Aimbot.TargetPart = aimPart
+    Extensions.UpdateAimbotStatus("Đã khóa: " .. tostring(label or model.Name), Theme.Success)
+    return true
+end
+
+function Extensions.ReleaseAimbotTarget(silent)
+    if not State.Aimbot.Enabled then
+        if not silent then
+            notify("Aimbot hiện không hoạt động.", Theme.Warning)
+        end
+        return false
+    end
+    if not State.Aimbot.TargetModel then
+        if not silent then
+            notify("Aimbot đang chờ mục tiêu khác trong FOV.", Theme.Warning)
+        end
+        return false
+    end
+    State.Aimbot.ReleasedModel = State.Aimbot.TargetModel
+    State.Aimbot.ReleasedPlayer = State.Aimbot.TargetPlayer
+    Extensions.ClearAimbotTarget(false)
+    Extensions.UpdateAimbotStatus("Đã bỏ mục tiêu; đang chờ mục tiêu khác", Theme.Warning)
+    if not silent then
+        notify("Đã bỏ mục tiêu hiện tại. Aimbot tiếp tục chờ mục tiêu khác.", Theme.Success)
+    end
+    return true
+end
+
+function Extensions.TryStickyAimbotOverride(now)
+    if not State.Aimbot.StickyEnabled or State.Aimbot.TargetType ~= "Player" or now - State.Aimbot.LastStickyCheck < 0.08 then
+        return false
+    end
+    State.Aimbot.LastStickyCheck = now
+    local player = Extensions.ResolveStickyPlayer()
+    if not player or player == State.Aimbot.TargetPlayer or Extensions.IsAimbotPlayerBlacklisted(player) or player == State.Aimbot.ReleasedPlayer then
+        return false
+    end
+    local character = player.Character
+    if not character or character == State.Aimbot.ReleasedModel then
+        return false
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local aimPart = Extensions.GetAimbotPart(character)
+    if not humanoid or humanoid.Health <= 0 or not aimPart then
+        return false
+    end
+    local insideFOV = Extensions.IsAimbotPartInFOV(aimPart)
+    if not insideFOV or not Extensions.HasAimbotLineOfSight(character, aimPart) then
+        return false
+    end
+    Extensions.ClearAimbotTarget(false)
+    State.Aimbot.TargetModel = character
+    State.Aimbot.TargetPlayer = player
+    State.Aimbot.TargetHumanoid = humanoid
+    State.Aimbot.TargetPart = aimPart
+    Extensions.UpdateAimbotStatus("Aim Dính: " .. player.DisplayName .. " (@" .. player.Name .. ")", Theme.Success)
+    return true
+end
+
+function Extensions.IsAimbotTargetValid()
+    local model = State.Aimbot.TargetModel
+    local humanoid = State.Aimbot.TargetHumanoid
+    local aimPart = State.Aimbot.TargetPart
+    return model ~= nil
+        and model.Parent ~= nil
+        and model:IsDescendantOf(Workspace)
+        and humanoid ~= nil
+        and humanoid.Parent ~= nil
+        and humanoid.Health > 0
+        and aimPart ~= nil
+        and aimPart.Parent ~= nil
+        and aimPart:IsDescendantOf(model)
+end
+
+function Extensions.EnsureAimbotFOV()
+    if State.Aimbot.FOVDrawing or State.Aimbot.FOVGui then
+        return
+    end
+    if DrawingSupported then
+        local circle = newDrawing("Circle")
+        if circle then
+            pcall(function()
+                circle.Filled = false
+                circle.NumSides = 64
+                circle.Thickness = 2
+                circle.Transparency = 0.9
+                circle.Color = Theme.Accent
+                circle.Visible = false
+            end)
+            State.Aimbot.FOVDrawing = circle
+            return
+        end
+    end
+
+    local circleFrame = Instance.new("Frame")
+    circleFrame.Name = "AimbotFOVCircle"
+    circleFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    circleFrame.BackgroundTransparency = 1
+    circleFrame.BorderSizePixel = 0
+    circleFrame.ZIndex = 80
+    circleFrame.Visible = false
+    circleFrame.Parent = Overlay
+    Instance.new("UICorner", circleFrame).CornerRadius = UDim.new(1, 0)
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "FOVStroke"
+    stroke.Color = Theme.Accent
+    stroke.Thickness = 2
+    stroke.Transparency = 0.1
+    stroke.Parent = circleFrame
+    State.Aimbot.FOVGui = circleFrame
+end
+
+function Extensions.UpdateAimbotFOV()
+    if not State.Aimbot.Enabled and not State.Aimbot.FOVDrawing and not State.Aimbot.FOVGui then
+        return
+    end
+    Extensions.EnsureAimbotFOV()
+    Camera = Workspace.CurrentCamera or Camera
+    local center = Camera.ViewportSize * 0.5
+    local radius = State.Aimbot.FOVRadius
+    local locked = State.Aimbot.TargetModel ~= nil
+    local circleColor = locked and Theme.Success or Theme.Accent
+    local drawingCircle = State.Aimbot.FOVDrawing
+    if drawingCircle then
+        pcall(function()
+            drawingCircle.Position = center
+            drawingCircle.Radius = radius
+            drawingCircle.Color = circleColor
+            drawingCircle.Visible = State.Aimbot.Enabled
+        end)
+    end
+    local guiCircle = State.Aimbot.FOVGui
+    if guiCircle and guiCircle.Parent then
+        guiCircle.Position = UDim2.fromOffset(center.X, center.Y)
+        guiCircle.Size = UDim2.fromOffset(radius * 2, radius * 2)
+        guiCircle.Visible = State.Aimbot.Enabled
+        local stroke = guiCircle:FindFirstChild("FOVStroke")
+        if stroke then
+            stroke.Color = circleColor
+        end
+    end
+end
+
+function Extensions.DestroyAimbotFOV()
+    if State.Aimbot.FOVDrawing then
+        destroyDrawing(State.Aimbot.FOVDrawing)
+        State.Aimbot.FOVDrawing = nil
+    end
+    if State.Aimbot.FOVGui then
+        State.Aimbot.FOVGui:Destroy()
+        State.Aimbot.FOVGui = nil
+    end
+end
+
+function Extensions.SetAimbotEnabled(enabled, reason, silent)
+    enabled = not not enabled
+    if State.Aimbot.RenderBound then
+        pcall(function()
+            RunService:UnbindFromRenderStep("RaphaelAimbotLock")
+        end)
+        State.Aimbot.RenderBound = false
+    end
+    if enabled then
+        Extensions.ClearAimbotTarget(true)
+        State.Aimbot.ReleasedModel = nil
+        State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.LastStickyCheck = 0
+        State.Aimbot.Enabled = true
+        if State.Aimbot.Mode == "Aim truyền thống (Góc 1)" and State.SpectatingPlayer then
+            setSpectating(nil)
+        end
+        if State.Aimbot.TargetType == "NPC" and next(MobCache) == nil then
+            task.spawn(rescanMobs)
+        end
+        Extensions.UpdateAimbotStatus("Đang chờ mục tiêu trong FOV", Theme.Warning)
+        Extensions.UpdateAimbotFOV()
+        State.Aimbot.RenderBound = pcall(function()
+            RunService:BindToRenderStep("RaphaelAimbotLock", Enum.RenderPriority.Camera.Value + 1, function()
+                Extensions.UpdateAimbotFrame(os.clock())
+            end)
+        end)
+    else
+        State.Aimbot.Enabled = false
+        State.Aimbot.ReleasedModel = nil
+        State.Aimbot.ReleasedPlayer = nil
+        Extensions.ClearAimbotTarget(true)
+        Extensions.UpdateAimbotFOV()
+    end
+    local control = State.ConfigControls.AimbotEnabled
+    if control and control.Set then
+        control.Set(enabled, false)
+    end
+    if not silent then
+        notify(reason or (enabled and "Aimbot đã bật; đang tìm mục tiêu trong FOV." or "Aimbot đã dừng."), enabled and Theme.Success or Theme.Warning)
+    end
+end
+
+function Extensions.CreateAimbotReleaseButton()
+    if State.Aimbot.ReleaseButton and State.Aimbot.ReleaseButton.Parent then
+        return
+    end
+    local button = Instance.new("TextButton")
+    button.Name = "AimbotReleaseButton"
+    button.Size = UDim2.fromOffset(132, 42)
+    button.Position = UDim2.new(1, -150, 0.68, 0)
+    button.BackgroundColor3 = State.Aimbot.TargetModel and Theme.Danger or (State.Aimbot.Enabled and Theme.Warning or Theme.SurfaceLight)
+    button.BackgroundTransparency = 0.08
+    button.BorderSizePixel = 0
+    button.Text = State.Aimbot.TargetModel and "BỎ AIM" or (State.Aimbot.Enabled and "ĐANG CHỜ" or "AIM OFF")
+    button.TextColor3 = Theme.Text
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 12
+    button.AutoButtonColor = false
+    button.ZIndex = 90
+    button.Parent = Overlay
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 11)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Theme.Text
+    stroke.Transparency = 0.68
+    stroke.Parent = button
+    UI.AddRipple(button, Theme.Text)
+    State.Aimbot.ReleaseButton = button
+    UI.Motion.Pop(button)
+
+    local dragging = false
+    local moved = false
+    local dragStart
+    local startPosition
+    connect(button.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            moved = false
+            dragStart = input.Position
+            startPosition = button.Position
+        end
+    end)
+    connect(UserInputService.InputChanged, function(input)
+        if dragging and button.Parent and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 5 then
+                moved = true
+            end
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end
+    end)
+    connect(UserInputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    connect(button.Activated, function()
+        if moved then
+            return
+        end
+        Extensions.ReleaseAimbotTarget(false)
+    end)
+end
+
+function Extensions.SetAimbotReleaseButtonVisible(visible, silent)
+    State.Aimbot.ReleaseButtonVisible = not not visible
+    if State.Aimbot.ReleaseButtonVisible then
+        Extensions.CreateAimbotReleaseButton()
+    elseif State.Aimbot.ReleaseButton then
+        State.Aimbot.ReleaseButton:Destroy()
+        State.Aimbot.ReleaseButton = nil
+    end
+    local control = State.ConfigControls.AimbotReleaseVisible
+    if control and control.Set then
+        control.Set(State.Aimbot.ReleaseButtonVisible, false)
+    end
+    if not silent then
+        notify(State.Aimbot.ReleaseButtonVisible and "Đã hiện nút chuyển mục tiêu ngoài menu." or "Đã ẩn nút chuyển mục tiêu ngoài menu.", Theme.Success)
+    end
+end
+
+function Extensions.UpdateAimbotFrame(now)
+    if not State.Aimbot.Enabled then
+        return
+    end
+    Extensions.UpdateAimbotFOV()
+
+    if State.Aimbot.TargetModel and not Extensions.IsAimbotTargetValid() then
+        Extensions.SetAimbotEnabled(false, "Mục tiêu đã chết hoặc không còn hợp lệ; Aimbot đã dừng.", false)
+        return
+    end
+
+    if State.Aimbot.TargetPlayer and Extensions.IsAimbotPlayerBlacklisted(State.Aimbot.TargetPlayer) then
+        Extensions.ClearAimbotTarget(false)
+        Extensions.UpdateAimbotStatus("Mục tiêu thuộc blacklist; đang chờ mục tiêu khác", Theme.Warning)
+    end
+
+    Extensions.TryStickyAimbotOverride(now)
+
+    if State.Aimbot.TargetModel and State.Aimbot.WallCheck and not Extensions.HasAimbotLineOfSight(State.Aimbot.TargetModel, State.Aimbot.TargetPart) then
+        Extensions.ClearAimbotTarget(false)
+        Extensions.UpdateAimbotStatus("Mục tiêu đã khuất tường; đang chờ mục tiêu nhìn thấy", Theme.Warning)
+    end
+
+    if not State.Aimbot.TargetModel and now - State.Aimbot.LastScan >= 0.12 then
+        State.Aimbot.LastScan = now
+        Extensions.AcquireAimbotTarget()
+    end
+
+    local targetPart = State.Aimbot.TargetPart
+    if not targetPart then
+        return
+    end
+    local _, localHumanoid, localRoot = getCharacter()
+    if not localHumanoid or not localRoot or localHumanoid.Health <= 0 then
+        return
+    end
+
+    if State.Aimbot.Mode == "Silent Aim (Góc 3)" then
+        if State.Aimbot.AutoRotateBackup[localHumanoid] == nil then
+            State.Aimbot.AutoRotateBackup[localHumanoid] = localHumanoid.AutoRotate
+        end
+        localHumanoid.AutoRotate = false
+        local rootPosition = localRoot.Position
+        local targetPosition = targetPart.Position
+        local flatTarget = Vector3.new(targetPosition.X, rootPosition.Y, targetPosition.Z)
+        if (flatTarget - rootPosition).Magnitude > 0.05 then
+            localRoot.CFrame = CFrame.lookAt(rootPosition, flatTarget)
+        end
+    else
+        Extensions.RestoreAimbotCharacterRotation()
+        if State.Aimbot.CameraModeBackup == nil then
+            Camera = Workspace.CurrentCamera or Camera
+            State.Aimbot.CameraModeBackup = LocalPlayer.CameraMode
+            State.Aimbot.CameraTypeBackup = Camera.CameraType
+            State.Aimbot.CameraSubjectBackup = Camera.CameraSubject
+        end
+        pcall(function()
+            LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+        end)
+        Camera = Workspace.CurrentCamera or Camera
+        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraSubject = localHumanoid
+        local cameraPosition = Camera.CFrame.Position
+        local targetPosition = targetPart.Position
+        if (targetPosition - cameraPosition).Magnitude > 0.05 then
+            Camera.CFrame = CFrame.lookAt(cameraPosition, targetPosition)
+            Camera.Focus = CFrame.new(targetPosition)
+        end
+    end
 end
 
 local function createFloatingSavedButton()
@@ -2936,6 +3962,128 @@ connect(UserInputService.TouchTapInWorld, function(positions, processed)
     end
 end)
 
+function Extensions.MaintainAntiStun(character, humanoid, root)
+    if not State.AntiStun or not character or not humanoid or not root then
+        return
+    end
+
+    local currentState = humanoid:GetState()
+    if humanoid.PlatformStand
+        or humanoid.Sit
+        or currentState == Enum.HumanoidStateType.FallingDown
+        or currentState == Enum.HumanoidStateType.Ragdoll
+        or currentState == Enum.HumanoidStateType.Physics then
+        humanoid.PlatformStand = false
+        humanoid.Sit = false
+        pcall(function()
+            humanoid:ChangeState(humanoid.FloorMaterial == Enum.Material.Air and Enum.HumanoidStateType.Freefall or Enum.HumanoidStateType.Running)
+        end)
+    end
+
+    if root.Anchored then
+        root.Anchored = false
+    end
+
+    local velocity = root.AssemblyLinearVelocity
+    local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+    local direction = humanoid.MoveDirection
+    local speed = math.max(State.SpeedValue, 0)
+    local now = os.clock()
+    local grounded = humanoid.FloorMaterial ~= Enum.Material.Air
+    local correctedHorizontal = horizontal
+
+    if grounded then
+        if direction.Magnitude <= 0.01 then
+            correctedHorizontal = Vector3.zero
+        elseif State.SpeedMethod ~= "CFrame" then
+            correctedHorizontal = direction.Unit * speed
+        elseif horizontal.Magnitude > math.max(speed * 1.6, 32) or horizontal:Dot(direction.Unit) < -1 then
+            correctedHorizontal = direction.Unit * speed
+        end
+    elseif direction.Magnitude <= 0.01 and horizontal.Magnitude > 3 then
+        correctedHorizontal = Vector3.zero
+    elseif horizontal.Magnitude > math.max(speed * 1.6, 36) or direction.Magnitude > 0.01 and horizontal:Dot(direction.Unit) < -1 then
+        correctedHorizontal = direction.Magnitude > 0.01 and direction.Unit * speed or Vector3.zero
+    end
+
+    local jumpLimit
+    if State.JumpMethod == "JumpHeight" then
+        jumpLimit = math.sqrt(math.max(2 * Workspace.Gravity * State.JumpValue, 0))
+    else
+        jumpLimit = State.JumpValue
+    end
+    local jumpGrace = now - State.LastJumpRequest <= 0.65
+    local verticalLimit = jumpGrace and math.max(jumpLimit * 1.25, 30) or 12
+    local vertical = math.min(velocity.Y, verticalLimit)
+    root.AssemblyLinearVelocity = Vector3.new(correctedHorizontal.X, vertical, correctedHorizontal.Z)
+    root.AssemblyAngularVelocity = Vector3.zero
+
+    if now - State.LastAntiStunMaintain < 0.18 then
+        return
+    end
+    State.LastAntiStunMaintain = now
+    pcall(function()
+        humanoid.PlatformStand = false
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+    end)
+
+    for _, descendant in ipairs(character:GetDescendants()) do
+        if descendant:IsA("Motor6D") and not descendant.Enabled then
+            descendant.Enabled = true
+        end
+    end
+
+    for _, object in ipairs({character, humanoid, root}) do
+        for _, markerName in ipairs(State.AntiStunMarkerNames) do
+            local attribute = object:GetAttribute(markerName)
+            if attribute == true or type(attribute) == "number" and attribute > 0 then
+                local neutral = string.lower(markerName) == "slow" and 1 or 0
+                pcall(function()
+                    object:SetAttribute(markerName, type(attribute) == "number" and neutral or false)
+                end)
+            end
+        end
+    end
+
+    for _, markerName in ipairs(State.AntiStunMarkerNames) do
+        local marker = character:FindFirstChild(markerName, true)
+        if marker then
+            pcall(function()
+                if marker:IsA("BoolValue") then
+                    marker.Value = false
+                elseif marker:IsA("NumberValue") or marker:IsA("IntValue") then
+                    marker.Value = string.lower(markerName) == "slow" and 1 or 0
+                end
+            end)
+        end
+    end
+end
+
+function Extensions.SetAntiStunEnabled(enabled, silent)
+    State.AntiStun = not not enabled
+    State.LastAntiStunMaintain = 0
+    local character, humanoid, root = getCharacter()
+    if State.AntiStun then
+        Extensions.MaintainAntiStun(character, humanoid, root)
+    elseif humanoid then
+        pcall(function()
+            humanoid.PlatformStand = false
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+        end)
+    end
+    local control = State.ConfigControls.AntiStun
+    if control and control.Set then
+        control.Set(State.AntiStun, false)
+    end
+    if not silent then
+        notify(State.AntiStun and "Anti Stun đã bật: chống làm chậm, trượt, ragdoll và lực đẩy bất lợi." or "Anti Stun đã tắt.", State.AntiStun and Theme.Success or Theme.Warning)
+    end
+end
+
 local function fetchServerCandidates(sortOrder)
     local servers = {}
     local cursor = nil
@@ -2984,8 +4132,8 @@ local function hopServer(preferFew)
 end
 
 local function setFPSBoost(enabled, silent)
-    State.FPSBoost = enabled
-    if enabled then
+    State.FPSBoost = not not enabled
+    if State.FPSBoost then
         if State.FPSBoostApplied then
             return
         end
@@ -2998,19 +4146,25 @@ local function setFPSBoost(enabled, silent)
                 State.TerrainDecorationBackup = gethiddenproperty(Workspace.Terrain, "Decoration")
             end)
         end
+        State.TerrainWaterBackup = {
+            WaveSize = Workspace.Terrain.WaterWaveSize,
+            WaveSpeed = Workspace.Terrain.WaterWaveSpeed,
+            Reflectance = Workspace.Terrain.WaterReflectance,
+            Transparency = Workspace.Terrain.WaterTransparency
+        }
 
-        local descendants = Workspace:GetDescendants()
-        for index, instance in ipairs(descendants) do
-            if instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles") then
-                if FPSBackup[instance] == nil then
-                    FPSBackup[instance] = instance.Enabled
-                end
-                instance.Enabled = false
-            end
-            if index % 1200 == 0 then
+        local workspaceDescendants = Workspace:GetDescendants()
+        for index, instance in ipairs(workspaceDescendants) do
+            Extensions.ApplyFPSOptimization(instance)
+            if index % 900 == 0 then
                 task.wait()
             end
         end
+        local lightingDescendants = Lighting:GetDescendants()
+        for _, instance in ipairs(lightingDescendants) do
+            Extensions.ApplyFPSOptimization(instance)
+        end
+
         Lighting.GlobalShadows = false
         pcall(function()
             settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
@@ -3018,22 +4172,21 @@ local function setFPSBoost(enabled, silent)
         pcall(function()
             sethiddenproperty(Workspace.Terrain, "Decoration", false)
         end)
+        pcall(function()
+            Workspace.Terrain.WaterWaveSize = 0
+            Workspace.Terrain.WaterWaveSpeed = 0
+            Workspace.Terrain.WaterReflectance = 0
+            Workspace.Terrain.WaterTransparency = 1
+        end)
         if not silent then
-            notify("FPS Boost đã bật.", Theme.Success)
+            notify("FPS Boost nâng cao đã bật: giảm texture, ánh sáng, vật liệu và hiệu ứng nặng.", Theme.Success)
         end
     else
         if not State.FPSBoostApplied then
             return
         end
         State.FPSBoostApplied = false
-        for instance, enabledValue in pairs(FPSBackup) do
-            if instance and instance.Parent then
-                pcall(function()
-                    instance.Enabled = enabledValue
-                end)
-            end
-        end
-        table.clear(FPSBackup)
+        Extensions.RestoreFPSOptimizations()
         if State.FullBrightLevel == nil then
             Lighting.GlobalShadows = OriginalLighting.GlobalShadows
         end
@@ -3046,10 +4199,22 @@ local function setFPSBoost(enabled, silent)
             local decoration = State.TerrainDecorationBackup
             sethiddenproperty(Workspace.Terrain, "Decoration", decoration == nil and true or decoration)
         end)
+        if State.TerrainWaterBackup then
+            pcall(function()
+                Workspace.Terrain.WaterWaveSize = State.TerrainWaterBackup.WaveSize
+                Workspace.Terrain.WaterWaveSpeed = State.TerrainWaterBackup.WaveSpeed
+                Workspace.Terrain.WaterReflectance = State.TerrainWaterBackup.Reflectance
+                Workspace.Terrain.WaterTransparency = State.TerrainWaterBackup.Transparency
+            end)
+        end
         State.RenderQualityBackup = nil
         State.TerrainDecorationBackup = nil
+        State.TerrainWaterBackup = nil
+        if State.RemoveEffects then
+            applyNoEffects()
+        end
         if not silent then
-            notify("FPS Boost đã tắt.", Theme.Success)
+            notify("FPS Boost nâng cao đã tắt và đã khôi phục đồ họa.", Theme.Success)
         end
     end
 end
@@ -3059,7 +4224,7 @@ Extensions.ConfigPath = "RaphaelSovereign/V6_4_Config.json"
 
 function Extensions.BuildConfig()
     return {
-        Version = 3,
+        Version = 6.71,
         AutoLoad = State.ConfigAutoLoad,
         Movement = {
             SpeedValue = State.SpeedValue,
@@ -3079,7 +4244,9 @@ function Extensions.BuildConfig()
             Name = State.PlayerESP.Name,
             Health = State.PlayerESP.Health,
             Distance = State.PlayerESP.Distance,
-            MaxDistanceMeters = State.PlayerESP.MaxDistanceMeters
+            MaxDistanceMeters = State.PlayerESP.MaxDistanceMeters,
+            LookDirection = State.PlayerESP.LookDirection,
+            LookLength = State.PlayerESP.LookLength
         },
         MobESP = {
             Enabled = State.MobESP.Enabled,
@@ -3087,10 +4254,11 @@ function Extensions.BuildConfig()
             Box = State.MobESP.Box,
             BoxMode = State.MobESP.BoxMode,
             Name = State.MobESP.Name,
-            Health = State.MobESP.Health,
             Distance = State.MobESP.Distance,
             MaxDistanceMeters = State.MobESP.MaxDistanceMeters,
-            MaxTargets = State.MobESP.MaxTargets
+            MaxTargets = State.MobESP.MaxTargets,
+            LookDirection = State.MobESP.LookDirection,
+            LookLength = State.MobESP.LookLength
         },
         ItemESP = {
             Enabled = State.ItemESP.Enabled,
@@ -3103,15 +4271,29 @@ function Extensions.BuildConfig()
             RadiusMeters = State.ItemESP.RadiusMeters,
             ExactName = State.ItemESP.ExactName
         },
+        Aimbot = {
+            Enabled = State.Aimbot.Enabled,
+            Mode = State.Aimbot.Mode,
+            TargetType = State.Aimbot.TargetType,
+            FOVRadius = State.Aimbot.FOVRadius,
+            AimPart = State.Aimbot.AimPart,
+            WallCheck = State.Aimbot.WallCheck,
+            StickyEnabled = State.Aimbot.StickyEnabled,
+            StickyUsername = State.Aimbot.StickyUsername,
+            BlacklistText = State.Aimbot.BlacklistText,
+            ReleaseButtonVisible = State.Aimbot.ReleaseButtonVisible
+        },
         Vision = {
-            ClockTime = State.ClockTime == nil and false or State.ClockTime,
+            ClockTime = State.ClockTime or false,
             FullBrightEnabled = State.RemoveEffects,
             FullBrightLevel = State.FullBrightLevel or 0,
             XRay = State.XRay,
             XRayMethod = State.XRayMethod,
             XRayWallTransparency = State.XRayWallTransparency,
             CameraFov = State.CameraFov,
-            UnlockZoom = State.UnlockZoom
+            UnlockZoom = State.UnlockZoom,
+            ScreenBlankEnabled = State.ScreenBlankEnabled,
+            ScreenBlankColor = State.ScreenBlankColor
         },
         Travel = {
             TelePlayerMode = State.TelePlayerMode,
@@ -3128,7 +4310,7 @@ function Extensions.BuildConfig()
             NoVoid = State.NoVoid,
             NoVoidMargin = State.NoVoidMargin,
             AntiAFK = State.AntiAFK,
-            AntiRagdoll = State.AntiRagdoll,
+            AntiStun = State.AntiStun,
             FPSBoost = State.FPSBoost,
             ESPRefreshMode = State.ESPRefreshMode
         }
@@ -3142,8 +4324,10 @@ function Extensions.SyncConfigControls()
         JumpValue = State.JumpValue,
         GravityValue = State.GravityValue,
         PlayerESPDistance = State.PlayerESP.MaxDistanceMeters,
+        PlayerESPLookLength = State.PlayerESP.LookLength,
         MobESPMaxTargets = State.MobESP.MaxTargets,
         MobESPDistance = State.MobESP.MaxDistanceMeters,
+        MobESPLookLength = State.MobESP.LookLength,
         ItemExactName = State.ItemESP.ExactName,
         ItemRadius = State.ItemESP.RadiusMeters,
         FullBrightLevel = State.FullBrightLevel or 0,
@@ -3152,7 +4336,10 @@ function Extensions.SyncConfigControls()
         TravelSpeed = State.TravelSpeed,
         SavedButtonName = State.SavedButtonName,
         MobFilterRadius = State.MobFilterScanRadiusMeters,
-        NoVoidMargin = State.NoVoidMargin
+        NoVoidMargin = State.NoVoidMargin,
+        AimbotFOVRadius = State.Aimbot.FOVRadius,
+        AimbotStickyUsername = State.Aimbot.StickyUsername,
+        AimbotBlacklist = State.Aimbot.BlacklistText
     }
     if State.ClockTime ~= nil then
         textValues.ClockTime = State.ClockTime
@@ -3177,7 +4364,11 @@ function Extensions.SyncConfigControls()
         XRayMethod = State.XRayMethod,
         TelePlayerMode = State.TelePlayerMode,
         TeleItemMode = State.TeleItemMode,
-        ESPRefreshMode = State.ESPRefreshMode
+        ESPRefreshMode = State.ESPRefreshMode,
+        AimbotMode = State.Aimbot.Mode,
+        AimbotTargetType = State.Aimbot.TargetType,
+        AimbotAimPart = State.Aimbot.AimPart,
+        ScreenBlankColor = State.ScreenBlankColor
     }
     for name, value in pairs(selectorValues) do
         local control = controls[name]
@@ -3195,12 +4386,13 @@ function Extensions.SyncConfigControls()
         PlayerESPName = State.PlayerESP.Name,
         PlayerESPHealth = State.PlayerESP.Health,
         PlayerESPDistanceToggle = State.PlayerESP.Distance,
+        PlayerESPLookDirection = State.PlayerESP.LookDirection,
         MobESPEnabled = State.MobESP.Enabled,
         MobESPTracer = State.MobESP.Tracer,
         MobESPBox = State.MobESP.Box,
         MobESPName = State.MobESP.Name,
-        MobESPHealth = State.MobESP.Health,
         MobESPDistanceToggle = State.MobESP.Distance,
+        MobESPLookDirection = State.MobESP.LookDirection,
         ItemESPEnabled = State.ItemESP.Enabled,
         ItemESPTracer = State.ItemESP.Tracer,
         ItemESPBox = State.ItemESP.Box,
@@ -3210,11 +4402,16 @@ function Extensions.SyncConfigControls()
         FullBrightEnabled = State.RemoveEffects,
         XRay = State.XRay,
         UnlockZoom = State.UnlockZoom,
+        ScreenBlankEnabled = State.ScreenBlankEnabled,
         MobFilterEnabled = State.MobManualFilterEnabled,
         NoVoid = State.NoVoid,
         AntiAFK = State.AntiAFK,
-        AntiRagdoll = State.AntiRagdoll,
+        AntiStun = State.AntiStun,
         FPSBoost = State.FPSBoost,
+        AimbotEnabled = State.Aimbot.Enabled,
+        AimbotWallCheck = State.Aimbot.WallCheck,
+        AimbotStickyEnabled = State.Aimbot.StickyEnabled,
+        AimbotReleaseVisible = State.Aimbot.ReleaseButtonVisible,
         ConfigAutoLoad = State.ConfigAutoLoad
     }
     for name, value in pairs(toggleValues) do
@@ -3230,6 +4427,8 @@ function Extensions.ApplyConfig(config, silent)
         if not silent then notify("Config không hợp lệ.", Theme.Danger) end
         return false
     end
+
+    Extensions.SetAimbotEnabled(false, nil, true)
 
     local function booleanValue(source, key, fallback)
         if type(source[key]) == "boolean" then
@@ -3258,10 +4457,16 @@ function Extensions.ApplyConfig(config, silent)
         target.Box = booleanValue(source, "Box", target.Box)
         target.BoxMode = allowed(source.BoxMode, {"2D", "Skin"}, target.BoxMode)
         target.Name = booleanValue(source, "Name", target.Name)
-        target.Health = booleanValue(source, "Health", target.Health)
+        if target.Health ~= nil then
+            target.Health = booleanValue(source, "Health", target.Health)
+        end
         target.Distance = booleanValue(source, "Distance", target.Distance)
         if source.MaxDistanceMeters ~= nil then
             target.MaxDistanceMeters = math.clamp(tonumber(source.MaxDistanceMeters) or target.MaxDistanceMeters, 1, 10000)
+        end
+        if target.LookDirection ~= nil then
+            target.LookDirection = booleanValue(source, "LookDirection", target.LookDirection)
+            target.LookLength = math.clamp(tonumber(source.LookLength) or target.LookLength, 1, 500)
         end
         if includeRadius and source.RadiusMeters ~= nil then
             target.RadiusMeters = math.clamp(tonumber(source.RadiusMeters) or target.RadiusMeters, 1, 10000)
@@ -3277,6 +4482,19 @@ function Extensions.ApplyConfig(config, silent)
         State.ItemESP.ExactName = tostring(config.ItemESP.ExactName or "")
     end
 
+    local aimbot = type(config.Aimbot) == "table" and config.Aimbot or {}
+    local applySavedAimbot = booleanValue(aimbot, "Enabled", false)
+    State.Aimbot.Mode = allowed(aimbot.Mode, {"Silent Aim (Góc 3)", "Aim truyền thống (Góc 1)"}, State.Aimbot.Mode)
+    State.Aimbot.TargetType = allowed(aimbot.TargetType, {"Player", "NPC"}, State.Aimbot.TargetType)
+    State.Aimbot.FOVRadius = math.floor(math.clamp(tonumber(aimbot.FOVRadius) or State.Aimbot.FOVRadius, 30, 1000))
+    State.Aimbot.AimPart = allowed(aimbot.AimPart, {"Đầu", "Thân"}, State.Aimbot.AimPart)
+    State.Aimbot.WallCheck = booleanValue(aimbot, "WallCheck", State.Aimbot.WallCheck)
+    State.Aimbot.StickyEnabled = booleanValue(aimbot, "StickyEnabled", State.Aimbot.StickyEnabled)
+    State.Aimbot.StickyUsername = tostring(aimbot.StickyUsername or State.Aimbot.StickyUsername or "")
+    State.Aimbot.StickyPlayer = nil
+    Extensions.ParseAimbotBlacklist(tostring(aimbot.BlacklistText or State.Aimbot.BlacklistText or ""))
+    State.Aimbot.ReleaseButtonVisible = booleanValue(aimbot, "ReleaseButtonVisible", State.Aimbot.ReleaseButtonVisible)
+
     local vision = type(config.Vision) == "table" and config.Vision or {}
     State.ClockTime = type(vision.ClockTime) == "number" and math.clamp(vision.ClockTime, 1, 24) or nil
     State.RemoveEffects = booleanValue(vision, "FullBrightEnabled", State.RemoveEffects)
@@ -3286,6 +4504,8 @@ function Extensions.ApplyConfig(config, silent)
     State.XRayWallTransparency = math.clamp(tonumber(vision.XRayWallTransparency) or State.XRayWallTransparency, 0.1, 0.95)
     State.CameraFov = math.clamp(tonumber(vision.CameraFov) or State.CameraFov, 1, 120)
     State.UnlockZoom = booleanValue(vision, "UnlockZoom", State.UnlockZoom)
+    State.ScreenBlankEnabled = booleanValue(vision, "ScreenBlankEnabled", State.ScreenBlankEnabled)
+    State.ScreenBlankColor = allowed(vision.ScreenBlankColor, {"Đen", "Trắng"}, State.ScreenBlankColor)
 
     local travel = type(config.Travel) == "table" and config.Travel or {}
     State.TelePlayerMode = allowed(travel.TelePlayerMode, {"Instant", "Fly"}, State.TelePlayerMode)
@@ -3304,7 +4524,7 @@ function Extensions.ApplyConfig(config, silent)
     State.NoVoid = booleanValue(misc, "NoVoid", State.NoVoid)
     State.NoVoidMargin = math.clamp(tonumber(misc.NoVoidMargin) or State.NoVoidMargin, 5, 200)
     State.AntiAFK = booleanValue(misc, "AntiAFK", State.AntiAFK)
-    State.AntiRagdoll = booleanValue(misc, "AntiRagdoll", State.AntiRagdoll)
+    State.AntiStun = booleanValue(misc, "AntiStun", booleanValue(misc, "AntiRagdoll", State.AntiStun))
     State.FPSBoost = booleanValue(misc, "FPSBoost", State.FPSBoost)
     State.ESPRefreshMode = allowed(misc.ESPRefreshMode, {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode)
     if type(config.AutoLoad) == "boolean" then
@@ -3312,20 +4532,14 @@ function Extensions.ApplyConfig(config, silent)
     end
 
     Extensions.SyncConfigControls()
+    Extensions.SetScreenBlank(State.ScreenBlankEnabled, true)
+    Extensions.SetAimbotReleaseButtonVisible(State.Aimbot.ReleaseButtonVisible, true)
     if not State.Noclip then
         restoreCollisions()
     end
     LocalPlayer.CameraMinZoomDistance = State.UnlockZoom and 0.5 or OriginalCamera.MinZoom
     LocalPlayer.CameraMaxZoomDistance = State.UnlockZoom and 10000 or OriginalCamera.MaxZoom
-    if not State.AntiRagdoll then
-        local _, humanoid = getCharacter()
-        if humanoid then
-            pcall(function()
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-            end)
-        end
-    end
+    Extensions.SetAntiStunEnabled(State.AntiStun, true)
     Workspace.Gravity = State.GravityValue
     Camera = Workspace.CurrentCamera or Camera
     Camera.FieldOfView = State.CameraFov
@@ -3355,8 +4569,11 @@ function Extensions.ApplyConfig(config, silent)
             scanItems(false)
         end)
     end
+    if applySavedAimbot then
+        Extensions.SetAimbotEnabled(true, nil, true)
+    end
     if not silent then
-        notify("Đã áp dụng config V6.4.", Theme.Success)
+        notify("Đã áp dụng config V6.7.1.", Theme.Success)
     end
     return true
 end
@@ -3416,7 +4633,7 @@ function Extensions.DeleteConfig()
         end
     end)
     if success then
-        notify("Đã xoá config V6.4.", Theme.Success)
+        notify("Đã xoá config V6.7.1.", Theme.Success)
         return true
     end
     notify("Xoá config thất bại: " .. tostring(result), Theme.Danger)
@@ -3555,6 +4772,15 @@ State.ConfigControls.PlayerESPDistance = createInput(PlayerESPSection, "Tầm ES
         State.PlayerESP.MaxDistanceMeters = math.clamp(value, 1, 10000)
     end
 end)
+State.ConfigControls.PlayerESPLookDirection = createToggle(PlayerESPSection, "Tia hướng nhìn Player", State.PlayerESP.LookDirection, function(value)
+    State.PlayerESP.LookDirection = value
+end)
+State.ConfigControls.PlayerESPLookLength = createInput(PlayerESPSection, "Độ dài tia hướng nhìn (stud)", State.PlayerESP.LookLength, "1 - 500", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.PlayerESP.LookLength = math.clamp(value, 1, 500)
+    end
+end)
 
 end
 
@@ -3588,9 +4814,6 @@ end)
 State.ConfigControls.MobESPName = createToggle(MobESPSection, "Hiện tên", State.MobESP.Name, function(value)
     State.MobESP.Name = value
 end)
-State.ConfigControls.MobESPHealth = createToggle(MobESPSection, "Hiện HP", State.MobESP.Health, function(value)
-    State.MobESP.Health = value
-end)
 State.ConfigControls.MobESPDistanceToggle = createToggle(MobESPSection, "Hiện khoảng cách", State.MobESP.Distance, function(value)
     State.MobESP.Distance = value
 end)
@@ -3598,6 +4821,15 @@ State.ConfigControls.MobESPDistance = createInput(MobESPSection, "Tầm ESP tố
     local value = tonumber(text)
     if value then
         State.MobESP.MaxDistanceMeters = math.clamp(value, 1, 10000)
+    end
+end)
+State.ConfigControls.MobESPLookDirection = createToggle(MobESPSection, "Tia hướng nhìn Quái", State.MobESP.LookDirection, function(value)
+    State.MobESP.LookDirection = value
+end)
+State.ConfigControls.MobESPLookLength = createInput(MobESPSection, "Độ dài tia hướng nhìn (stud)", State.MobESP.LookLength, "1 - 500", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.MobESP.LookLength = math.clamp(value, 1, 500)
     end
 end)
 createButton(MobESPSection, "Quét lại toàn bộ quái", function()
@@ -3661,6 +4893,99 @@ end)
 State.ConfigControls.ItemESPDistanceToggle = createToggle(ItemESPSection, "Hiện khoảng cách", State.ItemESP.Distance, function(value)
     State.ItemESP.Distance = value
 end)
+
+end
+
+do
+local AimbotLockSection = createSection(AimbotPage, "Aimbot", "Khóa một mục tiêu gần tâm màn hình. Mục tiêu bị che sẽ bị loại khi Check Tường bật. Bỏ Aim chỉ nhả mục tiêu hiện tại; Aimbot tiếp tục chờ mục tiêu khác.")
+State.ConfigControls.AimbotEnabled = createToggle(AimbotLockSection, "Bật Aimbot", State.Aimbot.Enabled, function(value)
+    if State.Aimbot.Enabled ~= value then
+        Extensions.SetAimbotEnabled(value, nil, false)
+    end
+end)
+State.ConfigControls.AimbotMode = createSelector(AimbotLockSection, "Cách Aim", {"Silent Aim (Góc 3)", "Aim truyền thống (Góc 1)"}, State.Aimbot.Mode, function(value)
+    if State.Aimbot.Mode ~= value then
+        Extensions.ClearAimbotTarget(true)
+        State.Aimbot.ReleasedModel = nil
+        State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.Mode = value
+        if State.Aimbot.Enabled and value == "Aim truyền thống (Góc 1)" and State.SpectatingPlayer then
+            setSpectating(nil)
+        end
+        Extensions.UpdateAimbotStatus(State.Aimbot.Enabled and "Đang chờ mục tiêu trong FOV" or "Không có mục tiêu", State.Aimbot.Enabled and Theme.Warning or Theme.SubText)
+    end
+end)
+State.ConfigControls.AimbotTargetType = createSelector(AimbotLockSection, "Loại mục tiêu", {"Player", "NPC"}, State.Aimbot.TargetType, function(value)
+    if State.Aimbot.TargetType ~= value then
+        Extensions.ClearAimbotTarget(false)
+        State.Aimbot.ReleasedModel = nil
+        State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.TargetType = value
+        if State.Aimbot.Enabled and value == "NPC" and next(MobCache) == nil then
+            task.spawn(rescanMobs)
+        end
+    end
+end)
+State.ConfigControls.AimbotAimPart = createSelector(AimbotLockSection, "Điểm Aim", {"Đầu", "Thân"}, State.Aimbot.AimPart, function(value)
+    State.Aimbot.AimPart = value
+    if State.Aimbot.TargetModel then
+        local aimPart = Extensions.GetAimbotPart(State.Aimbot.TargetModel)
+        if aimPart then
+            State.Aimbot.TargetPart = aimPart
+        else
+            Extensions.ClearAimbotTarget(false)
+            Extensions.UpdateAimbotStatus("Mục tiêu thiếu bộ phận Aim; đang chờ mục tiêu khác", Theme.Warning)
+        end
+    end
+end)
+State.ConfigControls.AimbotWallCheck = createToggle(AimbotLockSection, "Check Tường", State.Aimbot.WallCheck, function(value)
+    State.Aimbot.WallCheck = value
+    if value and State.Aimbot.TargetModel and not Extensions.HasAimbotLineOfSight(State.Aimbot.TargetModel, State.Aimbot.TargetPart) then
+        Extensions.ClearAimbotTarget(false)
+        Extensions.UpdateAimbotStatus("Mục tiêu bị tường che; đang chờ mục tiêu nhìn thấy", Theme.Warning)
+    end
+end)
+State.Aimbot.StatusValue = createInfoRow(AimbotLockSection, "Mục tiêu", State.Aimbot.TargetLabel)
+
+end
+
+do
+local AimbotPrioritySection = createSection(AimbotPage, "Ưu tiên & Danh sách đen", "Aim Dính dùng username chính xác và chỉ ưu tiên khi Player ở trong FOV, còn sống, nhìn thấy được và không nằm trong danh sách đen. Danh sách đen có quyền ưu tiên tuyệt đối.")
+State.ConfigControls.AimbotStickyEnabled = createToggle(AimbotPrioritySection, "Bật Aim Dính", State.Aimbot.StickyEnabled, function(value)
+    State.Aimbot.StickyEnabled = value
+    State.Aimbot.LastStickyCheck = 0
+end)
+State.ConfigControls.AimbotStickyUsername = createInput(AimbotPrioritySection, "Username Aim Dính", State.Aimbot.StickyUsername, "Username chính xác, không phải DisplayName", false, function(text)
+    State.Aimbot.StickyUsername = string.gsub(text, "^%s*@?%s*(.-)%s*$", "%1")
+    State.Aimbot.StickyPlayer = nil
+    State.Aimbot.LastStickyCheck = 0
+end)
+State.ConfigControls.AimbotBlacklist = createInput(AimbotPrioritySection, "Blacklist username", State.Aimbot.BlacklistText, "Cách nhau bằng dấu phẩy hoặc chấm phẩy", false, function(text)
+    Extensions.ParseAimbotBlacklist(text)
+    if State.Aimbot.TargetPlayer and Extensions.IsAimbotPlayerBlacklisted(State.Aimbot.TargetPlayer) then
+        Extensions.ClearAimbotTarget(false)
+        Extensions.UpdateAimbotStatus("Mục tiêu thuộc blacklist; đang chờ mục tiêu khác", Theme.Warning)
+    end
+end)
+
+end
+
+do
+local AimbotControlSection = createSection(AimbotPage, "FOV & Bỏ Aim", "Vòng FOV lấy chính giữa viewport làm tâm. Nút ngoài menu có thể kéo; khi nhấn, mục tiêu hiện tại bị loại và Aimbot vẫn hoạt động.")
+State.ConfigControls.AimbotFOVRadius = createInput(AimbotControlSection, "Bán kính FOV (pixel)", State.Aimbot.FOVRadius, "30 - 1000", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.Aimbot.FOVRadius = math.floor(math.clamp(value, 30, 1000))
+    end
+end)
+State.ConfigControls.AimbotReleaseVisible = createToggle(AimbotControlSection, "Hiện nút Bỏ Aim ngoài menu", State.Aimbot.ReleaseButtonVisible, function(value)
+    if State.Aimbot.ReleaseButtonVisible ~= value then
+        Extensions.SetAimbotReleaseButtonVisible(value, false)
+    end
+end)
+createButton(AimbotControlSection, "Bỏ Aim hiện tại", function()
+    Extensions.ReleaseAimbotTarget(false)
+end, Theme.Danger)
 
 end
 
@@ -3767,6 +5092,22 @@ State.ConfigControls.UnlockZoom = createToggle(CameraSection, "Mở khoá zoom x
     else
         LocalPlayer.CameraMinZoomDistance = OriginalCamera.MinZoom
         LocalPlayer.CameraMaxZoomDistance = OriginalCamera.MaxZoom
+    end
+end)
+
+end
+
+do
+local ScreenBlankSection = createSection(VisionPage, "Screen White / Black", "Phủ kín màn hình và tạm dừng dựng cảnh 3D để giảm tải GPU, nhiệt độ và mức tiêu hao pin khi treo game. Chạm bất kỳ vị trí nào trên lớp phủ để tắt.")
+State.ConfigControls.ScreenBlankColor = createSelector(ScreenBlankSection, "Màu màn hình", {"Đen", "Trắng"}, State.ScreenBlankColor, function(value)
+    State.ScreenBlankColor = value
+    if State.ScreenBlankEnabled then
+        Extensions.SetScreenBlank(true, true)
+    end
+end)
+State.ConfigControls.ScreenBlankEnabled = createToggle(ScreenBlankSection, "Bật Screen White / Black", State.ScreenBlankEnabled, function(value)
+    if State.ScreenBlankEnabled ~= value then
+        Extensions.SetScreenBlank(value, false)
     end
 end)
 
@@ -4065,21 +5406,16 @@ end
 
 
 do
-local UtilitySection = createSection(MiscPage, "Tiện ích", "Các chức năng nền được dừng và khôi phục khi đóng Raphael.")
+local UtilitySection = createSection(MiscPage, "Tiện ích", "Anti Stun khôi phục quyền điều khiển, tốc độ và vận tốc; FPS Boost nâng cao tối giản hiệu ứng nhưng vẫn có thể khôi phục khi tắt Raphael.")
 State.ConfigControls.AntiAFK = createToggle(UtilitySection, "Anti AFK", false, function(value)
     State.AntiAFK = value
 end)
-State.ConfigControls.AntiRagdoll = createToggle(UtilitySection, "Anti Ragdoll", false, function(value)
-    State.AntiRagdoll = value
-    local _, humanoid = getCharacter()
-    if humanoid and not value then
-        pcall(function()
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-        end)
+State.ConfigControls.AntiStun = createToggle(UtilitySection, "Anti Stun toàn diện", false, function(value)
+    if State.AntiStun ~= value then
+        Extensions.SetAntiStunEnabled(value, false)
     end
 end)
-State.ConfigControls.FPSBoost = createToggle(UtilitySection, "FPS Boost", false, setFPSBoost)
+State.ConfigControls.FPSBoost = createToggle(UtilitySection, "FPS Boost nâng cao", false, setFPSBoost)
 State.ConfigControls.ESPRefreshMode = createSelector(UtilitySection, "Nhịp cập nhật ESP", {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode, function(value)
     State.ESPRefreshMode = value
 end)
@@ -4327,6 +5663,9 @@ connect(Players.PlayerAdded, function()
     task.defer(rebuildPlayerList)
 end)
 connect(Players.PlayerRemoving, function(player)
+    if State.Aimbot.TargetPlayer == player then
+        Extensions.SetAimbotEnabled(false, "Player đang Aim đã rời server; Aimbot đã dừng.", false)
+    end
     if State.SpectatingPlayer == player then
         setSpectating(nil)
         notify("Player đang theo dõi đã rời server.", Theme.Warning)
@@ -4353,6 +5692,7 @@ task.spawn(function()
 end)
 
 connect(UserInputService.JumpRequest, function()
+    State.LastJumpRequest = os.clock()
     local _, humanoid, root = getCharacter()
     if not humanoid or not root then
         return
@@ -4409,7 +5749,7 @@ local LastXRayUpdate = 0
 local LastESPUpdate = 0
 
 connect(RunService.Stepped, function()
-    if not State.Running or not State.Noclip and not State.AntiRagdoll then
+    if not State.Running or not State.Noclip and not State.AntiStun then
         return
     end
     local character, humanoid, root = getCharacter()
@@ -4441,26 +5781,8 @@ connect(RunService.Stepped, function()
         end
     end
 
-    if State.AntiRagdoll then
-        local currentState = humanoid:GetState()
-        if currentState == Enum.HumanoidStateType.FallingDown or currentState == Enum.HumanoidStateType.Ragdoll then
-            pcall(function()
-                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-            end)
-        end
-        local now = os.clock()
-        if now - State.LastRagdollMaintain >= 0.25 then
-            State.LastRagdollMaintain = now
-            pcall(function()
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            end)
-            for _, descendant in ipairs(character:GetDescendants()) do
-                if descendant:IsA("Motor6D") and not descendant.Enabled then
-                    descendant.Enabled = true
-                end
-            end
-        end
+    if State.AntiStun then
+        Extensions.MaintainAntiStun(character, humanoid, root)
     end
 end)
 
@@ -4507,6 +5829,9 @@ connect(RunService.Heartbeat, function(deltaTime)
 
     if Workspace.Gravity ~= State.GravityValue then
         Workspace.Gravity = State.GravityValue
+    end
+    if State.AntiStun then
+        Extensions.MaintainAntiStun(character, humanoid, root)
     end
     Camera = Workspace.CurrentCamera or Camera
     if Camera.FieldOfView ~= State.CameraFov then
@@ -4576,7 +5901,7 @@ connect(RunService.Heartbeat, function(deltaTime)
 
     if now - LastMobRescan >= 120 then
         LastMobRescan = now
-        if State.MobESP.Enabled or State.XRay then
+        if State.MobESP.Enabled or State.XRay or (State.Aimbot.Enabled and State.Aimbot.TargetType == "NPC") then
             task.spawn(rescanMobs)
         end
     end
@@ -4598,6 +5923,9 @@ connect(RunService.RenderStepped, function()
 
     if not State.Running then
         return
+    end
+    if State.Aimbot.Enabled and not State.Aimbot.RenderBound then
+        Extensions.UpdateAimbotFrame(now)
     end
     if not State.PlayerESP.Enabled and not State.MobESP.Enabled and not State.ItemESP.Enabled and not State.XRay then
         return
@@ -4691,19 +6019,8 @@ connect(RunService.RenderStepped, function()
             local candidate = mobCandidates[index]
             local model = candidate.Model
             local classification = candidate.Data
-            local healthText
-            if State.MobESP.Enabled and State.MobESP.Health then
-                healthText = getHealthText(classification.Humanoid)
-                if not healthText then
-                    local health = model:GetAttribute("Health") or model:GetAttribute("HP")
-                    local maximum = model:GetAttribute("MaxHealth") or model:GetAttribute("MaxHP")
-                    if type(health) == "number" then
-                        healthText = type(maximum) == "number" and string.format("HP %d/%d", health, maximum) or string.format("HP %d", health)
-                    end
-                end
-            end
             seen[model] = true
-            updateVisual("Mob", model, model, candidate.Root, classification.DisplayName, healthText, math.sqrt(candidate.DistanceSquared))
+            updateVisual("Mob", model, model, candidate.Root, classification.DisplayName, nil, math.sqrt(candidate.DistanceSquared))
         end
 
         for model, visual in pairs(Visuals.Mob) do
@@ -4745,6 +6062,7 @@ TabButtons.Movement.Button.TextColor3 = Theme.Text
 TabButtons.Movement.Icon.ImageColor3 = Theme.Text
 TabButtons.Movement.Gradient.Enabled = true
 TabButtons.Movement.Accent.BackgroundTransparency = 0.16
+Extensions.RepairInterfaceGeometry()
 
 cleanup = function()
     if not State.Running then
@@ -4752,11 +6070,21 @@ cleanup = function()
     end
     State.Running = false
     State.TouchTeleportArmed = false
+    State.ScreenBlankEnabled = false
+    pcall(function()
+        RunService:Set3dRenderingEnabled(true)
+    end)
     cancelActiveTravel()
+    Extensions.SetAimbotEnabled(false, nil, true)
+    Extensions.SetAimbotReleaseButtonVisible(false, true)
+    Extensions.DestroyAimbotFOV()
 
     restoreCollisions()
     restoreXRayOccluders()
     removeAllVisuals()
+    if State.FPSBoostApplied then
+        setFPSBoost(false, true)
+    end
     restoreEffects()
     restoreLightingVisuals()
     Lighting.ClockTime = OriginalLighting.ClockTime
@@ -4770,11 +6098,8 @@ cleanup = function()
     State.SpectatingPlayer = nil
     Camera.CameraType = OriginalCamera.Type
     Camera.CameraSubject = humanoid or OriginalCamera.Subject
+    State.AntiStun = false
     restoreHumanoid(humanoid)
-
-    if State.FPSBoostApplied then
-        setFPSBoost(false, true)
-    end
 
     for _, connection in ipairs(Connections) do
         pcall(function()
@@ -4805,12 +6130,12 @@ task.spawn(function()
     end)
 end)
 
-notify("Raphael Sovereign V6.4 Optimized đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
+notify("Raphael Sovereign V6.7.1 UI ClipFix đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
 
 task.defer(function()
     local config = Extensions.ReadConfig(true)
     if config and config.AutoLoad == true and State.Running then
         Extensions.ApplyConfig(config, true)
-        notify("Đã tự áp dụng config V6.4.", Theme.Success)
+        notify("Đã tự áp dụng config V6.7.1.", Theme.Success)
     end
 end)
