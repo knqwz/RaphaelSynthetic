@@ -35,9 +35,9 @@ local Theme = {
     Success = Color3.fromRGB(87, 224, 137),
     Warning = Color3.fromRGB(255, 190, 66),
     Danger = Color3.fromRGB(255, 88, 112),
-    Player = Color3.fromRGB(50, 255, 115),
-    Mob = Color3.fromRGB(255, 65, 75),
-    Item = Color3.fromRGB(190, 75, 255)
+    Player = Color3.fromRGB(70, 255, 135),
+    Mob = Color3.fromRGB(255, 72, 84),
+    Item = Color3.fromRGB(205, 92, 255)
 }
 
 local UI = {
@@ -330,12 +330,15 @@ local State = {
     InfiniteJump = false,
     Noclip = false,
     NoclipMethod = "Toàn thân",
-    GravityValue = Workspace.Gravity,
+    GravityValue = math.floor(Workspace.Gravity * 10 + 0.5) / 10,
     FlyLoaded = false,
     FlyHidden = false,
     ClockTime = nil,
     RemoveEffects = false,
     FullBrightLevel = nil,
+    VisionDeepScanRunning = false,
+    LastVisionDeepScan = 0,
+    VisionObstructionHints = {"fog", "blur", "haze", "smoke", "dark", "darkness", "vignette", "blind", "blindness", "flash", "weather", "storm", "cloud", "mist", "overlay", "screenfx", "visualeffect", "posteffect", "damageeffect"},
     XRay = false,
     XRayMethod = "Hybrid",
     XRayWallTransparency = 0.72,
@@ -373,6 +376,7 @@ local State = {
     ScreenBlankFrame = nil,
     ItemScanRunning = false,
     MobScanRunning = false,
+    MobHumanoidConnections = setmetatable({}, {__mode = "k"}),
     ExecutorText = nil,
     ESPRefreshMode = "Adaptive",
     LastAntiStunMaintain = 0,
@@ -417,6 +421,7 @@ local State = {
     PlayerESP = {
         Enabled = false,
         Tracer = true,
+        TracerOrigin = "Giữa",
         Box = true,
         BoxMode = "2D",
         Name = true,
@@ -430,6 +435,7 @@ local State = {
     MobESP = {
         Enabled = false,
         Tracer = false,
+        TracerOrigin = "Dưới",
         Box = true,
         BoxMode = "Skin",
         Name = true,
@@ -443,6 +449,7 @@ local State = {
     ItemESP = {
         Enabled = false,
         Tracer = false,
+        TracerOrigin = "Dưới",
         Box = true,
         BoxMode = "Skin",
         Name = true,
@@ -476,6 +483,10 @@ local OriginalLighting = {
     OutdoorAmbient = Lighting.OutdoorAmbient,
     FogStart = Lighting.FogStart,
     FogEnd = Lighting.FogEnd,
+    FogColor = Lighting.FogColor,
+    ColorShiftTop = Lighting.ColorShift_Top,
+    ColorShiftBottom = Lighting.ColorShift_Bottom,
+    ShadowSoftness = Lighting.ShadowSoftness,
     GlobalShadows = Lighting.GlobalShadows,
     ExposureCompensation = Lighting.ExposureCompensation,
     EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
@@ -514,6 +525,19 @@ local function clampNumber(value, minimum, maximum, fallback)
         return fallback
     end
     return math.clamp(number, minimum, maximum)
+end
+
+function Extensions.RoundMovementNumber(value)
+    local number = tonumber(value) or 0
+    return math.floor(number * 10 + 0.5) / 10
+end
+
+function Extensions.FormatMovementNumber(value)
+    local rounded = Extensions.RoundMovementNumber(value)
+    if rounded == math.floor(rounded) then
+        return tostring(math.floor(rounded))
+    end
+    return string.format("%.1f", rounded)
 end
 
 local function formatDuration(totalSeconds)
@@ -591,13 +615,13 @@ do
     local _, initialHumanoid = getCharacter()
     if initialHumanoid then
         rememberHumanoid(initialHumanoid)
-        State.SpeedValue = initialHumanoid.WalkSpeed
+        State.SpeedValue = Extensions.RoundMovementNumber(initialHumanoid.WalkSpeed)
         if initialHumanoid.UseJumpPower then
             State.JumpMethod = "JumpPower"
-            State.JumpValue = initialHumanoid.JumpPower
+            State.JumpValue = Extensions.RoundMovementNumber(initialHumanoid.JumpPower)
         else
             State.JumpMethod = "JumpHeight"
-            State.JumpValue = initialHumanoid.JumpHeight
+            State.JumpValue = Extensions.RoundMovementNumber(initialHumanoid.JumpHeight)
         end
     end
 end
@@ -761,7 +785,7 @@ local GuiParent = resolveGuiParent()
 
 for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
     pcall(function()
-        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden", "Raphael_Sovereign_V6_3_SmartMob", "Raphael_Sovereign_V6_4_ManualMob", "Raphael_Sovereign_V6_4_1_Stable", "Raphael_Sovereign_V6_4_2_RegisterFix", "Raphael_Sovereign_V6_4_Final", "Raphael_Sovereign_V6_4_Enhanced", "Raphael_Sovereign_V6_4_Enhanced_2", "Raphael_Sovereign_V6_4_Enhanced_3", "Raphael_Sovereign_V6_4_Enhanced_4", "Raphael_Sovereign_V6_4_Enhanced_5", "Raphael_Sovereign_V6_4_FinalSkin", "Raphael_Sovereign_V6_4_Optimized", "Raphael_Sovereign_V6_5_Aimbot", "Raphael_Sovereign_V6_5_1_HealthFix", "Raphael_Sovereign_V6_6_AimbotRefined", "Raphael_Sovereign_V6_7_MobilityVisual", "Raphael_Sovereign_V6_7_1_UIClipFix"}) do
+        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden", "Raphael_Sovereign_V6_3_SmartMob", "Raphael_Sovereign_V6_4_ManualMob", "Raphael_Sovereign_V6_4_1_Stable", "Raphael_Sovereign_V6_4_2_RegisterFix", "Raphael_Sovereign_V6_4_Final", "Raphael_Sovereign_V6_4_Enhanced", "Raphael_Sovereign_V6_4_Enhanced_2", "Raphael_Sovereign_V6_4_Enhanced_3", "Raphael_Sovereign_V6_4_Enhanced_4", "Raphael_Sovereign_V6_4_Enhanced_5", "Raphael_Sovereign_V6_4_FinalSkin", "Raphael_Sovereign_V6_4_Optimized", "Raphael_Sovereign_V6_5_Aimbot", "Raphael_Sovereign_V6_5_1_HealthFix", "Raphael_Sovereign_V6_6_AimbotRefined", "Raphael_Sovereign_V6_7_MobilityVisual", "Raphael_Sovereign_V6_8_Ultimate"}) do
             local staleInterface = guiRoot:FindFirstChild(interfaceName)
             if staleInterface then
                 staleInterface:Destroy()
@@ -771,7 +795,7 @@ for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
 end
 
 ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "Raphael_Sovereign_V6_7_1_UIClipFix"
+ScreenGui.Name = "Raphael_Sovereign_V6_8_Ultimate"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -2029,6 +2053,22 @@ local function deleteFlyGui()
     notify(removed > 0 and "Đã xoá giao diện Fly." or "Không có giao diện Fly để xoá.", removed > 0 and Theme.Success or Theme.Warning)
 end
 
+function Extensions.HasVisionObstructionHint(instance)
+    local current = instance
+    local depth = 0
+    while current and depth < 5 do
+        local lowerName = string.lower(current.Name)
+        for _, hint in ipairs(State.VisionObstructionHints) do
+            if string.find(lowerName, hint, 1, true) then
+                return true
+            end
+        end
+        current = current.Parent
+        depth = depth + 1
+    end
+    return false
+end
+
 local function captureEffect(instance)
     if EffectBackup[instance] then
         return
@@ -2045,10 +2085,34 @@ local function captureEffect(instance)
             Color = instance.Color,
             Decay = instance.Decay
         }
+    elseif instance:IsA("Clouds") then
+        EffectBackup[instance] = {
+            Type = "Clouds",
+            Cover = instance.Cover,
+            Density = instance.Density,
+            Color = instance.Color
+        }
+    elseif instance:IsA("ParticleEmitter") or instance:IsA("Beam") or instance:IsA("Trail") or instance:IsA("Smoke") then
+        EffectBackup[instance] = {Type = "EnabledEffect", Enabled = instance.Enabled}
+    elseif instance:IsA("LayerCollector") then
+        EffectBackup[instance] = {Type = "LayerCollector", Enabled = instance.Enabled}
+    elseif instance:IsA("GuiObject") then
+        EffectBackup[instance] = {Type = "GuiObject", Visible = instance.Visible}
     end
 end
 
 local function suppressEffect(instance)
+    if not instance or instance:GetAttribute("RaphaelOwned") then
+        return
+    end
+    local alwaysSuppress = instance:IsA("PostEffect") or instance:IsA("Atmosphere") or instance:IsA("Clouds")
+    local cameraEffect = Camera and instance:IsDescendantOf(Camera) and (instance:IsA("ParticleEmitter") or instance:IsA("Beam") or instance:IsA("Trail") or instance:IsA("Smoke"))
+    local hinted = Extensions.HasVisionObstructionHint(instance)
+    local worldEffect = hinted and (instance:IsA("ParticleEmitter") or instance:IsA("Beam") or instance:IsA("Trail") or instance:IsA("Smoke"))
+    local guiEffect = hinted and (instance:IsA("LayerCollector") or instance:IsA("GuiObject")) and not instance:IsDescendantOf(ScreenGui)
+    if not alwaysSuppress and not cameraEffect and not worldEffect and not guiEffect then
+        return
+    end
     captureEffect(instance)
     pcall(function()
         if instance:IsA("PostEffect") then
@@ -2058,19 +2122,78 @@ local function suppressEffect(instance)
             instance.Haze = 0
             instance.Glare = 0
             instance.Offset = 0
+            instance.Color = Color3.fromRGB(255, 255, 255)
+            instance.Decay = Color3.fromRGB(255, 255, 255)
+        elseif instance:IsA("Clouds") then
+            instance.Cover = 0
+            instance.Density = 0
+        elseif instance:IsA("ParticleEmitter") or instance:IsA("Beam") or instance:IsA("Trail") or instance:IsA("Smoke") then
+            instance.Enabled = false
+        elseif instance:IsA("LayerCollector") then
+            instance.Enabled = false
+        elseif instance:IsA("GuiObject") then
+            instance.Visible = false
         end
     end)
+end
+
+function Extensions.DeepSuppressVision()
+    if State.VisionDeepScanRunning or not State.RemoveEffects then
+        return
+    end
+    State.VisionDeepScanRunning = true
+    State.LastVisionDeepScan = os.clock()
+    local workspaceDescendants = Workspace:GetDescendants()
+    for index, instance in ipairs(workspaceDescendants) do
+        if not State.RemoveEffects then
+            break
+        end
+        suppressEffect(instance)
+        if index % 1200 == 0 then
+            task.wait()
+        end
+    end
+    local guiDescendants = PlayerGui:GetDescendants()
+    for index, instance in ipairs(guiDescendants) do
+        if not State.RemoveEffects then
+            break
+        end
+        suppressEffect(instance)
+        if index % 600 == 0 then
+            task.wait()
+        end
+    end
+    if State.RemoveEffects then
+        Camera = Workspace.CurrentCamera or Camera
+        for _, instance in ipairs(Camera:GetDescendants()) do
+            suppressEffect(instance)
+        end
+    end
+    State.VisionDeepScanRunning = false
 end
 
 local function applyNoEffects()
     Lighting.FogStart = 1000000
     Lighting.FogEnd = 1000000
+    Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+    Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
+    Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
+    Lighting.ShadowSoftness = 0
     for _, instance in ipairs(Lighting:GetDescendants()) do
         suppressEffect(instance)
     end
     Camera = Workspace.CurrentCamera or Camera
     for _, instance in ipairs(Camera:GetDescendants()) do
         suppressEffect(instance)
+    end
+    for instance in pairs(EffectBackup) do
+        if instance and instance.Parent then
+            suppressEffect(instance)
+        end
+    end
+    local now = os.clock()
+    if not State.VisionDeepScanRunning and (State.LastVisionDeepScan == 0 or now - State.LastVisionDeepScan >= 12) then
+        task.spawn(Extensions.DeepSuppressVision)
     end
 end
 
@@ -2087,12 +2210,27 @@ local function restoreEffects()
                     instance.Offset = values.Offset
                     instance.Color = values.Color
                     instance.Decay = values.Decay
+                elseif values.Type == "Clouds" then
+                    instance.Cover = values.Cover
+                    instance.Density = values.Density
+                    instance.Color = values.Color
+                elseif values.Type == "EnabledEffect" then
+                    instance.Enabled = values.Enabled
+                elseif values.Type == "LayerCollector" then
+                    instance.Enabled = values.Enabled
+                elseif values.Type == "GuiObject" then
+                    instance.Visible = values.Visible
                 end
             end)
+            if State.FPSBoostApplied then
+                Extensions.ApplyFPSOptimization(instance)
+            end
         end
     end
+    table.clear(EffectBackup)
     Lighting.FogStart = OriginalLighting.FogStart
     Lighting.FogEnd = OriginalLighting.FogEnd
+    Lighting.FogColor = OriginalLighting.FogColor
 end
 
 local function applyFullBright()
@@ -2102,6 +2240,9 @@ local function applyFullBright()
     Lighting.Brightness = State.FullBrightLevel
     Lighting.Ambient = Color3.fromRGB(255, 255, 255)
     Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+    Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
+    Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
+    Lighting.ShadowSoftness = 0
     Lighting.GlobalShadows = false
     Lighting.ExposureCompensation = math.clamp(State.FullBrightLevel * 0.2, 0, 5)
     Lighting.EnvironmentDiffuseScale = 1
@@ -2112,6 +2253,9 @@ local function restoreLightingVisuals()
     Lighting.Brightness = OriginalLighting.Brightness
     Lighting.Ambient = OriginalLighting.Ambient
     Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+    Lighting.ColorShift_Top = OriginalLighting.ColorShiftTop
+    Lighting.ColorShift_Bottom = OriginalLighting.ColorShiftBottom
+    Lighting.ShadowSoftness = OriginalLighting.ShadowSoftness
     Lighting.GlobalShadows = OriginalLighting.GlobalShadows
     Lighting.ExposureCompensation = OriginalLighting.ExposureCompensation
     Lighting.EnvironmentDiffuseScale = OriginalLighting.EnvironmentDiffuseScale
@@ -2139,7 +2283,9 @@ function Extensions.ApplyFPSOptimization(instance)
     local basePart = instance:IsA("BasePart")
     local surfaceImage = instance:IsA("Decal") or instance:IsA("Texture")
     local meshPart = instance:IsA("MeshPart")
-    if not toggled and not atmosphere and not basePart and not surfaceImage and not meshPart then
+    local specialMesh = instance:IsA("SpecialMesh")
+    local surfaceAppearance = instance:IsA("SurfaceAppearance")
+    if not toggled and not atmosphere and not basePart and not surfaceImage and not meshPart and not specialMesh and not surfaceAppearance then
         return
     end
     local backup = FPSBackup[instance]
@@ -2175,11 +2321,19 @@ function Extensions.ApplyFPSOptimization(instance)
             backup.CastShadow = instance.CastShadow
             backup.Material = instance.Material
             backup.Reflectance = instance.Reflectance
+            backup.Color = instance.Color
+            backup.MaterialVariant = instance.MaterialVariant
+            backup.TopSurface = instance.TopSurface
+            backup.BottomSurface = instance.BottomSurface
         end
         pcall(function()
             instance.CastShadow = false
             instance.Material = Enum.Material.SmoothPlastic
+            instance.MaterialVariant = ""
             instance.Reflectance = 0
+            instance.Color = Color3.fromRGB(128, 128, 128)
+            instance.TopSurface = Enum.SurfaceType.Smooth
+            instance.BottomSurface = Enum.SurfaceType.Smooth
         end)
     end
 
@@ -2197,11 +2351,39 @@ function Extensions.ApplyFPSOptimization(instance)
             pcall(function()
                 backup.RenderFidelity = instance.RenderFidelity
                 backup.TextureID = instance.TextureID
+                backup.DoubleSided = instance.DoubleSided
             end)
         end
         pcall(function()
             instance.RenderFidelity = Enum.RenderFidelity.Performance
             instance.TextureID = ""
+            instance.DoubleSided = false
+        end)
+    end
+
+    if specialMesh then
+        if backup.TextureId == nil then
+            backup.TextureId = instance.TextureId
+            backup.VertexColor = instance.VertexColor
+        end
+        pcall(function()
+            instance.TextureId = ""
+            instance.VertexColor = Vector3.new(0.5, 0.5, 0.5)
+        end)
+    end
+
+    if surfaceAppearance then
+        if backup.ColorMap == nil then
+            backup.ColorMap = instance.ColorMap
+            backup.MetalnessMap = instance.MetalnessMap
+            backup.NormalMap = instance.NormalMap
+            backup.RoughnessMap = instance.RoughnessMap
+        end
+        pcall(function()
+            instance.ColorMap = ""
+            instance.MetalnessMap = ""
+            instance.NormalMap = ""
+            instance.RoughnessMap = ""
         end)
     end
 end
@@ -2223,6 +2405,15 @@ connect(Lighting.DescendantAdded, function(instance)
     if State.FPSBoostApplied then
         Extensions.ApplyFPSOptimization(instance)
     end
+    if State.RemoveEffects then
+        task.defer(function()
+            if instance.Parent then
+                suppressEffect(instance)
+            end
+        end)
+    end
+end)
+connect(PlayerGui.DescendantAdded, function(instance)
     if State.RemoveEffects then
         task.defer(function()
             if instance.Parent then
@@ -2274,99 +2465,171 @@ local function getCategoryConfig(category)
     return State.ItemESP
 end
 
+function Extensions.GetMobVisualAnchor(model, fallbackRoot)
+    if model and model.Parent then
+        local head = model:FindFirstChild("Head")
+        if head and head:IsA("BasePart") then
+            return head
+        end
+        local upperTorso = model:FindFirstChild("UpperTorso")
+        if upperTorso and upperTorso:IsA("BasePart") then
+            return upperTorso
+        end
+        local torso = model:FindFirstChild("Torso")
+        if torso and torso:IsA("BasePart") then
+            return torso
+        end
+    end
+    if fallbackRoot and fallbackRoot.Parent and fallbackRoot:IsA("BasePart") then
+        return fallbackRoot
+    end
+    if model and model.Parent then
+        local humanoidRoot = model:FindFirstChild("HumanoidRootPart")
+        if humanoidRoot and humanoidRoot:IsA("BasePart") then
+            return humanoidRoot
+        end
+    end
+    return nil
+end
+
+function Extensions.GetMobWorldPosition(model, visualAnchor)
+    local anchorPosition = visualAnchor and visualAnchor.Position or nil
+    if model and model.Parent then
+        local success, pivotCFrame = pcall(model.GetPivot, model)
+        if success and pivotCFrame then
+            local pivotPosition = pivotCFrame.Position
+            if not anchorPosition or (pivotPosition - anchorPosition).Magnitude <= 100 then
+                return pivotPosition
+            end
+        end
+    end
+    return anchorPosition
+end
+
 local function createVisual(category, key)
     local config = getCategoryConfig(category)
     local visual = {
         Key = key,
-        Category = category
+        Category = category,
+        Active = false,
+        InfoEnabled = false
     }
 
     if DrawingSupported then
         visual.Box = newDrawing("Square")
         visual.Tracer = newDrawing("Line")
         visual.LookLine = newDrawing("Line")
-        visual.Name = newDrawing("Text")
-        visual.Health = newDrawing("Text")
-        visual.Distance = newDrawing("Text")
 
         if visual.Box then
-            visual.Box.Color = config.Color
-            visual.Box.Thickness = 1.5
+            visual.Box.Color = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.18)
+            visual.Box.Thickness = 1.2
             visual.Box.Filled = false
             visual.Box.Transparency = 1
+            visual.Box.Visible = false
         end
         if visual.Tracer then
-            visual.Tracer.Color = config.Color
-            visual.Tracer.Thickness = 1.2
-            visual.Tracer.Transparency = 0.9
+            visual.Tracer.Color = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.08)
+            visual.Tracer.Thickness = 1.5
+            visual.Tracer.Transparency = 0.95
+            visual.Tracer.Visible = false
         end
         if visual.LookLine then
             visual.LookLine.Color = config.Color
             visual.LookLine.Thickness = 2
             visual.LookLine.Transparency = 1
-        end
-        for _, textObject in ipairs({visual.Name, visual.Health, visual.Distance}) do
-            if textObject then
-                textObject.Center = true
-                textObject.Outline = true
-                textObject.OutlineColor = Color3.fromRGB(0, 0, 0)
-                textObject.Font = 2
-                textObject.Size = 13
-                textObject.Color = config.Color
-                textObject.Transparency = 1
-            end
+            visual.LookLine.Visible = false
         end
     end
 
     visual.Highlight = Instance.new("Highlight")
     visual.Highlight.Name = "Raphael_" .. category
+    visual.Highlight:SetAttribute("RaphaelOwned", true)
     visual.Highlight.FillColor = config.Color
-    visual.Highlight.OutlineColor = config.Color
+    visual.Highlight.OutlineColor = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.12)
     visual.Highlight.FillTransparency = 1
     visual.Highlight.OutlineTransparency = 0
     visual.Highlight.Enabled = false
     visual.Highlight.Parent = Workspace
 
-    if not DrawingSupported then
-        visual.Billboard = Instance.new("BillboardGui")
-        visual.Billboard.Name = "Raphael_Label_" .. category
-        visual.Billboard.Size = UDim2.fromOffset(210, 72)
-        visual.Billboard.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
-        visual.Billboard.AlwaysOnTop = true
-        visual.Billboard.Enabled = false
-        visual.Billboard.Parent = ScreenGui
+    visual.InfoBillboard = Instance.new("BillboardGui")
+    visual.InfoBillboard.Name = "Raphael_Info_" .. category
+    visual.InfoBillboard:SetAttribute("RaphaelOwned", true)
+    visual.InfoBillboard.Size = UDim2.fromOffset(230, 58)
+    visual.InfoBillboard.StudsOffsetWorldSpace = category == "Item" and Vector3.new(0, 2.1, 0) or Vector3.new(0, 3.2, 0)
+    visual.InfoBillboard.AlwaysOnTop = true
+    visual.InfoBillboard.Enabled = false
+    visual.InfoBillboard.Parent = ScreenGui
 
-        visual.BillboardText = Instance.new("TextLabel")
-        visual.BillboardText.Size = UDim2.fromScale(1, 1)
-        visual.BillboardText.BackgroundTransparency = 1
-        visual.BillboardText.TextColor3 = config.Color
-        visual.BillboardText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        visual.BillboardText.TextStrokeTransparency = 0
-        visual.BillboardText.Font = Enum.Font.GothamBold
-        visual.BillboardText.TextSize = 13
-        visual.BillboardText.TextWrapped = true
-        visual.BillboardText.Parent = visual.Billboard
-    end
+    visual.InfoName = Instance.new("TextLabel")
+    visual.InfoName.Name = "Name"
+    visual.InfoName.BackgroundTransparency = 1
+    visual.InfoName.TextColor3 = Color3.fromRGB(255, 250, 240)
+    visual.InfoName.TextStrokeColor3 = config.Color
+    visual.InfoName.TextStrokeTransparency = 0
+    visual.InfoName.Font = Enum.Font.GothamBold
+    visual.InfoName.TextSize = 14
+    visual.InfoName.TextScaled = true
+    visual.InfoName.Text = ""
+    visual.InfoName.Visible = false
+    visual.InfoName.Parent = visual.InfoBillboard
+
+    visual.InfoHealth = Instance.new("TextLabel")
+    visual.InfoHealth.Name = "Health"
+    visual.InfoHealth.BackgroundTransparency = 1
+    visual.InfoHealth.TextColor3 = Color3.fromRGB(235, 255, 235)
+    visual.InfoHealth.TextStrokeColor3 = config.Color
+    visual.InfoHealth.TextStrokeTransparency = 0
+    visual.InfoHealth.Font = Enum.Font.GothamBold
+    visual.InfoHealth.TextSize = 13
+    visual.InfoHealth.TextScaled = true
+    visual.InfoHealth.Text = ""
+    visual.InfoHealth.Visible = false
+    visual.InfoHealth.Parent = visual.InfoBillboard
+
+    visual.InfoDistance = Instance.new("TextLabel")
+    visual.InfoDistance.Name = "Distance"
+    visual.InfoDistance.BackgroundTransparency = 1
+    visual.InfoDistance.TextColor3 = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.58)
+    visual.InfoDistance.TextStrokeColor3 = config.Color
+    visual.InfoDistance.TextStrokeTransparency = 0
+    visual.InfoDistance.Font = Enum.Font.Gotham
+    visual.InfoDistance.TextSize = 13
+    visual.InfoDistance.TextScaled = true
+    visual.InfoDistance.Text = ""
+    visual.InfoDistance.Visible = false
+    visual.InfoDistance.Parent = visual.InfoBillboard
 
     Visuals[category][key] = visual
     return visual
 end
-
 local function hideVisual(visual)
     setDrawingVisible(visual.Box, false)
     setDrawingVisible(visual.Tracer, false)
     setDrawingVisible(visual.LookLine, false)
-    setDrawingVisible(visual.Name, false)
-    setDrawingVisible(visual.Health, false)
-    setDrawingVisible(visual.Distance, false)
     if visual.Highlight then
         visual.Highlight.Enabled = false
     end
-    if visual.Billboard then
-        visual.Billboard.Enabled = false
+    if visual.InfoBillboard then
+        visual.InfoBillboard.Enabled = false
     end
     if visual.LookBeam then
         visual.LookBeam.Enabled = false
+    end
+end
+function Extensions.CullMobVisuals()
+    Camera = Workspace.CurrentCamera or Camera
+    for model, visual in pairs(Visuals.Mob) do
+        local classification = MobCache[model]
+        local detectorRoot = classification and classification.Root
+        local visualAnchor = Extensions.GetMobVisualAnchor(model, detectorRoot)
+        if not model or not model.Parent or not visualAnchor or not visualAnchor.Parent then
+            hideVisual(visual)
+        else
+            local point, onScreen = Camera:WorldToViewportPoint(visualAnchor.Position)
+            if not onScreen or point.Z <= 0 then
+                hideVisual(visual)
+            end
+        end
     end
 end
 
@@ -2377,14 +2640,11 @@ local function destroyVisual(visual)
     destroyDrawing(visual.Box)
     destroyDrawing(visual.Tracer)
     destroyDrawing(visual.LookLine)
-    destroyDrawing(visual.Name)
-    destroyDrawing(visual.Health)
-    destroyDrawing(visual.Distance)
     if visual.Highlight then
         visual.Highlight:Destroy()
     end
-    if visual.Billboard then
-        visual.Billboard:Destroy()
+    if visual.InfoBillboard then
+        visual.InfoBillboard:Destroy()
     end
     if visual.LookBeam then
         visual.LookBeam:Destroy()
@@ -2396,7 +2656,6 @@ local function destroyVisual(visual)
         visual.LookEnd:Destroy()
     end
 end
-
 removeAllVisuals = function(category)
     local categories = category and {category} or {"Player", "Mob", "Item"}
     for _, categoryName in ipairs(categories) do
@@ -2495,6 +2754,29 @@ local function getScreenBounds(instance)
     return Vector2.new(minimumX, minimumY), Vector2.new(width, height)
 end
 
+function Extensions.GetStableMobScreenBounds(model, visualAnchor, anchorPoint)
+    local topLeft, boxSize = getScreenBounds(model)
+    if topLeft and boxSize then
+        local margin = math.max(24, math.min(math.max(boxSize.X, boxSize.Y) * 0.35, 90))
+        local containsAnchor = anchorPoint.X >= topLeft.X - margin
+            and anchorPoint.X <= topLeft.X + boxSize.X + margin
+            and anchorPoint.Y >= topLeft.Y - margin
+            and anchorPoint.Y <= topLeft.Y + boxSize.Y + margin
+        local viewport = Camera.ViewportSize
+        local reasonableSize = boxSize.X <= viewport.X * 1.25 and boxSize.Y <= viewport.Y * 1.25
+        if containsAnchor and reasonableSize then
+            return topLeft, boxSize
+        end
+    end
+
+    local depth = math.max(anchorPoint.Z, 1)
+    local estimatedHeight = math.clamp(Camera.ViewportSize.Y * 4.5 / depth, 18, 170)
+    local estimatedWidth = math.clamp(estimatedHeight * 0.58, 10, 105)
+    local anchorIsHead = visualAnchor and visualAnchor.Name == "Head"
+    local topOffset = anchorIsHead and estimatedHeight * 0.12 or estimatedHeight * 0.48
+    return Vector2.new(anchorPoint.X - estimatedWidth * 0.5, anchorPoint.Y - topOffset), Vector2.new(estimatedWidth, estimatedHeight)
+end
+
 local function getHealthText(humanoid)
     if humanoid and humanoid.Health > 0 then
         return string.format("HP %d/%d", math.floor(humanoid.Health + 0.5), math.floor(humanoid.MaxHealth + 0.5))
@@ -2540,32 +2822,165 @@ local function getItemHealthText(item)
     return nil
 end
 
+function Extensions.GetTracerOriginPoint(config)
+    local viewport = Camera.ViewportSize
+    local origin = config.TracerOrigin
+    if origin == "Trên" then
+        return Vector2.new(viewport.X * 0.5, 0)
+    elseif origin == "Giữa" then
+        return Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
+    end
+    return Vector2.new(viewport.X * 0.5, viewport.Y)
+end
+
+function Extensions.UpdateDynamicVisual(visual)
+    setDrawingVisible(visual.Box, false)
+    setDrawingVisible(visual.Tracer, false)
+    setDrawingVisible(visual.LookLine, false)
+    if visual.InfoBillboard then
+        visual.InfoBillboard.Enabled = false
+    end
+    if visual.LookBeam then
+        visual.LookBeam.Enabled = false
+    end
+    if not visual.Active then
+        return
+    end
+
+    local target = visual.Target
+    local root = visual.Root
+    if not target or not target.Parent or not root or not root.Parent then
+        return
+    end
+
+    local config = getCategoryConfig(visual.Category)
+    local espEnabled = config.Enabled
+    Camera = Workspace.CurrentCamera or Camera
+    local projected, onScreen = Camera:WorldToViewportPoint(root.Position)
+    if not onScreen or projected.Z <= 0 then
+        return
+    end
+
+    if visual.InfoBillboard then
+        local infoAnchor = visual.InfoAnchor
+        if infoAnchor and infoAnchor.Parent then
+            visual.InfoBillboard.Adornee = infoAnchor
+            visual.InfoBillboard.Enabled = visual.InfoEnabled
+        end
+    end
+
+    local screenPosition = Vector2.new(projected.X, projected.Y)
+    if visual.Box and espEnabled and config.Box and config.BoxMode == "2D" then
+        local cameraDistance = (Camera.CFrame.Position - root.Position).Magnitude
+        local scale = visual.Category == "Item" and 850 or 1200
+        local width = math.clamp(scale / math.max(cameraDistance, 1), 12, 320)
+        local height = visual.Category == "Item" and width or width * 1.4
+        local centerY = root.Name == "Head" and visual.Category ~= "Item" and screenPosition.Y + height * 0.34 or screenPosition.Y
+        visual.Box.Color = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.18)
+        visual.Box.Thickness = 1.2
+        visual.Box.Size = Vector2.new(width, height)
+        visual.Box.Position = Vector2.new(screenPosition.X - width * 0.5, centerY - height * 0.5)
+        visual.Box.Visible = true
+    end
+
+    if visual.Tracer and espEnabled and config.Tracer then
+        visual.Tracer.Color = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.08)
+        visual.Tracer.Thickness = 1.5
+        visual.Tracer.From = Extensions.GetTracerOriginPoint(config)
+        visual.Tracer.To = screenPosition
+        visual.Tracer.Visible = true
+    end
+
+    local lookPart = target:IsA("Model") and (target:FindFirstChild("Head") or root) or root
+    local lookEnabled = espEnabled and visual.Category ~= "Item" and config.LookDirection and lookPart and lookPart:IsA("BasePart")
+    if lookEnabled and visual.LookLine then
+        local startWorld = lookPart.Position + Vector3.new(0, lookPart.Size.Y * 0.55 + 0.15, 0)
+        local endWorld = startWorld + lookPart.CFrame.LookVector * config.LookLength
+        local startPoint = Camera:WorldToViewportPoint(startWorld)
+        local endPoint = Camera:WorldToViewportPoint(endWorld)
+        visual.LookLine.Color = config.Color
+        visual.LookLine.From = Vector2.new(startPoint.X, startPoint.Y)
+        visual.LookLine.To = Vector2.new(endPoint.X, endPoint.Y)
+        visual.LookLine.Visible = startPoint.Z > 0 and endPoint.Z > 0
+    elseif lookEnabled then
+        if visual.LookAdornee ~= lookPart or not visual.LookBeam or not visual.LookBeam.Parent then
+            if visual.LookBeam then visual.LookBeam:Destroy() end
+            if visual.LookStart then visual.LookStart:Destroy() end
+            if visual.LookEnd then visual.LookEnd:Destroy() end
+            visual.LookStart = Instance.new("Attachment")
+            visual.LookEnd = Instance.new("Attachment")
+            visual.LookBeam = Instance.new("Beam")
+            visual.LookStart.Name = "RaphaelLookStart"
+            visual.LookEnd.Name = "RaphaelLookEnd"
+            visual.LookBeam.Name = "RaphaelLookDirection"
+            visual.LookStart:SetAttribute("RaphaelOwned", true)
+            visual.LookEnd:SetAttribute("RaphaelOwned", true)
+            visual.LookBeam:SetAttribute("RaphaelOwned", true)
+            visual.LookStart.Parent = lookPart
+            visual.LookEnd.Parent = lookPart
+            visual.LookBeam.Attachment0 = visual.LookStart
+            visual.LookBeam.Attachment1 = visual.LookEnd
+            visual.LookBeam.FaceCamera = true
+            visual.LookBeam.Width0 = 0.07
+            visual.LookBeam.Width1 = 0.035
+            visual.LookBeam.LightEmission = 1
+            visual.LookBeam.Segments = 1
+            visual.LookBeam.Parent = lookPart
+            visual.LookAdornee = lookPart
+        end
+        local verticalOffset = lookPart.Size.Y * 0.55 + 0.15
+        visual.LookStart.Position = Vector3.new(0, verticalOffset, 0)
+        visual.LookEnd.Position = Vector3.new(0, verticalOffset, -config.LookLength)
+        visual.LookBeam.Color = ColorSequence.new(config.Color)
+        visual.LookBeam.Enabled = true
+    end
+end
+
+function Extensions.RefreshDynamicESP()
+    for _, categoryVisuals in pairs(Visuals) do
+        for _, visual in pairs(categoryVisuals) do
+            Extensions.UpdateDynamicVisual(visual)
+        end
+    end
+end
+
 local function updateVisual(category, key, target, root, displayName, healthText, distanceStuds)
     local config = getCategoryConfig(category)
     local espEnabled = config.Enabled
     local xrayEnabled = State.XRay
+    local existing = Visuals[category][key]
     if (not espEnabled and not xrayEnabled) or not target or not root then
-        local existing = Visuals[category][key]
         if existing then
+            existing.Active = false
             hideVisual(existing)
         end
         return
     end
 
     local distanceMeters = distanceStuds * 0.28
-    local exactItemGlobal = category == "Item" and State.ItemESP.ExactName ~= ""
-    local maximumMeters = category == "Item" and (exactItemGlobal and math.huge or config.RadiusMeters) or config.MaxDistanceMeters
+    local maximumMeters = category == "Item"
+        and (State.ItemESP.ExactName ~= "" and math.huge or config.RadiusMeters)
+        or config.MaxDistanceMeters
     if distanceMeters > maximumMeters then
-        local existing = Visuals[category][key]
         if existing then
+            existing.Active = false
             hideVisual(existing)
         end
         return
     end
 
-    local visual = Visuals[category][key] or createVisual(category, key)
+    local visual = existing or createVisual(category, key)
+    visual.Active = true
+    visual.Target = target
+    visual.Root = root
+    visual.InfoAnchor = target:IsA("Model") and (target:FindFirstChild("Head") or root) or root
+    visual.DisplayName = displayName
+    visual.HealthText = healthText
+    visual.DistanceStuds = distanceStuds
+
     local outlineXRay = xrayEnabled and State.XRayMethod ~= "Wall Transparency"
-    local highlightEnabled = (espEnabled and config.Box and config.BoxMode == "Skin") or outlineXRay or (espEnabled and not DrawingSupported)
+    local skinEnabled = espEnabled and config.Box and config.BoxMode == "Skin"
+    local highlightEnabled = skinEnabled or outlineXRay or (espEnabled and config.Box and not DrawingSupported)
     local highlightTarget = target
     if not target:IsA("Model") and not target:IsA("BasePart") then
         highlightTarget = root
@@ -2575,144 +2990,51 @@ local function updateVisual(category, key, target, root, displayName, healthText
     end
     visual.Highlight.Adornee = highlightTarget
     visual.Highlight.FillColor = config.Color
-    visual.Highlight.OutlineColor = config.Color
-    visual.Highlight.DepthMode = outlineXRay and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
-    visual.Highlight.FillTransparency = outlineXRay and 0.68 or 1
-    visual.Highlight.OutlineTransparency = (espEnabled and config.Box or outlineXRay) and 0 or 1
+    visual.Highlight.OutlineColor = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.12)
+    visual.Highlight.DepthMode = (skinEnabled or outlineXRay) and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+    visual.Highlight.FillTransparency = skinEnabled and 0.65 or (outlineXRay and 0.72 or 1)
+    visual.Highlight.OutlineTransparency = highlightEnabled and 0 or 1
     visual.Highlight.Enabled = highlightEnabled
 
-    if visual.Billboard then
-        visual.Billboard.Adornee = root
-        local lines = {}
-        if espEnabled and config.Name then
-            table.insert(lines, displayName)
-        end
-        if espEnabled and config.Health and healthText then
-            table.insert(lines, healthText)
-        end
-        if espEnabled and config.Distance then
-            table.insert(lines, string.format("%.1f m", distanceMeters))
-        end
-        visual.BillboardText.Text = table.concat(lines, "\n")
-        visual.Billboard.Enabled = espEnabled and #lines > 0
-        local lookPart = target:IsA("Model") and (target:FindFirstChild("Head") or root) or root
-        local lookEnabled = espEnabled and category ~= "Item" and config.LookDirection and lookPart and lookPart:IsA("BasePart")
-        if lookEnabled then
-            if visual.LookAdornee ~= lookPart or not visual.LookBeam or not visual.LookBeam.Parent then
-                if visual.LookBeam then visual.LookBeam:Destroy() end
-                if visual.LookStart then visual.LookStart:Destroy() end
-                if visual.LookEnd then visual.LookEnd:Destroy() end
-                visual.LookStart = Instance.new("Attachment")
-                visual.LookEnd = Instance.new("Attachment")
-                visual.LookBeam = Instance.new("Beam")
-                visual.LookStart.Name = "RaphaelLookStart"
-                visual.LookEnd.Name = "RaphaelLookEnd"
-                visual.LookBeam.Name = "RaphaelLookDirection"
-                visual.LookStart:SetAttribute("RaphaelOwned", true)
-                visual.LookEnd:SetAttribute("RaphaelOwned", true)
-                visual.LookBeam:SetAttribute("RaphaelOwned", true)
-                visual.LookStart.Parent = lookPart
-                visual.LookEnd.Parent = lookPart
-                visual.LookBeam.Attachment0 = visual.LookStart
-                visual.LookBeam.Attachment1 = visual.LookEnd
-                visual.LookBeam.FaceCamera = true
-                visual.LookBeam.Width0 = 0.07
-                visual.LookBeam.Width1 = 0.035
-                visual.LookBeam.LightEmission = 1
-                visual.LookBeam.Segments = 1
-                visual.LookBeam.Parent = lookPart
-                visual.LookAdornee = lookPart
-            end
-            local verticalOffset = lookPart.Size.Y * 0.55 + 0.15
-            visual.LookStart.Position = Vector3.new(0, verticalOffset, 0)
-            visual.LookEnd.Position = Vector3.new(0, verticalOffset, -config.LookLength)
-            visual.LookBeam.Color = ColorSequence.new(config.Color)
-            visual.LookBeam.Enabled = true
-        elseif visual.LookBeam then
-            visual.LookBeam.Enabled = false
-        end
-        return
+    local lineCount = 0
+    local showName = espEnabled and config.Name
+    local showHealth = espEnabled and config.Health and healthText ~= nil
+    local showDistance = espEnabled and config.Distance
+
+    visual.InfoName.Text = displayName
+    visual.InfoName.TextStrokeColor3 = config.Color
+    visual.InfoName.Visible = showName
+    if showName then
+        visual.InfoName.Position = UDim2.fromOffset(0, lineCount * 19)
+        visual.InfoName.Size = UDim2.new(1, 0, 0, 19)
+        lineCount = lineCount + 1
     end
 
-    local needsScreenDrawing = espEnabled and ((config.Box and config.BoxMode == "2D") or config.Tracer or config.Name or (config.Health and healthText ~= nil) or config.Distance or (category ~= "Item" and config.LookDirection))
-    if not needsScreenDrawing then
-        setDrawingVisible(visual.Box, false)
-        setDrawingVisible(visual.Tracer, false)
-        setDrawingVisible(visual.LookLine, false)
-        setDrawingVisible(visual.Name, false)
-        setDrawingVisible(visual.Health, false)
-        setDrawingVisible(visual.Distance, false)
-        return
+    visual.InfoHealth.Text = healthText or ""
+    visual.InfoHealth.TextStrokeColor3 = config.Color
+    visual.InfoHealth.Visible = showHealth
+    if showHealth then
+        visual.InfoHealth.Position = UDim2.fromOffset(0, lineCount * 19)
+        visual.InfoHealth.Size = UDim2.new(1, 0, 0, 19)
+        lineCount = lineCount + 1
     end
 
-    local topLeft, boxSize = getScreenBounds(target)
-    if not topLeft or not boxSize then
-        setDrawingVisible(visual.Box, false)
-        setDrawingVisible(visual.Tracer, false)
-        setDrawingVisible(visual.LookLine, false)
-        setDrawingVisible(visual.Name, false)
-        setDrawingVisible(visual.Health, false)
-        setDrawingVisible(visual.Distance, false)
-        return
+    visual.InfoDistance.Text = string.format("[ %d studs | %.1f m ]", math.floor(distanceStuds + 0.5), distanceMeters)
+    visual.InfoDistance.TextColor3 = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.58)
+    visual.InfoDistance.TextStrokeColor3 = config.Color
+    visual.InfoDistance.Visible = showDistance
+    if showDistance then
+        visual.InfoDistance.Position = UDim2.fromOffset(0, lineCount * 19)
+        visual.InfoDistance.Size = UDim2.new(1, 0, 0, 19)
+        lineCount = lineCount + 1
     end
 
-    local centerX = topLeft.X + boxSize.X * 0.5
-    local topY = topLeft.Y
-    local bottomY = topLeft.Y + boxSize.Y
+    visual.InfoBillboard.Size = UDim2.fromOffset(230, math.max(24, lineCount * 19))
+    visual.InfoBillboard.Adornee = visual.InfoAnchor
+    visual.InfoEnabled = espEnabled and lineCount > 0
 
-    if visual.LookLine then
-        local lookPart = target:IsA("Model") and (target:FindFirstChild("Head") or root) or root
-        local lookEnabled = espEnabled and category ~= "Item" and config.LookDirection and lookPart and lookPart:IsA("BasePart")
-        if lookEnabled then
-            local startWorld = lookPart.Position + Vector3.new(0, lookPart.Size.Y * 0.55 + 0.15, 0)
-            local endWorld = startWorld + lookPart.CFrame.LookVector * config.LookLength
-            local startPoint = Camera:WorldToViewportPoint(startWorld)
-            local endPoint = Camera:WorldToViewportPoint(endWorld)
-            visual.LookLine.Color = config.Color
-            visual.LookLine.From = Vector2.new(startPoint.X, startPoint.Y)
-            visual.LookLine.To = Vector2.new(endPoint.X, endPoint.Y)
-            visual.LookLine.Visible = startPoint.Z > 0 and endPoint.Z > 0
-        else
-            visual.LookLine.Visible = false
-        end
-    end
-
-    if visual.Box then
-        visual.Box.Color = config.Color
-        visual.Box.Position = topLeft
-        visual.Box.Size = boxSize
-        visual.Box.Visible = espEnabled and config.Box and config.BoxMode == "2D"
-    end
-
-    if visual.Tracer then
-        visual.Tracer.Color = config.Color
-        visual.Tracer.From = Camera.ViewportSize * 0.5
-        visual.Tracer.To = Vector2.new(centerX, topLeft.Y + boxSize.Y * 0.5)
-        visual.Tracer.Visible = espEnabled and config.Tracer
-    end
-
-    if visual.Name then
-        visual.Name.Color = config.Color
-        visual.Name.Text = displayName
-        visual.Name.Position = Vector2.new(centerX, topY - 17)
-        visual.Name.Visible = espEnabled and config.Name
-    end
-
-    if visual.Health then
-        visual.Health.Color = config.Color
-        visual.Health.Text = healthText or ""
-        visual.Health.Position = Vector2.new(centerX, bottomY + 2)
-        visual.Health.Visible = espEnabled and config.Health and healthText ~= nil
-    end
-
-    if visual.Distance then
-        visual.Distance.Color = config.Color
-        visual.Distance.Text = string.format("[ %.1f m ]", distanceMeters)
-        visual.Distance.Position = Vector2.new(centerX, bottomY + (config.Health and healthText and 17 or 2))
-        visual.Distance.Visible = espEnabled and config.Distance
-    end
+    Extensions.UpdateDynamicVisual(visual)
 end
-
 local function restoreXRayOccluders(keepSet)
     for part, originalTransparency in pairs(XRayOccluders) do
         if not keepSet or not keepSet[part] then
@@ -2748,10 +3070,12 @@ local function updateXRayOcclusion()
 
     for model, classification in pairs(MobCache) do
         if model and model.Parent and type(classification) == "table" then
-            local root = classification.Root
-            if root and root.Parent then
-                local offset = root.Position - cameraPosition
-                table.insert(candidates, {Target = model, Root = root, DistanceSquared = offset:Dot(offset)})
+            local detectorRoot = classification.Root
+            local visualAnchor = Extensions.GetMobVisualAnchor(model, detectorRoot)
+            local worldPosition = Extensions.GetMobWorldPosition(model, visualAnchor)
+            if visualAnchor and visualAnchor.Parent and worldPosition then
+                local offset = worldPosition - cameraPosition
+                table.insert(candidates, {Target = model, Root = visualAnchor, DistanceSquared = offset:Dot(offset)})
             end
         end
     end
@@ -2804,41 +3128,12 @@ local function updateXRayOcclusion()
     restoreXRayOccluders(currentOccluders)
 end
 
-local EnemyHints = {"enemy", "enemies", "mob", "mobs", "monster", "monsters", "npc", "boss", "zombie", "creature", "bot", "hostile", "wave"}
-EnemyHints.Attributes = {"Enemy", "IsEnemy", "Mob", "IsMob", "NPC", "IsNPC", "Monster", "Hostile", "IsHostile", "EntityType", "Faction", "Team"}
 local GenericMobNames = {model = true, npc = true, enemy = true, mob = true, rig = true, dummy = true}
 
 local function textHasHint(text, hints)
     local lower = string.lower(tostring(text or ""))
     for _, hint in ipairs(hints) do
         if string.find(lower, hint, 1, true) then
-            return true
-        end
-    end
-    return false
-end
-
-local function hasEnemyMetadata(model)
-    if textHasHint(model.Name, EnemyHints) then
-        return true
-    end
-    local ancestor = model.Parent
-    local depth = 0
-    while ancestor and ancestor ~= Workspace and depth < 5 do
-        if textHasHint(ancestor.Name, EnemyHints) then
-            return true
-        end
-        ancestor = ancestor.Parent
-        depth = depth + 1
-    end
-    for _, attributeName in ipairs(EnemyHints.Attributes) do
-        local value = model:GetAttribute(attributeName)
-        if value == true or type(value) == "string" and textHasHint(value, EnemyHints) then
-            return true
-        end
-    end
-    for _, tag in ipairs(CollectionService:GetTags(model)) do
-        if textHasHint(tag, EnemyHints) then
             return true
         end
     end
@@ -2895,24 +3190,19 @@ local function classifyMob(model)
     if not model or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then
         return nil
     end
-    if belongsToPlayerCharacter(model) then
+    if model == LocalPlayer.Character or belongsToPlayerCharacter(model) then
         return nil
     end
-
     local humanoid = model:FindFirstChildOfClass("Humanoid")
-    local metadata = not humanoid and hasEnemyMetadata(model)
-    if not humanoid and not metadata then
+    if not humanoid or humanoid.Health <= 0 or humanoid.MaxHealth <= 0 then
         return nil
     end
-    if humanoid and humanoid.Health <= 0 then
+    local root = model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChild("UpperTorso")
+    if not root or not root:IsA("BasePart") then
         return nil
     end
-
-    local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or getAdorneeRoot(model)
-    if not root then
-        return nil
-    end
-
     return {
         Humanoid = humanoid,
         Root = root,
@@ -2967,8 +3257,10 @@ local function collectMobNamesInRadius()
     local names = {}
     for model, classification in pairs(MobCache) do
         if model and model.Parent and type(classification) == "table" then
-            local root = classification.Root
-            if root and root.Parent and (root.Position - localRoot.Position).Magnitude <= maximumStuds then
+            local detectorRoot = classification.Root
+            local visualAnchor = Extensions.GetMobVisualAnchor(model, detectorRoot)
+            local worldPosition = Extensions.GetMobWorldPosition(model, visualAnchor)
+            if visualAnchor and visualAnchor.Parent and worldPosition and (worldPosition - localRoot.Position).Magnitude <= maximumStuds then
                 local displayName = classification.DisplayName or model.Name
                 local key = string.lower(displayName)
                 if displayName ~= "" and not uniqueNames[key] then
@@ -3006,6 +3298,22 @@ local function considerMob(instance)
         return
     end
 
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid and not State.MobHumanoidConnections[humanoid] then
+        State.MobHumanoidConnections[humanoid] = {
+            Health = connect(humanoid.HealthChanged, function()
+                if State.Running and model.Parent then
+                    task.defer(considerMob, model)
+                end
+            end),
+            Maximum = connect(humanoid:GetPropertyChangedSignal("MaxHealth"), function()
+                if State.Running and model.Parent then
+                    task.defer(considerMob, model)
+                end
+            end)
+        }
+    end
+
     local classification = classifyMob(model)
     if classification then
         MobCache[model] = classification
@@ -3032,6 +3340,14 @@ local function rescanMobs()
 end
 
 connect(Workspace.DescendantRemoving, function(instance)
+    if instance:IsA("Humanoid") and State.MobHumanoidConnections[instance] then
+        for _, connection in pairs(State.MobHumanoidConnections[instance]) do
+            pcall(function()
+                connection:Disconnect()
+            end)
+        end
+        State.MobHumanoidConnections[instance] = nil
+    end
     if MobCache[instance] then
         MobCache[instance] = nil
         local visual = Visuals.Mob[instance]
@@ -3173,11 +3489,14 @@ local function findAutomaticItem(part)
 end
 
 connect(Workspace.DescendantAdded, function(instance)
+    if State.RemoveEffects then
+        suppressEffect(instance)
+    end
     if State.FPSBoostApplied then
         Extensions.ApplyFPSOptimization(instance)
     end
 
-    if instance:IsA("Model") or instance:IsA("Humanoid") or instance:IsA("AnimationController") or instance:IsA("BasePart") and instance.Name == "HumanoidRootPart" then
+    if instance:IsA("Model") or instance:IsA("Humanoid") or instance:IsA("BasePart") and (instance.Name == "HumanoidRootPart" or instance.Name == "Torso" or instance.Name == "UpperTorso") then
         task.defer(function()
             if instance.Parent then
                 considerMob(instance)
@@ -4179,7 +4498,7 @@ local function setFPSBoost(enabled, silent)
             Workspace.Terrain.WaterTransparency = 1
         end)
         if not silent then
-            notify("FPS Boost nâng cao đã bật: giảm texture, ánh sáng, vật liệu và hiệu ứng nặng.", Theme.Success)
+            notify("FPS Boost đơn sắc đã bật: map được tối giản về vật liệu phẳng và một tông xám.", Theme.Success)
         end
     else
         if not State.FPSBoostApplied then
@@ -4224,7 +4543,7 @@ Extensions.ConfigPath = "RaphaelSovereign/V6_4_Config.json"
 
 function Extensions.BuildConfig()
     return {
-        Version = 6.71,
+        Version = 6.8,
         AutoLoad = State.ConfigAutoLoad,
         Movement = {
             SpeedValue = State.SpeedValue,
@@ -4239,6 +4558,7 @@ function Extensions.BuildConfig()
         PlayerESP = {
             Enabled = State.PlayerESP.Enabled,
             Tracer = State.PlayerESP.Tracer,
+            TracerOrigin = State.PlayerESP.TracerOrigin,
             Box = State.PlayerESP.Box,
             BoxMode = State.PlayerESP.BoxMode,
             Name = State.PlayerESP.Name,
@@ -4251,6 +4571,7 @@ function Extensions.BuildConfig()
         MobESP = {
             Enabled = State.MobESP.Enabled,
             Tracer = State.MobESP.Tracer,
+            TracerOrigin = State.MobESP.TracerOrigin,
             Box = State.MobESP.Box,
             BoxMode = State.MobESP.BoxMode,
             Name = State.MobESP.Name,
@@ -4263,6 +4584,7 @@ function Extensions.BuildConfig()
         ItemESP = {
             Enabled = State.ItemESP.Enabled,
             Tracer = State.ItemESP.Tracer,
+            TracerOrigin = State.ItemESP.TracerOrigin,
             Box = State.ItemESP.Box,
             BoxMode = State.ItemESP.BoxMode,
             Name = State.ItemESP.Name,
@@ -4320,9 +4642,9 @@ end
 function Extensions.SyncConfigControls()
     local controls = State.ConfigControls
     local textValues = {
-        SpeedValue = State.SpeedValue,
-        JumpValue = State.JumpValue,
-        GravityValue = State.GravityValue,
+        SpeedValue = Extensions.FormatMovementNumber(State.SpeedValue),
+        JumpValue = Extensions.FormatMovementNumber(State.JumpValue),
+        GravityValue = Extensions.FormatMovementNumber(State.GravityValue),
         PlayerESPDistance = State.PlayerESP.MaxDistanceMeters,
         PlayerESPLookLength = State.PlayerESP.LookLength,
         MobESPMaxTargets = State.MobESP.MaxTargets,
@@ -4358,8 +4680,11 @@ function Extensions.SyncConfigControls()
         SpeedMethod = State.SpeedMethod,
         JumpMethod = State.JumpMethod,
         NoclipMethod = State.NoclipMethod,
+        PlayerESPTracerOrigin = State.PlayerESP.TracerOrigin,
         PlayerESPBoxMode = State.PlayerESP.BoxMode,
+        MobESPTracerOrigin = State.MobESP.TracerOrigin,
         MobESPBoxMode = State.MobESP.BoxMode,
+        ItemESPTracerOrigin = State.ItemESP.TracerOrigin,
         ItemESPBoxMode = State.ItemESP.BoxMode,
         XRayMethod = State.XRayMethod,
         TelePlayerMode = State.TelePlayerMode,
@@ -4454,6 +4779,7 @@ function Extensions.ApplyConfig(config, silent)
         if type(source) ~= "table" then return end
         target.Enabled = booleanValue(source, "Enabled", target.Enabled)
         target.Tracer = booleanValue(source, "Tracer", target.Tracer)
+        target.TracerOrigin = allowed(source.TracerOrigin, {"Trên", "Giữa", "Dưới"}, target.TracerOrigin)
         target.Box = booleanValue(source, "Box", target.Box)
         target.BoxMode = allowed(source.BoxMode, {"2D", "Skin"}, target.BoxMode)
         target.Name = booleanValue(source, "Name", target.Name)
@@ -4545,6 +4871,7 @@ function Extensions.ApplyConfig(config, silent)
     Camera.FieldOfView = State.CameraFov
     removeAllVisuals()
     if State.RemoveEffects then
+        State.LastVisionDeepScan = 0
         applyNoEffects()
         applyFullBright()
     else
@@ -4573,7 +4900,7 @@ function Extensions.ApplyConfig(config, silent)
         Extensions.SetAimbotEnabled(true, nil, true)
     end
     if not silent then
-        notify("Đã áp dụng config V6.7.1.", Theme.Success)
+        notify("Đã áp dụng config V6.8.", Theme.Success)
     end
     return true
 end
@@ -4633,7 +4960,7 @@ function Extensions.DeleteConfig()
         end
     end)
     if success then
-        notify("Đã xoá config V6.7.1.", Theme.Success)
+        notify("Đã xoá config V6.8.", Theme.Success)
         return true
     end
     notify("Xoá config thất bại: " .. tostring(result), Theme.Danger)
@@ -4642,7 +4969,7 @@ end
 
 do
 local SpeedSection = createSection(MovementPage, "Speed", "Giá trị được áp dụng ngay khi nhập; không cần công tắc bật/tắt.")
-State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", State.SpeedValue, "1 - 1000", true, function(text)
+State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", Extensions.FormatMovementNumber(State.SpeedValue), "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
         State.SpeedValue = math.clamp(value, 0, 1000)
@@ -4656,8 +4983,11 @@ end)
 createButton(SpeedSection, "Khôi phục tốc độ mặc định", function()
     local _, humanoid = getCharacter()
     local original = rememberHumanoid(humanoid)
-    State.SpeedValue = original and original.WalkSpeed or 16
+    State.SpeedValue = Extensions.RoundMovementNumber(original and original.WalkSpeed or 16)
     resetSpeedSideEffects()
+    if State.ConfigControls.SpeedValue then
+        State.ConfigControls.SpeedValue.Text = Extensions.FormatMovementNumber(State.SpeedValue)
+    end
     notify("Đã khôi phục tốc độ nhân vật.", Theme.Success)
 end, Theme.SurfaceLight)
 
@@ -4665,7 +4995,7 @@ end
 
 do
 local JumpSection = createSection(MovementPage, "Jump", "JumpPower và JumpHeight được duy trì phía client. Velocity phù hợp game ghi đè thuộc tính Humanoid.")
-State.ConfigControls.JumpValue = createInput(JumpSection, "Lực/độ cao nhảy", State.JumpValue, "1 - 1000", true, function(text)
+State.ConfigControls.JumpValue = createInput(JumpSection, "Lực/độ cao nhảy", Extensions.FormatMovementNumber(State.JumpValue), "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
         State.JumpValue = math.clamp(value, 0, 1000)
@@ -4720,15 +5050,18 @@ end
 
 do
 local GravitySection = createSection(MovementPage, "Movement bổ sung", "Trọng lực chỉ thay đổi ở client và được duy trì liên tục.")
-State.ConfigControls.GravityValue = createInput(GravitySection, "Gravity", string.format("%.1f", Workspace.Gravity), "0 - 1000", true, function(text)
+State.ConfigControls.GravityValue = createInput(GravitySection, "Gravity", Extensions.FormatMovementNumber(State.GravityValue), "0 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
         State.GravityValue = math.clamp(value, 0, 1000)
     end
 end)
 createButton(GravitySection, "Khôi phục Gravity", function()
-    State.GravityValue = OriginalGravity
-    Workspace.Gravity = OriginalGravity
+    State.GravityValue = Extensions.RoundMovementNumber(OriginalGravity)
+    Workspace.Gravity = State.GravityValue
+    if State.ConfigControls.GravityValue then
+        State.ConfigControls.GravityValue.Text = Extensions.FormatMovementNumber(State.GravityValue)
+    end
     notify("Đã khôi phục Gravity.", Theme.Success)
 end, Theme.SurfaceLight)
 
@@ -4741,7 +5074,7 @@ createColorLegend(ColorSection)
 end
 
 do
-local PlayerESPSection = createSection(ESPPage, "ESP Player", "Tracer bắt đầu chính xác từ giữa màn hình. Khoảng cách hiển thị theo mét, quy đổi 1 stud ≈ 0.28 m.")
+local PlayerESPSection = createSection(ESPPage, "ESP Player", "Tên và khoảng cách dùng Billboard đồng bộ; khung và tracer cập nhật theo từng frame. Có thể chọn điểm phát tracer ở trên, giữa hoặc dưới màn hình.")
 State.ConfigControls.PlayerESPEnabled = createToggle(PlayerESPSection, "Bật ESP Player", false, function(value)
     State.PlayerESP.Enabled = value
     if not value then
@@ -4750,6 +5083,9 @@ State.ConfigControls.PlayerESPEnabled = createToggle(PlayerESPSection, "Bật ES
 end)
 State.ConfigControls.PlayerESPTracer = createToggle(PlayerESPSection, "Tracer", State.PlayerESP.Tracer, function(value)
     State.PlayerESP.Tracer = value
+end)
+State.ConfigControls.PlayerESPTracerOrigin = createSelector(PlayerESPSection, "Điểm phát tracer", {"Trên", "Giữa", "Dưới"}, State.PlayerESP.TracerOrigin, function(value)
+    State.PlayerESP.TracerOrigin = value
 end)
 State.ConfigControls.PlayerESPBox = createToggle(PlayerESPSection, "Khung", State.PlayerESP.Box, function(value)
     State.PlayerESP.Box = value
@@ -4785,7 +5121,7 @@ end)
 end
 
 do
-local MobESPSection = createSection(ESPPage, "ESP Quái", "Quét Broad tương thích tối đa. Danh sách lọc tên quái được cấu hình trong tab Misc để loại AmmoBox, props và Model không cần thiết.")
+local MobESPSection = createSection(ESPPage, "ESP Quái", "Nhận diện nghiêm ngặt theo Model có Humanoid sống và HumanoidRootPart/Torso/UpperTorso; tự loại Player và props. Bộ lọc tên thủ công vẫn có thể giới hạn thêm.")
 State.ConfigControls.MobESPEnabled = createToggle(MobESPSection, "Bật ESP Quái", false, function(value)
     State.MobESP.Enabled = value
     if value then
@@ -4804,6 +5140,9 @@ State.ConfigControls.MobESPMaxTargets = createInput(MobESPSection, "Số quái h
 end)
 State.ConfigControls.MobESPTracer = createToggle(MobESPSection, "Tracer", State.MobESP.Tracer, function(value)
     State.MobESP.Tracer = value
+end)
+State.ConfigControls.MobESPTracerOrigin = createSelector(MobESPSection, "Điểm phát tracer", {"Trên", "Giữa", "Dưới"}, State.MobESP.TracerOrigin, function(value)
+    State.MobESP.TracerOrigin = value
 end)
 State.ConfigControls.MobESPBox = createToggle(MobESPSection, "Khung", State.MobESP.Box, function(value)
     State.MobESP.Box = value
@@ -4877,6 +5216,9 @@ createButton(ItemESPSection, "Phát hiện ngay", function()
 end, Theme.Accent2)
 State.ConfigControls.ItemESPTracer = createToggle(ItemESPSection, "Tracer", State.ItemESP.Tracer, function(value)
     State.ItemESP.Tracer = value
+end)
+State.ConfigControls.ItemESPTracerOrigin = createSelector(ItemESPSection, "Điểm phát tracer", {"Trên", "Giữa", "Dưới"}, State.ItemESP.TracerOrigin, function(value)
+    State.ItemESP.TracerOrigin = value
 end)
 State.ConfigControls.ItemESPBox = createToggle(ItemESPSection, "Khung", State.ItemESP.Box, function(value)
     State.ItemESP.Box = value
@@ -5006,11 +5348,12 @@ end, Theme.SurfaceLight)
 end
 
 do
-local EnhancedVisionSection = createSection(VisionPage, "Full Bright + No Fog", "Một cơ chế chung: xoá Fog, Atmosphere và PostEffect; Ambient trắng giúp map sáng ngay cả khi mức Brightness bằng 0.")
+local EnhancedVisionSection = createSection(VisionPage, "Full Bright + No Fog", "Chế độ tăng cường: khoá ánh sáng, xoá Fog/Atmosphere/Clouds/PostEffect, hạt mù trong Camera/Workspace và lớp phủ GUI có dấu hiệu che màn hình.")
 local EnhancedVisionToggle
 EnhancedVisionToggle = createToggle(EnhancedVisionSection, "Bật Full Bright + No Fog", false, function(value)
     State.RemoveEffects = value
     if value then
+        State.LastVisionDeepScan = 0
         if State.FullBrightLevel == nil then
             State.FullBrightLevel = 0
         end
@@ -5031,6 +5374,7 @@ State.ConfigControls.FullBrightLevel = createInput(EnhancedVisionSection, "Mức
     if value then
         State.FullBrightLevel = math.clamp(value, 0, 20)
         State.RemoveEffects = true
+        State.LastVisionDeepScan = 0
         EnhancedVisionToggle.Set(true, false)
         applyNoEffects()
         applyFullBright()
@@ -5303,7 +5647,7 @@ end, Theme.Danger)
 end
 
 do
-local MobFilterSection = createSection(MiscPage, "Bộ lọc ESP Quái", "Quét Broad trong phạm vi, đưa tên phát hiện vào danh sách cách nhau bằng dấu phẩy. Xoá tên props không phải quái rồi nhấn Áp dụng.")
+local MobFilterSection = createSection(MiscPage, "Bộ lọc ESP Quái", "Liệt kê các Quái Humanoid hợp lệ trong phạm vi; có thể giữ lại những tên cần hiển thị rồi nhấn Áp dụng.")
 State.MobFilterToggle = createToggle(MobFilterSection, "Dùng danh sách lọc thủ công", false, function(value)
     State.MobManualFilterEnabled = value
     removeAllVisuals("Mob")
@@ -5347,7 +5691,7 @@ end, "Xoá bộ lọc", function()
     State.MobFilterBox.Text = ""
     parseMobManualNames("")
     State.MobFilterToggle.Set(false, true)
-    notify("Đã xoá bộ lọc; ESP Quái trở về Broad.", Theme.Success)
+    notify("Đã xoá bộ lọc; ESP Quái trở về nhận diện Humanoid nghiêm ngặt.", Theme.Success)
 end, Theme.Accent, Theme.Danger)
 
 end
@@ -5406,7 +5750,7 @@ end
 
 
 do
-local UtilitySection = createSection(MiscPage, "Tiện ích", "Anti Stun khôi phục quyền điều khiển, tốc độ và vận tốc; FPS Boost nâng cao tối giản hiệu ứng nhưng vẫn có thể khôi phục khi tắt Raphael.")
+local UtilitySection = createSection(MiscPage, "Tiện ích", "Anti Stun khôi phục quyền điều khiển; FPS Boost đơn sắc ép vật liệu phẳng, xoá texture và giảm hiệu ứng nhưng vẫn có backup để khôi phục.")
 State.ConfigControls.AntiAFK = createToggle(UtilitySection, "Anti AFK", false, function(value)
     State.AntiAFK = value
 end)
@@ -5415,7 +5759,7 @@ State.ConfigControls.AntiStun = createToggle(UtilitySection, "Anti Stun toàn di
         Extensions.SetAntiStunEnabled(value, false)
     end
 end)
-State.ConfigControls.FPSBoost = createToggle(UtilitySection, "FPS Boost nâng cao", false, setFPSBoost)
+State.ConfigControls.FPSBoost = createToggle(UtilitySection, "FPS Boost đơn sắc", false, setFPSBoost)
 State.ConfigControls.ESPRefreshMode = createSelector(UtilitySection, "Nhịp cập nhật ESP", {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode, function(value)
     State.ESPRefreshMode = value
 end)
@@ -5846,7 +6190,7 @@ connect(RunService.Heartbeat, function(deltaTime)
     end
 
     local now = os.clock()
-    local xrayInterval = MeasuredFPS > 0 and MeasuredFPS < 35 and 0.35 or 0.22
+    local xrayInterval = State.FPSBoost and 0.5 or (MeasuredFPS > 0 and MeasuredFPS < 35 and 0.4 or 0.28)
     if State.XRay and State.XRayMethod ~= "Outline" and now - LastXRayUpdate >= xrayInterval then
         LastXRayUpdate = now
         updateXRayOcclusion()
@@ -5876,7 +6220,7 @@ connect(RunService.Heartbeat, function(deltaTime)
         end
     end
 
-    if now - LastVisionApply >= 0.5 then
+    if now - LastVisionApply >= 0.15 then
         LastVisionApply = now
         if State.ClockTime then
             Lighting.ClockTime = State.ClockTime
@@ -5889,7 +6233,7 @@ connect(RunService.Heartbeat, function(deltaTime)
         end
     end
 
-    local itemScanInterval = State.ItemESP.ExactName ~= "" and 15 or 0.9
+    local itemScanInterval = State.ItemESP.ExactName ~= "" and 15 or 1.5
     if now - LastItemScan >= itemScanInterval then
         LastItemScan = now
         if State.ItemESP.Enabled or State.XRay then
@@ -5924,6 +6268,15 @@ connect(RunService.RenderStepped, function()
     if not State.Running then
         return
     end
+    if State.ScreenBlankEnabled then
+        for _, categoryVisuals in pairs(Visuals) do
+            for _, visual in pairs(categoryVisuals) do
+                hideVisual(visual)
+            end
+        end
+        return
+    end
+    Extensions.RefreshDynamicESP()
     if State.Aimbot.Enabled and not State.Aimbot.RenderBound then
         Extensions.UpdateAimbotFrame(now)
     end
@@ -5939,11 +6292,14 @@ connect(RunService.RenderStepped, function()
     elseif State.ESPRefreshMode == "10 FPS" then
         refreshInterval = 0.1
     elseif MeasuredFPS > 0 and MeasuredFPS < 30 then
-        refreshInterval = 0.12
+        refreshInterval = 0.1
     elseif MeasuredFPS > 0 and MeasuredFPS < 45 then
-        refreshInterval = 0.08
+        refreshInterval = 0.067
     else
         refreshInterval = 0.05
+    end
+    if State.FPSBoost then
+        refreshInterval = math.max(refreshInterval, 0.067)
     end
     if now - LastESPUpdate < refreshInterval then
         return
@@ -5986,18 +6342,20 @@ connect(RunService.RenderStepped, function()
         local maximumDistanceSquared = maximumStuds * maximumStuds
         for model, classification in pairs(MobCache) do
             if model and model.Parent and type(classification) == "table" then
-                local root = classification.Root
+                local detectorRoot = classification.Root
                 local humanoid = classification.Humanoid
-                local alive = root and root.Parent and (not humanoid or humanoid.Parent and humanoid.Health > 0)
+                local visualAnchor = Extensions.GetMobVisualAnchor(model, detectorRoot)
+                local worldPosition = Extensions.GetMobWorldPosition(model, visualAnchor)
+                local alive = detectorRoot and detectorRoot.Parent == model and humanoid and humanoid.Parent == model and humanoid.Health > 0 and humanoid.MaxHealth > 0 and visualAnchor and visualAnchor.Parent and worldPosition
                 if alive then
                     if isMobAllowedByManualFilter(model, classification) then
-                        local offset = root.Position - localRoot.Position
+                        local offset = worldPosition - localRoot.Position
                         local distanceSquared = offset:Dot(offset)
                         if distanceSquared <= maximumDistanceSquared then
                             table.insert(mobCandidates, {
                                 Model = model,
                                 Data = classification,
-                                Root = root,
+                                Root = visualAnchor,
                                 DistanceSquared = distanceSquared
                             })
                         end
@@ -6014,7 +6372,7 @@ connect(RunService.RenderStepped, function()
             return left.DistanceSquared < right.DistanceSquared
         end)
 
-        local targetLimit = math.min(#mobCandidates, State.MobESP.MaxTargets)
+        local targetLimit = math.min(#mobCandidates, State.FPSBoost and math.min(State.MobESP.MaxTargets, 15) or State.MobESP.MaxTargets)
         for index = 1, targetLimit do
             local candidate = mobCandidates[index]
             local model = candidate.Model
@@ -6082,6 +6440,7 @@ cleanup = function()
     restoreCollisions()
     restoreXRayOccluders()
     removeAllVisuals()
+    State.RemoveEffects = false
     if State.FPSBoostApplied then
         setFPSBoost(false, true)
     end
@@ -6130,12 +6489,12 @@ task.spawn(function()
     end)
 end)
 
-notify("Raphael Sovereign V6.7.1 UI ClipFix đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
+notify("Raphael Sovereign V6.8 Ultimate đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
 
 task.defer(function()
     local config = Extensions.ReadConfig(true)
     if config and config.AutoLoad == true and State.Running then
         Extensions.ApplyConfig(config, true)
-        notify("Đã tự áp dụng config V6.7.1.", Theme.Success)
+        notify("Đã tự áp dụng config V6.8.", Theme.Success)
     end
 end)
