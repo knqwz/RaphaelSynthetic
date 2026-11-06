@@ -24,17 +24,17 @@ if RuntimeEnvironment.RaphaelSovereignCleanup then
 end
 
 local Theme = {
-    Background = Color3.fromRGB(14, 11, 8),
-    Surface = Color3.fromRGB(24, 19, 14),
-    SurfaceLight = Color3.fromRGB(39, 30, 20),
-    Input = Color3.fromRGB(18, 15, 12),
-    Accent = Color3.fromRGB(255, 190, 66),
-    Accent2 = Color3.fromRGB(255, 104, 31),
-    Text = Color3.fromRGB(255, 247, 230),
-    SubText = Color3.fromRGB(190, 172, 146),
-    Success = Color3.fromRGB(87, 224, 137),
-    Warning = Color3.fromRGB(255, 190, 66),
-    Danger = Color3.fromRGB(255, 88, 112),
+    Background = Color3.fromRGB(22, 57, 119),
+    Surface = Color3.fromRGB(51, 107, 176),
+    SurfaceLight = Color3.fromRGB(79, 145, 220),
+    Input = Color3.fromRGB(30, 79, 146),
+    Accent = Color3.fromRGB(82, 185, 255),
+    Accent2 = Color3.fromRGB(123, 111, 248),
+    Text = Color3.fromRGB(250, 253, 255),
+    SubText = Color3.fromRGB(207, 228, 249),
+    Success = Color3.fromRGB(84, 230, 208),
+    Warning = Color3.fromRGB(255, 198, 122),
+    Danger = Color3.fromRGB(255, 102, 148),
     Player = Color3.fromRGB(70, 255, 135),
     Mob = Color3.fromRGB(255, 72, 84),
     Item = Color3.fromRGB(205, 92, 255)
@@ -197,6 +197,20 @@ function UI.GetIcon(name)
     return UI.Icons[name] or UI.Icons.sparkles
 end
 
+function UI.AddSmoothGradient(instance, startColor, endColor, rotation)
+    local firstColor = startColor or Theme.Accent2
+    local lastColor = endColor or Theme.Accent
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, firstColor),
+        ColorSequenceKeypoint.new(0.52, firstColor:Lerp(lastColor, 0.48):Lerp(Color3.fromRGB(255, 255, 255), 0.08)),
+        ColorSequenceKeypoint.new(1, lastColor)
+    })
+    gradient.Rotation = rotation or 18
+    gradient.Parent = instance
+    return gradient
+end
+
 function UI.CreateIcon(parent, name, size, color)
     local icon = Instance.new("ImageLabel")
     icon.Name = "Icon_" .. tostring(name)
@@ -323,6 +337,9 @@ end)
 local State = {
     Running = true,
     InterfaceVisible = true,
+    InterfaceImageURL = "https://files.catbox.moe/pgm88d.jpg",
+    InterfaceImageFallback = "rbxassetid://134964139950",
+    InterfaceBackground = nil,
     SpeedValue = 16,
     SpeedMethod = "WalkSpeed",
     JumpValue = 50,
@@ -402,6 +419,8 @@ local State = {
         ReleasedModel = nil,
         ReleasedPlayer = nil,
         WallCheck = false,
+        TeamCheck = false,
+        TeamStatusValue = nil,
         StickyEnabled = false,
         StickyUsername = "",
         StickyPlayer = nil,
@@ -538,6 +557,39 @@ function Extensions.FormatMovementNumber(value)
         return tostring(math.floor(rounded))
     end
     return string.format("%.1f", rounded)
+end
+
+function Extensions.ResolveInterfaceBackground()
+    local customAsset = getcustomasset or getsynasset
+    if not customAsset or not writefile then
+        return State.InterfaceImageFallback
+    end
+    local folder = "Raphael_Assets"
+    local path = folder .. "/Yaoguang_Interface.jpg"
+    if isfolder and makefolder and not isfolder(folder) then
+        pcall(makefolder, folder)
+    end
+    if isfile and isfile(path) then
+        local cachedSuccess, cachedAsset = pcall(customAsset, path)
+        if cachedSuccess and cachedAsset then
+            return cachedAsset
+        end
+    end
+    local downloadSuccess, imageData = pcall(function()
+        return game:HttpGet(State.InterfaceImageURL, true)
+    end)
+    if not downloadSuccess or type(imageData) ~= "string" or #imageData < 128 then
+        return State.InterfaceImageFallback
+    end
+    local writeSuccess = pcall(writefile, path, imageData)
+    if not writeSuccess then
+        return State.InterfaceImageFallback
+    end
+    local assetSuccess, assetPath = pcall(customAsset, path)
+    if assetSuccess and assetPath then
+        return assetPath
+    end
+    return State.InterfaceImageFallback
 end
 
 local function formatDuration(totalSeconds)
@@ -820,11 +872,34 @@ MainFrame.Name = "Main"
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Position = UDim2.fromScale(0.5, 0.5)
 MainFrame.BackgroundColor3 = Theme.Background
-MainFrame.BackgroundTransparency = 0.12
+MainFrame.BackgroundTransparency = 0.58
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = Overlay
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 15)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 18)
+
+State.InterfaceBackground = Instance.new("ImageLabel")
+State.InterfaceBackground.Name = "YaoguangBackground"
+State.InterfaceBackground.Size = UDim2.fromScale(1, 1)
+State.InterfaceBackground.BackgroundTransparency = 1
+State.InterfaceBackground.Image = State.InterfaceImageFallback
+State.InterfaceBackground.ImageColor3 = Color3.fromRGB(226, 240, 255)
+State.InterfaceBackground.ImageTransparency = 0.08
+State.InterfaceBackground.ScaleType = Enum.ScaleType.Crop
+State.InterfaceBackground.ZIndex = 0
+State.InterfaceBackground:SetAttribute("RaphaelOwned", true)
+State.InterfaceBackground.Parent = MainFrame
+Instance.new("UICorner", State.InterfaceBackground).CornerRadius = UDim.new(0, 18)
+
+task.spawn(function()
+    local assetPath = Extensions.ResolveInterfaceBackground()
+    if State.Running and State.InterfaceBackground and State.InterfaceBackground.Parent then
+        State.InterfaceBackground.Image = assetPath
+        pcall(function()
+            ContentProvider:PreloadAsync({State.InterfaceBackground})
+        end)
+    end
+end)
 
 local MainShadow = Instance.new("Frame")
 MainShadow.Name = "ShadowCompatibilityLayer"
@@ -855,8 +930,9 @@ end)
 
 local MainGradient = Instance.new("UIGradient")
 MainGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 14, 9)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 15, 7))
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 94, 168)),
+    ColorSequenceKeypoint.new(0.52, Color3.fromRGB(97, 145, 218)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(93, 78, 186))
 })
 MainGradient.Rotation = 35
 MainGradient.Parent = MainFrame
@@ -872,7 +948,7 @@ local TopAccentGradient = Instance.new("UIGradient")
 TopAccentGradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0, Theme.Accent),
     ColorSequenceKeypoint.new(0.5, Theme.Accent2),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 224, 104))
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(201, 235, 255))
 })
 TopAccentGradient.Parent = TopAccent
 
@@ -898,16 +974,16 @@ local Header = Instance.new("Frame")
 Header.Name = "Header"
 Header.Size = UDim2.new(1, 0, 0, 52)
 Header.BackgroundColor3 = Theme.Surface
-Header.BackgroundTransparency = 0.1
+Header.BackgroundTransparency = 0.38
 Header.BorderSizePixel = 0
 Header.Active = true
 Header.Parent = MainFrame
 
 local HeaderGradient = Instance.new("UIGradient")
 HeaderGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(54, 35, 13)),
-    ColorSequenceKeypoint.new(0.55, Color3.fromRGB(30, 21, 14)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(65, 28, 10))
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 126, 207)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(65, 106, 188)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(105, 83, 195))
 })
 HeaderGradient.Parent = Header
 
@@ -941,7 +1017,7 @@ local Subtitle = Instance.new("TextLabel")
 Subtitle.Size = UDim2.new(1, -168, 0, 17)
 Subtitle.Position = UDim2.fromOffset(59, 29)
 Subtitle.BackgroundTransparency = 1
-Subtitle.Text = "DeltaX · Luau runtime suite"
+Subtitle.Text = "YAOGUANG  //  CELESTIAL INTERFACE"
 Subtitle.TextColor3 = Theme.SubText
 Subtitle.Font = Enum.Font.Gotham
 Subtitle.TextSize = 10
@@ -951,35 +1027,35 @@ Subtitle.Parent = Header
 local MinimizeButton = Instance.new("TextButton")
 MinimizeButton.Size = UDim2.fromOffset(32, 32)
 MinimizeButton.Position = UDim2.new(1, -78, 0, 10)
-MinimizeButton.BackgroundColor3 = Theme.Warning
+MinimizeButton.BackgroundColor3 = Theme.Text
+MinimizeButton.BackgroundTransparency = 1
 MinimizeButton.Text = ""
 MinimizeButton.AutoButtonColor = false
 MinimizeButton.Parent = Header
 Instance.new("UICorner", MinimizeButton).CornerRadius = UDim.new(0, 10)
-local MinimizeIcon = UI.CreateIcon(MinimizeButton, "minus", 16, Theme.Background)
+local MinimizeIcon = UI.CreateIcon(MinimizeButton, "minus", 19, Theme.Text)
 MinimizeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 MinimizeIcon.Position = UDim2.fromScale(0.5, 0.5)
-UI.AddRipple(MinimizeButton, Theme.Text)
 
 local CloseButton = Instance.new("TextButton")
 CloseButton.Size = UDim2.fromOffset(32, 32)
 CloseButton.Position = UDim2.new(1, -40, 0, 10)
-CloseButton.BackgroundColor3 = Theme.Danger
+CloseButton.BackgroundColor3 = Theme.Text
+CloseButton.BackgroundTransparency = 1
 CloseButton.Text = ""
 CloseButton.AutoButtonColor = false
 CloseButton.Parent = Header
 Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0, 10)
-local CloseIcon = UI.CreateIcon(CloseButton, "x", 16, Theme.Text)
+local CloseIcon = UI.CreateIcon(CloseButton, "x", 19, Theme.Danger)
 CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 CloseIcon.Position = UDim2.fromScale(0.5, 0.5)
-UI.AddRipple(CloseButton, Theme.Text)
 
 local Sidebar = Instance.new("ScrollingFrame")
 Sidebar.Name = "Sidebar"
 Sidebar.Position = UDim2.fromOffset(10, 62)
-Sidebar.Size = UDim2.new(0, 126, 1, -92)
+Sidebar.Size = UDim2.new(0, 132, 1, -92)
 Sidebar.BackgroundColor3 = Theme.Surface
-Sidebar.BackgroundTransparency = 0.18
+Sidebar.BackgroundTransparency = 0.44
 Sidebar.BorderSizePixel = 0
 Sidebar.ScrollBarThickness = 0
 Sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -989,6 +1065,7 @@ Sidebar.CanvasSize = UDim2.new()
 Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.None
 Sidebar.Parent = MainFrame
 Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 11)
+UI.AddSmoothGradient(Sidebar, Theme.Surface:Lerp(Theme.Background, 0.28), Theme.SurfaceLight:Lerp(Theme.Accent2, 0.18), 90)
 
 local SidebarPadding = Instance.new("UIPadding")
 SidebarPadding.PaddingTop = UDim.new(0, 8)
@@ -1007,8 +1084,8 @@ end)
 
 local Content = Instance.new("Frame")
 Content.Name = "Content"
-Content.Position = UDim2.fromOffset(146, 62)
-Content.Size = UDim2.new(1, -156, 1, -92)
+Content.Position = UDim2.fromOffset(152, 62)
+Content.Size = UDim2.new(1, -162, 1, -92)
 Content.BackgroundTransparency = 1
 Content.ClipsDescendants = true
 Content.Parent = MainFrame
@@ -1054,7 +1131,7 @@ local function createTab(name, order)
     button.Name = name .. "Tab"
     button.Size = UDim2.new(1, 0, 0, 37)
     button.BackgroundColor3 = Theme.SurfaceLight
-    button.BackgroundTransparency = 0.45
+    button.BackgroundTransparency = 0.54
     button.BorderSizePixel = 0
     button.Text = name
     button.TextColor3 = Theme.SubText
@@ -1071,8 +1148,9 @@ local function createTab(name, order)
 
     local tabGradient = Instance.new("UIGradient")
     tabGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.Accent),
-        ColorSequenceKeypoint.new(1, Theme.Accent2)
+        ColorSequenceKeypoint.new(0, Theme.Accent2:Lerp(Theme.Background, 0.12)),
+        ColorSequenceKeypoint.new(0.5, Theme.Accent:Lerp(Color3.fromRGB(255, 255, 255), 0.1)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(104, 180, 255))
     })
     tabGradient.Rotation = 15
     tabGradient.Enabled = false
@@ -1134,7 +1212,7 @@ local function createTab(name, order)
             local selected = tabName == name
             data.Gradient.Enabled = selected
             tween(data.Button, {
-                BackgroundTransparency = selected and 0 or 0.45,
+                BackgroundTransparency = selected and 0.1 or 0.54,
                 BackgroundColor3 = selected and Theme.Accent or Theme.SurfaceLight,
                 TextColor3 = selected and Theme.Text or Theme.SubText
             })
@@ -1158,15 +1236,21 @@ local function createSection(parent, title, description)
     section.Size = UDim2.new(1, 0, 0, 0)
     section.AutomaticSize = Enum.AutomaticSize.Y
     section.BackgroundColor3 = Theme.Surface
-    section.BackgroundTransparency = 0.16
+    section.BackgroundTransparency = 0.46
     section.BorderSizePixel = 0
     section.Parent = parent
     Instance.new("UICorner", section).CornerRadius = UDim.new(0, 13)
+    local sectionStroke = Instance.new("UIStroke")
+    sectionStroke.Color = Theme.Accent
+    sectionStroke.Transparency = 0.82
+    sectionStroke.Thickness = 1
+    sectionStroke.Parent = section
 
     local surfaceGradient = Instance.new("UIGradient")
     surfaceGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.Surface),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(36, 20, 10))
+        ColorSequenceKeypoint.new(0, Theme.Surface:Lerp(Color3.fromRGB(255, 255, 255), 0.08)),
+        ColorSequenceKeypoint.new(0.5, Theme.SurfaceLight:Lerp(Theme.Surface, 0.42)),
+        ColorSequenceKeypoint.new(1, Theme.Accent2:Lerp(Theme.Surface, 0.58))
     })
     surfaceGradient.Rotation = 28
     surfaceGradient.Parent = section
@@ -1258,6 +1342,7 @@ local function createToggle(parent, text, defaultValue, callback)
     button.Size = UDim2.fromOffset(32, 32)
     button.Position = UDim2.new(1, -35, 0.5, -16)
     button.BackgroundColor3 = defaultValue and Theme.Accent or Theme.SurfaceLight
+    button.BackgroundTransparency = defaultValue and 0.08 or 0.28
     button.BorderSizePixel = 0
     button.Text = ""
     button.AutoButtonColor = false
@@ -1266,8 +1351,9 @@ local function createToggle(parent, text, defaultValue, callback)
 
     local buttonGradient = Instance.new("UIGradient")
     buttonGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.Accent),
-        ColorSequenceKeypoint.new(1, Theme.Accent2)
+        ColorSequenceKeypoint.new(0, Theme.Accent2),
+        ColorSequenceKeypoint.new(0.52, Theme.Accent:Lerp(Color3.fromRGB(255, 255, 255), 0.1)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(128, 213, 255))
     })
     buttonGradient.Rotation = 45
     buttonGradient.Enabled = defaultValue
@@ -1286,6 +1372,7 @@ local function createToggle(parent, text, defaultValue, callback)
         stateIcon.Image = UI.GetIcon(value and "check" or "power")
         tween(button, {
             BackgroundColor3 = value and Theme.Accent or Theme.SurfaceLight,
+            BackgroundTransparency = value and 0.08 or 0.28,
             Rotation = value and 0 or -4
         })
         tween(stateIcon, {
@@ -1337,10 +1424,11 @@ local function createInput(parent, labelText, defaultText, placeholder, live, ca
     box.Size = UDim2.new(1, 0, 0, 31)
     box.Position = UDim2.fromOffset(0, 20)
     box.BackgroundColor3 = Theme.Input
+    box.BackgroundTransparency = 0.2
     box.BorderSizePixel = 0
     box.ClearTextOnFocus = false
     box.PlaceholderText = placeholder or ""
-    box.PlaceholderColor3 = Color3.fromRGB(122, 102, 75)
+    box.PlaceholderColor3 = Color3.fromRGB(148, 181, 220)
     box.Text = tostring(defaultText or "")
     box.TextColor3 = Theme.Text
     box.Font = Enum.Font.Gotham
@@ -1348,6 +1436,7 @@ local function createInput(parent, labelText, defaultText, placeholder, live, ca
     box.TextXAlignment = Enum.TextXAlignment.Left
     box.Parent = holder
     Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
+    UI.AddSmoothGradient(box, Theme.Input:Lerp(Theme.Background, 0.18), Theme.SurfaceLight:Lerp(Theme.Input, 0.52), 0)
 
     local boxPadding = Instance.new("UIPadding")
     boxPadding.PaddingLeft = UDim.new(0, 10)
@@ -1355,7 +1444,7 @@ local function createInput(parent, labelText, defaultText, placeholder, live, ca
     boxPadding.Parent = box
 
     local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(91, 66, 37)
+    stroke.Color = Color3.fromRGB(69, 139, 222)
     stroke.Transparency = 0.5
     stroke.Parent = box
 
@@ -1363,7 +1452,7 @@ local function createInput(parent, labelText, defaultText, placeholder, live, ca
         tween(stroke, {Color = Theme.Accent, Transparency = 0})
     end)
     connect(box.FocusLost, function()
-        tween(stroke, {Color = Color3.fromRGB(91, 66, 37), Transparency = 0.5})
+        tween(stroke, {Color = Color3.fromRGB(69, 139, 222), Transparency = 0.5})
         if not live and callback then
             callback(box.Text, box)
         end
@@ -1381,8 +1470,10 @@ end
 
 local function createButton(parent, text, callback, color)
     local button = Instance.new("TextButton")
+    local baseColor = color or Theme.Accent
     button.Size = UDim2.new(1, 0, 0, 34)
-    button.BackgroundColor3 = color or Theme.Accent
+    button.BackgroundColor3 = baseColor
+    button.BackgroundTransparency = 0.08
     button.BorderSizePixel = 0
     button.Text = text
     button.TextColor3 = Theme.Text
@@ -1391,6 +1482,7 @@ local function createButton(parent, text, callback, color)
     button.AutoButtonColor = false
     button.Parent = parent
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 9)
+    UI.AddSmoothGradient(button, baseColor:Lerp(Theme.Background, 0.2), baseColor:Lerp(Color3.fromRGB(255, 255, 255), 0.18), 8)
 
     local actionIcon = UI.CreateIcon(button, UI.GetButtonIcon(text), 14, Theme.Text)
     actionIcon.AnchorPoint = Vector2.new(0, 0.5)
@@ -1402,7 +1494,7 @@ local function createButton(parent, text, callback, color)
         tween(button, {BackgroundTransparency = 0.16})
     end)
     connect(button.MouseLeave, function()
-        tween(button, {BackgroundTransparency = 0})
+        tween(button, {BackgroundTransparency = 0.08})
     end)
     connect(button.Activated, function()
         tween(button, {Size = UDim2.new(1, -4, 0, 32)}, 0.06)
@@ -1426,7 +1518,9 @@ local function createDualButtons(parent, leftText, leftCallback, rightText, righ
 
     local left = Instance.new("TextButton")
     left.Size = UDim2.new(0.5, -4, 1, 0)
-    left.BackgroundColor3 = leftColor or Theme.Accent
+    local leftBaseColor = leftColor or Theme.Accent
+    left.BackgroundColor3 = leftBaseColor
+    left.BackgroundTransparency = 0.08
     left.BorderSizePixel = 0
     left.Text = leftText
     left.TextColor3 = Theme.Text
@@ -1435,6 +1529,7 @@ local function createDualButtons(parent, leftText, leftCallback, rightText, righ
     left.AutoButtonColor = false
     left.Parent = holder
     Instance.new("UICorner", left).CornerRadius = UDim.new(0, 9)
+    UI.AddSmoothGradient(left, leftBaseColor:Lerp(Theme.Background, 0.2), leftBaseColor:Lerp(Color3.fromRGB(255, 255, 255), 0.16), 8)
     local leftIcon = UI.CreateIcon(left, UI.GetButtonIcon(leftText), 13, Theme.Text)
     leftIcon.AnchorPoint = Vector2.new(0, 0.5)
     leftIcon.Position = UDim2.new(0, 9, 0.5, 0)
@@ -1444,7 +1539,9 @@ local function createDualButtons(parent, leftText, leftCallback, rightText, righ
     local right = Instance.new("TextButton")
     right.Size = UDim2.new(0.5, -4, 1, 0)
     right.Position = UDim2.new(0.5, 4, 0, 0)
-    right.BackgroundColor3 = rightColor or Theme.Accent2
+    local rightBaseColor = rightColor or Theme.Accent2
+    right.BackgroundColor3 = rightBaseColor
+    right.BackgroundTransparency = 0.08
     right.BorderSizePixel = 0
     right.Text = rightText
     right.TextColor3 = Theme.Text
@@ -1453,6 +1550,7 @@ local function createDualButtons(parent, leftText, leftCallback, rightText, righ
     right.AutoButtonColor = false
     right.Parent = holder
     Instance.new("UICorner", right).CornerRadius = UDim.new(0, 9)
+    UI.AddSmoothGradient(right, rightBaseColor:Lerp(Theme.Background, 0.2), rightBaseColor:Lerp(Color3.fromRGB(255, 255, 255), 0.16), 8)
     local rightIcon = UI.CreateIcon(right, UI.GetButtonIcon(rightText), 13, Theme.Text)
     rightIcon.AnchorPoint = Vector2.new(0, 0.5)
     rightIcon.Position = UDim2.new(0, 9, 0.5, 0)
@@ -1493,6 +1591,7 @@ local function createSelector(parent, labelText, options, defaultValue, callback
     button.Size = UDim2.new(1, 0, 0, 31)
     button.Position = UDim2.fromOffset(0, 20)
     button.BackgroundColor3 = Theme.Input
+    button.BackgroundTransparency = 0.2
     button.BorderSizePixel = 0
     button.TextColor3 = Theme.Text
     button.Font = Enum.Font.GothamBold
@@ -1500,6 +1599,7 @@ local function createSelector(parent, labelText, options, defaultValue, callback
     button.AutoButtonColor = false
     button.Parent = holder
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
+    UI.AddSmoothGradient(button, Theme.Input:Lerp(Theme.Background, 0.18), Theme.SurfaceLight:Lerp(Theme.Input, 0.52), 0)
 
     local chevronIcon = UI.CreateIcon(button, "chevron-down", 14, Theme.SubText)
     chevronIcon.AnchorPoint = Vector2.new(1, 0.5)
@@ -1604,9 +1704,11 @@ local function createColorLegend(parent)
     local holder = Instance.new("Frame")
     holder.Size = UDim2.new(1, 0, 0, 38)
     holder.BackgroundColor3 = Theme.Input
+    holder.BackgroundTransparency = 0.2
     holder.BorderSizePixel = 0
     holder.Parent = parent
     Instance.new("UICorner", holder).CornerRadius = UDim.new(0, 8)
+    UI.AddSmoothGradient(holder, Theme.Input:Lerp(Theme.Background, 0.18), Theme.SurfaceLight:Lerp(Theme.Input, 0.52), 0)
 
     local entries = {
         {"Player", Theme.Player},
@@ -1653,20 +1755,20 @@ local InfoPage = createTab("Info", 7)
 local function resizeInterface()
     Camera = Workspace.CurrentCamera or Camera
     local viewport = Camera.ViewportSize
-    local width = math.clamp(viewport.X - 20, 320, 820)
-    local height = math.clamp(viewport.Y - 28, 330, 570)
+    local width = math.clamp(viewport.X - 20, 320, 840)
+    local height = math.clamp(viewport.Y - 28, 330, 540)
     MainFrame.Size = UDim2.fromOffset(width, height)
     if width < 520 then
-        Sidebar.Size = UDim2.new(0, 102, 1, -92)
-        Content.Position = UDim2.fromOffset(121, 62)
-        Content.Size = UDim2.new(1, -131, 1, -92)
+        Sidebar.Size = UDim2.new(0, 104, 1, -92)
+        Content.Position = UDim2.fromOffset(123, 62)
+        Content.Size = UDim2.new(1, -133, 1, -92)
         for _, data in pairs(TabButtons) do
             data.Button.TextSize = 10
         end
     else
-        Sidebar.Size = UDim2.new(0, 126, 1, -92)
-        Content.Position = UDim2.fromOffset(146, 62)
-        Content.Size = UDim2.new(1, -156, 1, -92)
+        Sidebar.Size = UDim2.new(0, 132, 1, -92)
+        Content.Position = UDim2.fromOffset(152, 62)
+        Content.Size = UDim2.new(1, -162, 1, -92)
         for _, data in pairs(TabButtons) do
             data.Button.TextSize = 12
         end
@@ -1711,16 +1813,14 @@ RestoreOrb.Name = "RestoreOrb"
 RestoreOrb.Size = UDim2.fromOffset(48, 48)
 RestoreOrb.Position = UDim2.new(1, -62, 0, 18)
 RestoreOrb.BackgroundColor3 = Theme.Accent
+RestoreOrb.BackgroundTransparency = 0.08
 RestoreOrb.BorderSizePixel = 0
 RestoreOrb.Text = ""
 RestoreOrb.Visible = false
 RestoreOrb.AutoButtonColor = false
 RestoreOrb.Parent = Overlay
 Instance.new("UICorner", RestoreOrb).CornerRadius = UDim.new(0, 15)
-local OrbGradient = Instance.new("UIGradient")
-OrbGradient.Color = ColorSequence.new(Theme.Accent, Theme.Accent2)
-OrbGradient.Rotation = 45
-OrbGradient.Parent = RestoreOrb
+local OrbGradient = UI.AddSmoothGradient(RestoreOrb, Theme.Accent2:Lerp(Theme.Background, 0.14), Theme.AccentSoft, 45)
 local OrbIcon = UI.CreateIcon(RestoreOrb, "sparkles", 22, Theme.Text)
 OrbIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 OrbIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -1868,8 +1968,8 @@ connect(CloseButton.Activated, function()
     local confirmationOverlay = Instance.new("Frame")
     confirmationOverlay.Name = "ShutdownConfirmation"
     confirmationOverlay.Size = UDim2.fromScale(1, 1)
-    confirmationOverlay.BackgroundColor3 = Color3.fromRGB(7, 5, 3)
-    confirmationOverlay.BackgroundTransparency = 0.28
+    confirmationOverlay.BackgroundColor3 = Theme.Background
+    confirmationOverlay.BackgroundTransparency = 0.52
     confirmationOverlay.BorderSizePixel = 0
     confirmationOverlay.ZIndex = 1000
     confirmationOverlay.Parent = ScreenGui
@@ -1879,11 +1979,12 @@ connect(CloseButton.Activated, function()
     confirmationCard.Position = UDim2.fromScale(0.5, 0.5)
     confirmationCard.Size = UDim2.new(1, -36, 0, 178)
     confirmationCard.BackgroundColor3 = Theme.Surface
-    confirmationCard.BackgroundTransparency = 0.04
+    confirmationCard.BackgroundTransparency = 0.16
     confirmationCard.BorderSizePixel = 0
     confirmationCard.ZIndex = 1001
     confirmationCard.Parent = confirmationOverlay
     Instance.new("UICorner", confirmationCard).CornerRadius = UDim.new(0, 14)
+    UI.AddSmoothGradient(confirmationCard, Theme.Background:Lerp(Theme.Surface, 0.45), Theme.SurfaceLight, 0)
     UI.Motion.Pop(confirmationCard)
 
     local confirmationConstraint = Instance.new("UISizeConstraint")
@@ -1928,6 +2029,7 @@ connect(CloseButton.Activated, function()
     cancelButton.Position = UDim2.new(0, 18, 1, -55)
     cancelButton.Size = UDim2.new(0.5, -23, 0, 37)
     cancelButton.BackgroundColor3 = Theme.SurfaceLight
+    cancelButton.BackgroundTransparency = 0.08
     cancelButton.BorderSizePixel = 0
     cancelButton.Text = "Cancel"
     cancelButton.TextColor3 = Theme.Text
@@ -1936,11 +2038,13 @@ connect(CloseButton.Activated, function()
     cancelButton.ZIndex = 1002
     cancelButton.Parent = confirmationCard
     Instance.new("UICorner", cancelButton).CornerRadius = UDim.new(0, 9)
+    UI.AddSmoothGradient(cancelButton, Theme.Input, Theme.SurfaceLight, 0)
 
     local shutdownButton = Instance.new("TextButton")
     shutdownButton.Position = UDim2.new(0.5, 5, 1, -55)
     shutdownButton.Size = UDim2.new(0.5, -23, 0, 37)
     shutdownButton.BackgroundColor3 = Theme.Danger
+    shutdownButton.BackgroundTransparency = 0.08
     shutdownButton.BorderSizePixel = 0
     shutdownButton.Text = "Tắt script"
     shutdownButton.TextColor3 = Theme.Text
@@ -1949,6 +2053,7 @@ connect(CloseButton.Activated, function()
     shutdownButton.ZIndex = 1002
     shutdownButton.Parent = confirmationCard
     Instance.new("UICorner", shutdownButton).CornerRadius = UDim.new(0, 9)
+    UI.AddSmoothGradient(shutdownButton, Theme.Danger:Lerp(Theme.Background, 0.2), Theme.Danger:Lerp(Theme.Text, 0.2), 0)
 
     cancelButton.Activated:Connect(function()
         confirmationOverlay:Destroy()
@@ -3615,6 +3720,15 @@ function Extensions.UpdateAimbotStatus(text, color)
             releaseButton.Text = "AIM OFF"
             releaseButton.BackgroundColor3 = Theme.SurfaceLight
         end
+        local releaseGradient = releaseButton:FindFirstChild("RaphaelStateGradient")
+        if releaseGradient then
+            local stateColor = releaseButton.BackgroundColor3
+            releaseGradient.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, stateColor:Lerp(Theme.Background, 0.2)),
+                ColorSequenceKeypoint.new(0.52, stateColor:Lerp(Theme.Text, 0.1)),
+                ColorSequenceKeypoint.new(1, stateColor:Lerp(Theme.Text, 0.2))
+            })
+        end
     end
 end
 
@@ -3704,6 +3818,51 @@ function Extensions.IsAimbotPlayerBlacklisted(player)
     return player ~= nil and State.Aimbot.BlacklistNames[string.lower(player.Name)] == true
 end
 
+function Extensions.IsAimbotTeammate(player)
+    if not State.Aimbot.TeamCheck or not player or player == LocalPlayer then
+        return false
+    end
+    local localTeam = LocalPlayer.Team
+    if localTeam then
+        return not LocalPlayer.Neutral and not player.Neutral and player.Team == localTeam
+    end
+    return not LocalPlayer.Neutral and not player.Neutral and player.TeamColor == LocalPlayer.TeamColor
+end
+
+function Extensions.RefreshAimbotTeamStatus(showNotification)
+    local localTeam = LocalPlayer.Team
+    local teamName = localTeam and localTeam.Name or (LocalPlayer.Neutral and "Neutral / FFA" or tostring(LocalPlayer.TeamColor))
+    local memberCount = 0
+    local teammateCount = 0
+    local opponentCount = 0
+    for _, player in ipairs(Players:GetPlayers()) do
+        local sameTeam
+        if localTeam then
+            sameTeam = not LocalPlayer.Neutral and not player.Neutral and player.Team == localTeam
+        else
+            sameTeam = not LocalPlayer.Neutral and not player.Neutral and player.TeamColor == LocalPlayer.TeamColor
+        end
+        if sameTeam then
+            memberCount = memberCount + 1
+            if player ~= LocalPlayer then
+                teammateCount = teammateCount + 1
+            end
+        elseif player ~= LocalPlayer then
+            opponentCount = opponentCount + 1
+        end
+    end
+    local summary = string.format("%s · %d thành viên · %d đồng đội · %d team khác", teamName, memberCount, teammateCount, opponentCount)
+    local statusValue = State.Aimbot.TeamStatusValue
+    if statusValue and statusValue.Parent then
+        statusValue.Text = summary
+        statusValue.TextColor3 = State.Aimbot.TeamCheck and Theme.Success or Theme.SubText
+    end
+    if showNotification then
+        notify(summary, State.Aimbot.TeamCheck and Theme.Success or Theme.Warning)
+    end
+    return memberCount, teammateCount, opponentCount
+end
+
 function Extensions.ResolveStickyPlayer()
     local normalized = string.lower((string.gsub(State.Aimbot.StickyUsername or "", "^%s*@?%s*(.-)%s*$", "%1")))
     if normalized == "" then
@@ -3771,7 +3930,7 @@ function Extensions.FindAimbotTarget()
         if not model or not humanoid or humanoid.Health <= 0 then
             return
         end
-        if player and Extensions.IsAimbotPlayerBlacklisted(player) then
+        if player and (Extensions.IsAimbotPlayerBlacklisted(player) or Extensions.IsAimbotTeammate(player)) then
             return
         end
         if model == State.Aimbot.ReleasedModel or player == State.Aimbot.ReleasedPlayer then
@@ -3862,7 +4021,7 @@ function Extensions.TryStickyAimbotOverride(now)
     end
     State.Aimbot.LastStickyCheck = now
     local player = Extensions.ResolveStickyPlayer()
-    if not player or player == State.Aimbot.TargetPlayer or Extensions.IsAimbotPlayerBlacklisted(player) or player == State.Aimbot.ReleasedPlayer then
+    if not player or player == State.Aimbot.TargetPlayer or Extensions.IsAimbotPlayerBlacklisted(player) or Extensions.IsAimbotTeammate(player) or player == State.Aimbot.ReleasedPlayer then
         return false
     end
     local character = player.Character
@@ -3900,6 +4059,7 @@ function Extensions.IsAimbotTargetValid()
         and aimPart ~= nil
         and aimPart.Parent ~= nil
         and aimPart:IsDescendantOf(model)
+        and not (State.Aimbot.TargetPlayer and Extensions.IsAimbotTeammate(State.Aimbot.TargetPlayer))
 end
 
 function Extensions.EnsureAimbotFOV()
@@ -4048,6 +4208,8 @@ function Extensions.CreateAimbotReleaseButton()
     stroke.Color = Theme.Text
     stroke.Transparency = 0.68
     stroke.Parent = button
+    local releaseGradient = UI.AddSmoothGradient(button, button.BackgroundColor3:Lerp(Theme.Background, 0.2), button.BackgroundColor3:Lerp(Theme.Text, 0.18), 0)
+    releaseGradient.Name = "RaphaelStateGradient"
     UI.AddRipple(button, Theme.Text)
     State.Aimbot.ReleaseButton = button
     UI.Motion.Pop(button)
@@ -4108,6 +4270,11 @@ function Extensions.UpdateAimbotFrame(now)
         return
     end
     Extensions.UpdateAimbotFOV()
+
+    if State.Aimbot.TargetPlayer and Extensions.IsAimbotTeammate(State.Aimbot.TargetPlayer) then
+        Extensions.ClearAimbotTarget(false)
+        Extensions.UpdateAimbotStatus("Đã bỏ qua đồng đội; đang tìm team địch", Theme.Warning)
+    end
 
     if State.Aimbot.TargetModel and not Extensions.IsAimbotTargetValid() then
         Extensions.SetAimbotEnabled(false, "Mục tiêu đã chết hoặc không còn hợp lệ; Aimbot đã dừng.", false)
@@ -4186,6 +4353,7 @@ local function createFloatingSavedButton()
     FloatingSavedButton.Size = UDim2.fromOffset(118, 40)
     FloatingSavedButton.Position = UDim2.new(0, 18, 0.72, 0)
     FloatingSavedButton.BackgroundColor3 = Theme.Accent2
+    FloatingSavedButton.BackgroundTransparency = 0.08
     FloatingSavedButton.BorderSizePixel = 0
     FloatingSavedButton.Text = State.SavedButtonName
     FloatingSavedButton.TextColor3 = Theme.Text
@@ -4199,6 +4367,7 @@ local function createFloatingSavedButton()
     stroke.Color = Theme.Text
     stroke.Transparency = 0.65
     stroke.Parent = FloatingSavedButton
+    UI.AddSmoothGradient(FloatingSavedButton, Theme.Accent2:Lerp(Theme.Background, 0.18), Theme.AccentSoft, 0)
 
     local dragging = false
     local moved = false
@@ -4600,6 +4769,7 @@ function Extensions.BuildConfig()
             FOVRadius = State.Aimbot.FOVRadius,
             AimPart = State.Aimbot.AimPart,
             WallCheck = State.Aimbot.WallCheck,
+            TeamCheck = State.Aimbot.TeamCheck,
             StickyEnabled = State.Aimbot.StickyEnabled,
             StickyUsername = State.Aimbot.StickyUsername,
             BlacklistText = State.Aimbot.BlacklistText,
@@ -4735,6 +4905,7 @@ function Extensions.SyncConfigControls()
         FPSBoost = State.FPSBoost,
         AimbotEnabled = State.Aimbot.Enabled,
         AimbotWallCheck = State.Aimbot.WallCheck,
+        AimbotTeamCheck = State.Aimbot.TeamCheck,
         AimbotStickyEnabled = State.Aimbot.StickyEnabled,
         AimbotReleaseVisible = State.Aimbot.ReleaseButtonVisible,
         ConfigAutoLoad = State.ConfigAutoLoad
@@ -4815,6 +4986,7 @@ function Extensions.ApplyConfig(config, silent)
     State.Aimbot.FOVRadius = math.floor(math.clamp(tonumber(aimbot.FOVRadius) or State.Aimbot.FOVRadius, 30, 1000))
     State.Aimbot.AimPart = allowed(aimbot.AimPart, {"Đầu", "Thân"}, State.Aimbot.AimPart)
     State.Aimbot.WallCheck = booleanValue(aimbot, "WallCheck", State.Aimbot.WallCheck)
+    State.Aimbot.TeamCheck = booleanValue(aimbot, "TeamCheck", State.Aimbot.TeamCheck)
     State.Aimbot.StickyEnabled = booleanValue(aimbot, "StickyEnabled", State.Aimbot.StickyEnabled)
     State.Aimbot.StickyUsername = tostring(aimbot.StickyUsername or State.Aimbot.StickyUsername or "")
     State.Aimbot.StickyPlayer = nil
@@ -5239,7 +5411,7 @@ end)
 end
 
 do
-local AimbotLockSection = createSection(AimbotPage, "Aimbot", "Khóa một mục tiêu gần tâm màn hình. Mục tiêu bị che sẽ bị loại khi Check Tường bật. Bỏ Aim chỉ nhả mục tiêu hiện tại; Aimbot tiếp tục chờ mục tiêu khác.")
+local AimbotLockSection = createSection(AimbotPage, "Aimbot", "Khóa mục tiêu gần tâm màn hình. Check Tường loại mục tiêu bị che; Check Team loại đồng đội và chỉ nhận team địch hoặc team khác. Bỏ Aim chỉ nhả mục tiêu hiện tại.")
 State.ConfigControls.AimbotEnabled = createToggle(AimbotLockSection, "Bật Aimbot", State.Aimbot.Enabled, function(value)
     if State.Aimbot.Enabled ~= value then
         Extensions.SetAimbotEnabled(value, nil, false)
@@ -5287,7 +5459,26 @@ State.ConfigControls.AimbotWallCheck = createToggle(AimbotLockSection, "Check T�
         Extensions.UpdateAimbotStatus("Mục tiêu bị tường che; đang chờ mục tiêu nhìn thấy", Theme.Warning)
     end
 end)
+State.ConfigControls.AimbotTeamCheck = createToggle(AimbotLockSection, "Check Team · chỉ Aim team địch", State.Aimbot.TeamCheck, function(value)
+    State.Aimbot.TeamCheck = value
+    if value and State.Aimbot.TargetPlayer and Extensions.IsAimbotTeammate(State.Aimbot.TargetPlayer) then
+        Extensions.ClearAimbotTarget(false)
+        Extensions.UpdateAimbotStatus("Đã loại đồng đội; đang chờ team địch", Theme.Warning)
+    end
+    Extensions.RefreshAimbotTeamStatus(false)
+end)
+State.Aimbot.TeamStatusValue = createInfoRow(AimbotLockSection, "Team", "Chưa kiểm tra")
+createButton(AimbotLockSection, "Kiểm tra team hiện tại", function()
+    Extensions.RefreshAimbotTeamStatus(true)
+end, Theme.SurfaceLight)
 State.Aimbot.StatusValue = createInfoRow(AimbotLockSection, "Mục tiêu", State.Aimbot.TargetLabel)
+connect(LocalPlayer:GetPropertyChangedSignal("Team"), function()
+    Extensions.RefreshAimbotTeamStatus(false)
+end)
+connect(LocalPlayer:GetPropertyChangedSignal("Neutral"), function()
+    Extensions.RefreshAimbotTeamStatus(false)
+end)
+Extensions.RefreshAimbotTeamStatus(false)
 
 end
 
@@ -5789,14 +5980,17 @@ local ProfileSection = createSection(InfoPage, "Hồ sơ", "Thông tin client hi
 local ProfileCard = Instance.new("Frame")
 ProfileCard.Size = UDim2.new(1, 0, 0, 76)
 ProfileCard.BackgroundColor3 = Theme.Input
+ProfileCard.BackgroundTransparency = 0.2
 ProfileCard.BorderSizePixel = 0
 ProfileCard.Parent = ProfileSection
 Instance.new("UICorner", ProfileCard).CornerRadius = UDim.new(0, 10)
+UI.AddSmoothGradient(ProfileCard, Theme.Input:Lerp(Theme.Background, 0.16), Theme.SurfaceLight:Lerp(Theme.Input, 0.5), 0)
 
 local Avatar = Instance.new("ImageLabel")
 Avatar.Size = UDim2.fromOffset(58, 58)
 Avatar.Position = UDim2.fromOffset(9, 9)
 Avatar.BackgroundColor3 = Theme.SurfaceLight
+Avatar.BackgroundTransparency = 0.12
 Avatar.BorderSizePixel = 0
 Avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
 Avatar.Parent = ProfileCard
@@ -5894,13 +6088,14 @@ rebuildPlayerList = function()
         local row = Instance.new("TextButton")
         row.Size = UDim2.new(1, 0, 0, 38)
         row.BackgroundColor3 = Theme.Input
-        row.BackgroundTransparency = player == LocalPlayer and 0 or 0.22
+        row.BackgroundTransparency = player == LocalPlayer and 0.1 or 0.22
         row.BorderSizePixel = 0
         row.Text = ""
         row.AutoButtonColor = false
         row.LayoutOrder = index
         row.Parent = PlayerListContainer
         Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+        UI.AddSmoothGradient(row, player == LocalPlayer and Theme.Accent:Lerp(Theme.Background, 0.35) or Theme.Input, player == LocalPlayer and Theme.AccentSoft or Theme.SurfaceLight, 0)
 
         local image = Instance.new("ImageLabel")
         image.Size = UDim2.fromOffset(30, 30)
@@ -6415,7 +6610,7 @@ end)
 ActiveTab = "Movement"
 Pages.Movement.Visible = true
 TabButtons.Movement.Button.BackgroundColor3 = Theme.Accent
-TabButtons.Movement.Button.BackgroundTransparency = 0
+TabButtons.Movement.Button.BackgroundTransparency = 0.1
 TabButtons.Movement.Button.TextColor3 = Theme.Text
 TabButtons.Movement.Icon.ImageColor3 = Theme.Text
 TabButtons.Movement.Gradient.Enabled = true
