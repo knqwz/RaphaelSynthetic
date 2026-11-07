@@ -495,6 +495,10 @@ local State = {
     LastAntiAFKPulse = 0,
     AntiAFKPulseInterval = 50,
     AntiStun = false,
+    GodMode = false,
+    GodHealthValue = 1000000000,
+    GodHealthConnection = nil,
+    GodBackup = setmetatable({}, {__mode = "k"}),
     FPSBoost = false,
     FPSBoostApplied = false,
     RenderQualityBackup = nil,
@@ -597,6 +601,22 @@ local State = {
         RadiusMeters = 15,
         ExactName = "",
         Color = Theme.Item
+    },
+    Inspector = {
+        Enabled = false,
+        BoxMode = "2D",
+        MaxDistance = 5000,
+        LastScan = 0,
+        Target = nil,
+        Root = nil,
+        DisplayName = "",
+        Crosshair = nil,
+        CrosshairFrame = nil,
+        Box = nil,
+        Highlight = nil,
+        Billboard = nil,
+        NameLabel = nil,
+        RaycastParams = RaycastParams.new()
     }
 }
 
@@ -2488,30 +2508,42 @@ function Extensions.DeepSuppressVision()
     end
     State.VisionDeepScanRunning = true
     State.LastVisionDeepScan = os.clock()
+
+    for _, instance in ipairs(Lighting:GetDescendants()) do
+        if not State.RemoveEffects then break end
+        suppressEffect(instance)
+    end
+
+    Camera = Workspace.CurrentCamera or Camera
+    if State.RemoveEffects and Camera then
+        for _, instance in ipairs(Camera:GetDescendants()) do
+            suppressEffect(instance)
+        end
+    end
+
     local workspaceDescendants = Workspace:GetDescendants()
     for index, instance in ipairs(workspaceDescendants) do
         if not State.RemoveEffects then
             break
         end
-        suppressEffect(instance)
-        if index % 1200 == 0 then
+        if instance:IsA("ParticleEmitter") or instance:IsA("Beam") or instance:IsA("Trail") or instance:IsA("Smoke") then
+            suppressEffect(instance)
+        end
+        if index % 300 == 0 then
             task.wait()
         end
     end
+
     local guiDescendants = PlayerGui:GetDescendants()
     for index, instance in ipairs(guiDescendants) do
         if not State.RemoveEffects then
             break
         end
-        suppressEffect(instance)
-        if index % 600 == 0 then
-            task.wait()
-        end
-    end
-    if State.RemoveEffects then
-        Camera = Workspace.CurrentCamera or Camera
-        for _, instance in ipairs(Camera:GetDescendants()) do
+        if instance:IsA("LayerCollector") or instance:IsA("GuiObject") then
             suppressEffect(instance)
+        end
+        if index % 200 == 0 then
+            task.wait()
         end
     end
     State.VisionDeepScanRunning = false
@@ -2524,22 +2556,6 @@ local function applyNoEffects()
     Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
     Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
     Lighting.ShadowSoftness = 0
-    for _, instance in ipairs(Lighting:GetDescendants()) do
-        suppressEffect(instance)
-    end
-    Camera = Workspace.CurrentCamera or Camera
-    for _, instance in ipairs(Camera:GetDescendants()) do
-        suppressEffect(instance)
-    end
-    for instance in pairs(EffectBackup) do
-        if instance and instance.Parent then
-            suppressEffect(instance)
-        end
-    end
-    local now = os.clock()
-    if not State.VisionDeepScanRunning and (State.LastVisionDeepScan == 0 or now - State.LastVisionDeepScan >= 12) then
-        task.spawn(Extensions.DeepSuppressVision)
-    end
 end
 
 local function restoreEffects()
@@ -3109,6 +3125,277 @@ function Extensions.GetStableMobScreenBounds(model, visualAnchor, anchorPoint)
     local anchorIsHead = visualAnchor and visualAnchor.Name == "Head"
     local topOffset = anchorIsHead and estimatedHeight * 0.12 or estimatedHeight * 0.48
     return Vector2.new(anchorPoint.X - estimatedWidth * 0.5, anchorPoint.Y - topOffset), Vector2.new(estimatedWidth, estimatedHeight)
+end
+
+function Extensions.ResolveInspectorTarget(instance)
+    if not instance or not instance:IsDescendantOf(Workspace) then
+        return nil, "", Theme.Accent
+    end
+    local current = instance
+    local candidate
+    local humanoidModel
+    local depth = 0
+    while current and current ~= Workspace and depth < 10 do
+        if current:IsA("Tool") and not candidate then
+            candidate = current
+        elseif current:IsA("Model") then
+            if current:FindFirstChildOfClass("Humanoid") then
+                humanoidModel = current
+                break
+            elseif not candidate then
+                candidate = current
+            end
+        end
+        current = current.Parent
+        depth = depth + 1
+    end
+
+    local target = humanoidModel or candidate or instance
+    local lowerName = string.lower(target.Name)
+    if target:IsA("Model") and (lowerName == "map" or lowerName == "workspace" or lowerName == "world") then
+        target = instance
+    end
+
+    if humanoidModel then
+        local player = Players:GetPlayerFromCharacter(humanoidModel)
+        if player then
+            return target, player.DisplayName .. " (@" .. player.Name .. ")", Theme.Player
+        end
+        local humanoid = humanoidModel:FindFirstChildOfClass("Humanoid")
+        local displayName = humanoid and humanoid.DisplayName ~= "" and humanoid.DisplayName or humanoidModel.Name
+        return target, displayName, Theme.Mob
+    end
+    if target:IsA("Tool") then
+        return target, target.Name, Theme.Item
+    end
+    return target, target.Name .. " · " .. target.ClassName, Theme.Accent
+end
+
+function Extensions.CreateInspectorVisuals()
+    if State.Inspector.NameLabel and State.Inspector.NameLabel.Parent then
+        return
+    end
+    local crosshair = newDrawing("Circle")
+    if crosshair then
+        crosshair.Radius = 5
+        crosshair.Thickness = 1.5
+        crosshair.NumSides = 28
+        crosshair.Filled = false
+        crosshair.Color = Theme.Accent
+        crosshair.Transparency = 1
+        crosshair.Visible = false
+        State.Inspector.Crosshair = crosshair
+    else
+        local frame = Instance.new("Frame")
+        frame.Name = "RaphaelInspectorCrosshair"
+        frame.AnchorPoint = Vector2.new(0.5, 0.5)
+        frame.Size = UDim2.fromOffset(12, 12)
+        frame.BackgroundTransparency = 1
+        frame.BorderSizePixel = 0
+        frame.ZIndex = 920
+        frame:SetAttribute("RaphaelOwned", true)
+        frame.Parent = ScreenGui
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(1, 0)
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Theme.Accent
+        stroke.Thickness = 1.5
+        stroke.Parent = frame
+        State.Inspector.CrosshairFrame = frame
+    end
+
+    local box = newDrawing("Square")
+    if box then
+        box.Thickness = 1.5
+        box.Filled = false
+        box.Transparency = 1
+        box.Visible = false
+        State.Inspector.Box = box
+    else
+        local boxFrame = Instance.new("Frame")
+        boxFrame.Name = "RaphaelInspectorBox"
+        boxFrame.BackgroundTransparency = 1
+        boxFrame.BorderSizePixel = 0
+        boxFrame.Visible = false
+        boxFrame.ZIndex = 918
+        boxFrame:SetAttribute("RaphaelOwned", true)
+        boxFrame.Parent = ScreenGui
+        local stroke = Instance.new("UIStroke")
+        stroke.Name = "InspectorStroke"
+        stroke.Color = Theme.Accent
+        stroke.Thickness = 1.5
+        stroke.Parent = boxFrame
+        State.Inspector.BoxFrame = boxFrame
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "RaphaelInspectorHighlight"
+    highlight.FillTransparency = 0.82
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Enabled = false
+    highlight:SetAttribute("RaphaelOwned", true)
+    highlight.Parent = Workspace
+    State.Inspector.Highlight = highlight
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "RaphaelInspectorName"
+    nameLabel.AnchorPoint = Vector2.new(0.5, 0)
+    nameLabel.Size = UDim2.fromOffset(280, 24)
+    nameLabel.BackgroundColor3 = Theme.Background
+    nameLabel.BackgroundTransparency = 0.28
+    nameLabel.BorderSizePixel = 0
+    nameLabel.Text = ""
+    nameLabel.TextColor3 = Theme.Text
+    nameLabel.TextStrokeColor3 = Theme.Background
+    nameLabel.TextStrokeTransparency = 0.25
+    nameLabel.Font = Enum.Font.GothamMedium
+    nameLabel.TextSize = 12
+    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLabel.Visible = false
+    nameLabel.ZIndex = 921
+    nameLabel:SetAttribute("RaphaelOwned", true)
+    nameLabel.Parent = ScreenGui
+    Instance.new("UICorner", nameLabel).CornerRadius = UDim.new(0, 7)
+    State.Inspector.NameLabel = nameLabel
+end
+
+function Extensions.DestroyInspectorVisuals()
+    destroyDrawing(State.Inspector.Crosshair)
+    destroyDrawing(State.Inspector.Box)
+    State.Inspector.Crosshair = nil
+    State.Inspector.Box = nil
+    for _, instance in ipairs({State.Inspector.CrosshairFrame, State.Inspector.BoxFrame, State.Inspector.Highlight, State.Inspector.NameLabel}) do
+        if instance then
+            instance:Destroy()
+        end
+    end
+    State.Inspector.CrosshairFrame = nil
+    State.Inspector.BoxFrame = nil
+    State.Inspector.Highlight = nil
+    State.Inspector.NameLabel = nil
+    State.Inspector.Target = nil
+    State.Inspector.Root = nil
+    State.Inspector.DisplayName = ""
+end
+
+function Extensions.ScanInspector(now)
+    if now - State.Inspector.LastScan < 0.05 then
+        return
+    end
+    State.Inspector.LastScan = now
+    Camera = Workspace.CurrentCamera or Camera
+    local viewport = Camera.ViewportSize
+    local center = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
+    local ray = Camera:ViewportPointToRay(center.X, center.Y)
+    local character = LocalPlayer.Character
+    State.Inspector.RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    State.Inspector.RaycastParams.FilterDescendantsInstances = character and {character} or {}
+    State.Inspector.RaycastParams.IgnoreWater = false
+    local result = Workspace:Raycast(ray.Origin, ray.Direction * State.Inspector.MaxDistance, State.Inspector.RaycastParams)
+    if not result then
+        State.Inspector.Target = nil
+        State.Inspector.Root = nil
+        State.Inspector.DisplayName = ""
+        State.Inspector.HitPosition = nil
+        return
+    end
+    local target, displayName, color = Extensions.ResolveInspectorTarget(result.Instance)
+    State.Inspector.Target = target
+    State.Inspector.Root = result.Instance
+    State.Inspector.DisplayName = displayName
+    State.Inspector.Color = color
+    State.Inspector.HitPosition = result.Position
+end
+
+function Extensions.UpdateInspector(now)
+    if not State.Inspector.Enabled then
+        return
+    end
+    Extensions.CreateInspectorVisuals()
+    Camera = Workspace.CurrentCamera or Camera
+    local viewport = Camera.ViewportSize
+    local center = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
+    if State.Inspector.Crosshair then
+        State.Inspector.Crosshair.Position = center
+        setDrawingVisible(State.Inspector.Crosshair, true)
+    elseif State.Inspector.CrosshairFrame then
+        State.Inspector.CrosshairFrame.Position = UDim2.fromOffset(center.X, center.Y)
+        State.Inspector.CrosshairFrame.Visible = true
+    end
+
+    Extensions.ScanInspector(now)
+    local target = State.Inspector.Target
+    local hitPosition = State.Inspector.HitPosition
+    local color = State.Inspector.Color or Theme.Accent
+    local valid = target and target.Parent and hitPosition ~= nil
+    if State.Inspector.NameLabel then
+        State.Inspector.NameLabel.Position = UDim2.fromOffset(center.X, center.Y + 12)
+        State.Inspector.NameLabel.Text = valid and State.Inspector.DisplayName or ""
+        State.Inspector.NameLabel.TextColor3 = color:Lerp(Theme.Text, 0.35)
+        State.Inspector.NameLabel.Visible = not not valid
+    end
+    if not valid then
+        setDrawingVisible(State.Inspector.Box, false)
+        if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
+        if State.Inspector.Highlight then State.Inspector.Highlight.Enabled = false end
+        return
+    end
+
+    local useSkin = State.Inspector.BoxMode == "Skin"
+    local highlightTarget = (target:IsA("Model") or target:IsA("BasePart")) and target or (State.Inspector.Root and State.Inspector.Root:IsA("BasePart") and State.Inspector.Root or nil)
+    if State.Inspector.Highlight then
+        State.Inspector.Highlight.Adornee = highlightTarget
+        State.Inspector.Highlight.FillColor = color
+        State.Inspector.Highlight.OutlineColor = color:Lerp(Theme.Text, 0.25)
+        State.Inspector.Highlight.Enabled = useSkin and highlightTarget ~= nil
+    end
+
+    if useSkin then
+        setDrawingVisible(State.Inspector.Box, false)
+        if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
+        return
+    end
+
+    local topLeft, boxSize = getScreenBounds(target)
+    if not topLeft or not boxSize then
+        local projected, onScreen = Camera:WorldToViewportPoint(hitPosition)
+        if not onScreen or projected.Z <= 0 then
+            setDrawingVisible(State.Inspector.Box, false)
+            if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
+            return
+        end
+        topLeft = Vector2.new(projected.X - 13, projected.Y - 13)
+        boxSize = Vector2.new(26, 26)
+    end
+    if State.Inspector.Box then
+        State.Inspector.Box.Color = color
+        State.Inspector.Box.Position = topLeft
+        State.Inspector.Box.Size = boxSize
+        setDrawingVisible(State.Inspector.Box, true)
+    elseif State.Inspector.BoxFrame then
+        State.Inspector.BoxFrame.Position = UDim2.fromOffset(topLeft.X, topLeft.Y)
+        State.Inspector.BoxFrame.Size = UDim2.fromOffset(boxSize.X, boxSize.Y)
+        local stroke = State.Inspector.BoxFrame:FindFirstChild("InspectorStroke")
+        if stroke then stroke.Color = color end
+        State.Inspector.BoxFrame.Visible = true
+    end
+end
+
+function Extensions.SetInspectorEnabled(enabled, silent)
+    State.Inspector.Enabled = not not enabled
+    State.Inspector.LastScan = 0
+    if State.Inspector.Enabled then
+        Extensions.CreateInspectorVisuals()
+    else
+        Extensions.DestroyInspectorVisuals()
+    end
+    local control = State.ConfigControls.InspectorEnabled
+    if control and control.Set then
+        control.Set(State.Inspector.Enabled, false)
+    end
+    if not silent then
+        notify(State.Inspector.Enabled and "Nhận diện tâm màn hình đã bật." or "Nhận diện tâm màn hình đã tắt.", State.Inspector.Enabled and Theme.Success or Theme.Warning)
+    end
 end
 
 local function getHealthText(humanoid)
@@ -4654,6 +4941,88 @@ connect(UserInputService.TouchTapInWorld, function(positions, processed)
     end
 end)
 
+function Extensions.ApplyGodMode(humanoid)
+    if not State.GodMode or not humanoid or not humanoid.Parent then
+        return
+    end
+    if not State.GodBackup[humanoid] then
+        State.GodBackup[humanoid] = {
+            MaxHealth = humanoid.MaxHealth,
+            Health = humanoid.Health,
+            BreakJointsOnDeath = humanoid.BreakJointsOnDeath,
+            RequiresNeck = humanoid.RequiresNeck,
+            DeadEnabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
+        }
+    end
+    pcall(function()
+        humanoid.BreakJointsOnDeath = false
+        humanoid.RequiresNeck = false
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        if humanoid.MaxHealth < State.GodHealthValue then
+            humanoid.MaxHealth = State.GodHealthValue
+        end
+        if humanoid.Health < State.GodHealthValue * 0.98 then
+            humanoid.Health = State.GodHealthValue
+        end
+    end)
+end
+
+function Extensions.BindGodModeHumanoid(humanoid)
+    if State.GodHealthConnection then
+        State.GodHealthConnection:Disconnect()
+        State.GodHealthConnection = nil
+    end
+    if not State.GodMode or not humanoid then
+        return
+    end
+    Extensions.ApplyGodMode(humanoid)
+    State.GodHealthConnection = humanoid.HealthChanged:Connect(function(health)
+        if State.GodMode and humanoid.Parent and health < State.GodHealthValue * 0.98 then
+            Extensions.ApplyGodMode(humanoid)
+        end
+    end)
+end
+
+function Extensions.RestoreGodMode()
+    if State.GodHealthConnection then
+        State.GodHealthConnection:Disconnect()
+        State.GodHealthConnection = nil
+    end
+    for humanoid, backup in pairs(State.GodBackup) do
+        if humanoid and humanoid.Parent then
+            pcall(function()
+                humanoid.MaxHealth = backup.MaxHealth
+                humanoid.Health = math.min(math.max(backup.Health, 1), backup.MaxHealth)
+                humanoid.BreakJointsOnDeath = backup.BreakJointsOnDeath
+                humanoid.RequiresNeck = backup.RequiresNeck
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, backup.DeadEnabled)
+            end)
+        end
+    end
+    table.clear(State.GodBackup)
+end
+
+function Extensions.SetGodModeEnabled(enabled, silent)
+    enabled = not not enabled
+    if not enabled and State.GodMode then
+        State.GodMode = false
+        Extensions.RestoreGodMode()
+    else
+        State.GodMode = enabled
+        if enabled then
+            local _, humanoid = getCharacter()
+            Extensions.BindGodModeHumanoid(humanoid)
+        end
+    end
+    local control = State.ConfigControls.GodMode
+    if control and control.Set then
+        control.Set(State.GodMode, false)
+    end
+    if not silent then
+        notify(State.GodMode and "God Mode client đã bật và đang duy trì Humanoid." or "God Mode đã tắt và Health đã được khôi phục.", State.GodMode and Theme.Success or Theme.Warning)
+    end
+end
+
 function Extensions.PulseAntiAFK()
     if not State.AntiAFK then
         return
@@ -4984,6 +5353,10 @@ function Extensions.BuildConfig()
             RadiusMeters = State.ItemESP.RadiusMeters,
             ExactName = State.ItemESP.ExactName
         },
+        Inspector = {
+            Enabled = State.Inspector.Enabled,
+            BoxMode = State.Inspector.BoxMode
+        },
         Aimbot = {
             Enabled = State.Aimbot.Enabled,
             Mode = State.Aimbot.Mode,
@@ -5025,6 +5398,7 @@ function Extensions.BuildConfig()
             NoVoidMargin = State.NoVoidMargin,
             AntiAFK = State.AntiAFK,
             AntiStun = State.AntiStun,
+            GodMode = State.GodMode,
             FastMode = State.FPSBoost,
             FPSBoost = State.FPSBoost,
             ESPRefreshMode = State.ESPRefreshMode
@@ -5080,6 +5454,7 @@ function Extensions.SyncConfigControls()
         MobESPBoxMode = State.MobESP.BoxMode,
         ItemESPTracerOrigin = State.ItemESP.TracerOrigin,
         ItemESPBoxMode = State.ItemESP.BoxMode,
+        InspectorBoxMode = State.Inspector.BoxMode,
         XRayMethod = State.XRayMethod,
         TelePlayerMode = State.TelePlayerMode,
         TeleItemMode = State.TeleItemMode,
@@ -5119,6 +5494,7 @@ function Extensions.SyncConfigControls()
         ItemESPName = State.ItemESP.Name,
         ItemESPHealth = State.ItemESP.Health,
         ItemESPDistanceToggle = State.ItemESP.Distance,
+        InspectorEnabled = State.Inspector.Enabled,
         FullBrightEnabled = State.RemoveEffects,
         XRay = State.XRay,
         UnlockZoom = State.UnlockZoom,
@@ -5127,6 +5503,7 @@ function Extensions.SyncConfigControls()
         NoVoid = State.NoVoid,
         AntiAFK = State.AntiAFK,
         AntiStun = State.AntiStun,
+        GodMode = State.GodMode,
         FPSBoost = State.FPSBoost,
         AimbotEnabled = State.Aimbot.Enabled,
         AimbotWallCheck = State.Aimbot.WallCheck,
@@ -5150,6 +5527,7 @@ function Extensions.ApplyConfig(config, silent)
     end
 
     Extensions.SetAimbotEnabled(false, nil, true)
+    Extensions.SetGodModeEnabled(false, true)
 
     local function booleanValue(source, key, fallback)
         if type(source[key]) == "boolean" then
@@ -5207,6 +5585,9 @@ function Extensions.ApplyConfig(config, silent)
     if type(config.ItemESP) == "table" then
         State.ItemESP.ExactName = tostring(config.ItemESP.ExactName or "")
     end
+    local inspector = type(config.Inspector) == "table" and config.Inspector or {}
+    State.Inspector.Enabled = booleanValue(inspector, "Enabled", State.Inspector.Enabled)
+    State.Inspector.BoxMode = allowed(inspector.BoxMode, {"2D", "Skin"}, State.Inspector.BoxMode)
 
     local aimbot = type(config.Aimbot) == "table" and config.Aimbot or {}
     local applySavedAimbot = booleanValue(aimbot, "Enabled", false)
@@ -5252,6 +5633,7 @@ function Extensions.ApplyConfig(config, silent)
     State.NoVoidMargin = math.clamp(tonumber(misc.NoVoidMargin) or State.NoVoidMargin, 5, 200)
     State.AntiAFK = booleanValue(misc, "AntiAFK", State.AntiAFK)
     State.AntiStun = booleanValue(misc, "AntiStun", booleanValue(misc, "AntiRagdoll", State.AntiStun))
+    State.GodMode = booleanValue(misc, "GodMode", State.GodMode)
     State.FPSBoost = booleanValue(misc, "FastMode", booleanValue(misc, "FPSBoost", State.FPSBoost))
     State.ESPRefreshMode = allowed(misc.ESPRefreshMode, {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode)
     if type(config.AutoLoad) == "boolean" then
@@ -5260,6 +5642,7 @@ function Extensions.ApplyConfig(config, silent)
 
     Extensions.SyncConfigControls()
     Extensions.SetScreenBlank(State.ScreenBlankEnabled, true)
+    Extensions.SetInspectorEnabled(State.Inspector.Enabled, true)
     Extensions.SetAimbotReleaseButtonVisible(State.Aimbot.ReleaseButtonVisible, true)
     if not State.Noclip then
         restoreCollisions()
@@ -5268,6 +5651,7 @@ function Extensions.ApplyConfig(config, silent)
     LocalPlayer.CameraMaxZoomDistance = State.UnlockZoom and 10000 or OriginalCamera.MaxZoom
     Extensions.SetAntiAFKEnabled(State.AntiAFK, true)
     Extensions.SetAntiStunEnabled(State.AntiStun, true)
+    Extensions.SetGodModeEnabled(State.GodMode, true)
     Workspace.Gravity = State.GravityValue
     Camera = Workspace.CurrentCamera or Camera
     Camera.FieldOfView = State.CameraFov
@@ -5276,6 +5660,7 @@ function Extensions.ApplyConfig(config, silent)
         State.LastVisionDeepScan = 0
         applyNoEffects()
         applyFullBright()
+        task.spawn(Extensions.DeepSuppressVision)
     else
         restoreEffects()
         restoreLightingVisuals()
@@ -5470,6 +5855,17 @@ end
 do
 local ColorSection = createSection(ESPPage, "Bảng màu phân loại", "Màu cố định giúp không nhầm mục tiêu giữa Player, Quái và Item.")
 createColorLegend(ColorSection)
+
+end
+
+do
+local InspectorSection = createSection(ESPPage, "Nhận diện tâm màn hình", "Một tâm tròn nhỏ xác định vật thể đang được ngắm trong Workspace, gồm Player, quái, item, model và part. Không sử dụng tracer.")
+State.ConfigControls.InspectorEnabled = createToggle(InspectorSection, "Bật nhận diện mục tiêu", State.Inspector.Enabled, function(value)
+    Extensions.SetInspectorEnabled(value, false)
+end)
+State.ConfigControls.InspectorBoxMode = createSelector(InspectorSection, "Kiểu khung", {"2D", "Skin"}, State.Inspector.BoxMode, function(value)
+    State.Inspector.BoxMode = value
+end)
 
 end
 
@@ -5790,6 +6186,7 @@ EnhancedVisionToggle = createToggle(EnhancedVisionSection, "Bật Full Bright + 
         end
         applyNoEffects()
         applyFullBright()
+        task.spawn(Extensions.DeepSuppressVision)
     else
         State.FullBrightLevel = nil
         restoreEffects()
@@ -5806,6 +6203,7 @@ State.ConfigControls.FullBrightLevel = createInput(EnhancedVisionSection, "Mức
         EnhancedVisionToggle.Set(true, false)
         applyNoEffects()
         applyFullBright()
+        task.spawn(Extensions.DeepSuppressVision)
     end
 end)
 createButton(EnhancedVisionSection, "Khôi phục môi trường gốc", function()
@@ -6189,6 +6587,11 @@ State.ConfigControls.AntiStun = createToggle(UtilitySection, "Anti Stun nâng ca
         Extensions.SetAntiStunEnabled(value, false)
     end
 end)
+State.ConfigControls.GodMode = createToggle(UtilitySection, "God Mode · duy trì Humanoid", false, function(value)
+    if State.GodMode ~= value then
+        Extensions.SetGodModeEnabled(value, false)
+    end
+end)
 State.ConfigControls.FPSBoost = createToggle(UtilitySection, "Fast Mode · màu phẳng giữ màu gốc", false, setFPSBoost)
 State.ConfigControls.ESPRefreshMode = createSelector(UtilitySection, "Nhịp cập nhật ESP", {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode, function(value)
     State.ESPRefreshMode = value
@@ -6532,6 +6935,9 @@ connect(LocalPlayer.CharacterAdded, function(character)
         local root = character:WaitForChild("HumanoidRootPart", 10)
         if humanoid then
             rememberHumanoid(humanoid)
+            if State.GodMode then
+                Extensions.BindGodModeHumanoid(humanoid)
+            end
         end
         if root then
             task.wait(0.5)
@@ -6604,6 +7010,9 @@ connect(RunService.Heartbeat, function(deltaTime)
         return
     end
     local original = rememberHumanoid(humanoid)
+    if State.GodMode then
+        Extensions.ApplyGodMode(humanoid)
+    end
 
     if State.SpeedMethod == "WalkSpeed" then
         if humanoid.WalkSpeed ~= State.SpeedValue then
@@ -6685,7 +7094,7 @@ connect(RunService.Heartbeat, function(deltaTime)
         end
     end
 
-    if now - LastVisionApply >= 0.15 then
+    if now - LastVisionApply >= 0.5 then
         LastVisionApply = now
         if State.ClockTime then
             Lighting.ClockTime = State.ClockTime
@@ -6742,8 +7151,15 @@ connect(RunService.RenderStepped, function()
                 hideVisual(visual)
             end
         end
+        setDrawingVisible(State.Inspector.Crosshair, false)
+        setDrawingVisible(State.Inspector.Box, false)
+        if State.Inspector.CrosshairFrame then State.Inspector.CrosshairFrame.Visible = false end
+        if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
+        if State.Inspector.Highlight then State.Inspector.Highlight.Enabled = false end
+        if State.Inspector.NameLabel then State.Inspector.NameLabel.Visible = false end
         return
     end
+    Extensions.UpdateInspector(now)
     Extensions.RefreshDynamicESP()
     if State.Aimbot.Enabled and not State.Aimbot.RenderBound then
         Extensions.UpdateAimbotFrame(now)
@@ -6901,6 +7317,7 @@ cleanup = function()
     Extensions.SetAimbotEnabled(false, nil, true)
     Extensions.SetAimbotReleaseButtonVisible(false, true)
     Extensions.DestroyAimbotFOV()
+    Extensions.SetInspectorEnabled(false, true)
 
     restoreCollisions()
     restoreXRayOccluders()
@@ -6924,6 +7341,7 @@ cleanup = function()
     Camera.CameraSubject = humanoid or OriginalCamera.Subject
     State.AntiAFK = false
     State.LastAntiAFKPulse = 0
+    Extensions.SetGodModeEnabled(false, true)
     Extensions.SetAntiStunEnabled(false, true)
     restoreHumanoid(humanoid)
 
