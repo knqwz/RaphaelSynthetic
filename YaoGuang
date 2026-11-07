@@ -450,11 +450,18 @@ local State = {
     ExternalButtonImage = "",
     RestoreButtonImageURL = "https://files.catbox.moe/po5n9c.jpg",
     RestoreButtonImage = "",
+    SpeedEnabled = false,
     SpeedValue = 16,
     SpeedMethod = "WalkSpeed",
+    JumpEnabled = false,
     JumpValue = 50,
     JumpMethod = "JumpPower",
     InfiniteJump = false,
+    FlantEnabled = false,
+    FlantY = 0,
+    FlantYConfigured = false,
+    FlantPlatform = nil,
+    FlantSize = Vector3.new(14, 1, 14),
     Noclip = false,
     NoclipMethod = "Toàn thân",
     GravityValue = math.floor(Workspace.Gravity * 10 + 0.5) / 10,
@@ -604,19 +611,18 @@ local State = {
     },
     Inspector = {
         Enabled = false,
-        BoxMode = "2D",
         MaxDistance = 5000,
+        ScreenRadius = 52,
         LastScan = 0,
         Target = nil,
         Root = nil,
         DisplayName = "",
-        Crosshair = nil,
         CrosshairFrame = nil,
-        Box = nil,
         Highlight = nil,
-        Billboard = nil,
         NameLabel = nil,
-        RaycastParams = RaycastParams.new()
+        RaycastParams = RaycastParams.new(),
+        OverlapParams = OverlapParams.new(),
+        Tags = {"NPC", "Mob", "Enemy", "Item", "Pickup", "Collectible", "Loot", "Drop"}
     }
 }
 
@@ -667,6 +673,7 @@ local MainFrame
 local FloatingSavedButton
 local cleanup
 local scanItems
+local rescanMobs
 local refreshInfo
 local rebuildPlayerList
 local removeAllVisuals
@@ -798,19 +805,6 @@ function Extensions.ResolveRestoreButtonArtwork()
     return ""
 end
 
-function Extensions.GetServerType()
-    if RunService:IsStudio() then
-        return "Studio"
-    end
-    if game.PrivateServerId ~= "" then
-        if game.PrivateServerOwnerId ~= 0 then
-            return "VIP / Private Server"
-        end
-        return "Reserved Server"
-    end
-    return "Public Server"
-end
-
 local function formatDuration(totalSeconds)
     local seconds = math.max(0, math.floor(totalSeconds))
     local hours = math.floor(seconds / 3600)
@@ -885,6 +879,16 @@ local function resetSpeedSideEffects()
     end
 end
 
+function Extensions.ResetJumpSideEffects()
+    local _, humanoid = getCharacter()
+    local original = rememberHumanoid(humanoid)
+    if humanoid and original then
+        humanoid.UseJumpPower = original.UseJumpPower
+        humanoid.JumpPower = original.JumpPower
+        humanoid.JumpHeight = original.JumpHeight
+    end
+end
+
 do
     local _, initialHumanoid = getCharacter()
     if initialHumanoid then
@@ -923,6 +927,77 @@ local function safeTeleport(targetCFrame)
         character:PivotTo(targetCFrame)
     end)
     return true
+end
+
+function Extensions.DestroyFlantPlatform()
+    if State.FlantPlatform then
+        State.FlantPlatform:Destroy()
+        State.FlantPlatform = nil
+    end
+    local orphan = Workspace:FindFirstChild("Raphael_FlantPlatform")
+    while orphan do
+        orphan:Destroy()
+        orphan = Workspace:FindFirstChild("Raphael_FlantPlatform")
+    end
+end
+
+function Extensions.EnsureFlantPlatform()
+    if State.FlantPlatform and State.FlantPlatform.Parent then
+        return State.FlantPlatform
+    end
+    Extensions.DestroyFlantPlatform()
+    local platform = Instance.new("Part")
+    platform.Name = "Raphael_FlantPlatform"
+    platform.Size = State.FlantSize
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.CanQuery = false
+    platform.CanTouch = false
+    platform.CastShadow = false
+    platform.Material = Enum.Material.ForceField
+    platform.Color = Theme.Success
+    platform.Transparency = 0.58
+    platform:SetAttribute("RaphaelOwned", true)
+    platform.Parent = Workspace
+    State.FlantPlatform = platform
+    return platform
+end
+
+function Extensions.SetFlantEnabled(enabled, silent)
+    State.FlantEnabled = not not enabled
+    if State.FlantEnabled then
+        local _, _, root = getCharacter()
+        if root and not State.FlantYConfigured then
+            State.FlantY = math.floor((root.Position.Y - 3.5) * 10 + 0.5) / 10
+        end
+        Extensions.EnsureFlantPlatform()
+    else
+        Extensions.DestroyFlantPlatform()
+    end
+    local control = State.ConfigControls.FlantEnabled
+    if control and control.Set then
+        control.Set(State.FlantEnabled, false)
+    end
+    local yControl = State.ConfigControls.FlantY
+    if yControl and yControl:IsA("TextBox") then
+        yControl.Text = Extensions.FormatMovementNumber(State.FlantY)
+    end
+    if not silent then
+        notify(State.FlantEnabled and ("Flant đã khóa sàn tại Y = " .. Extensions.FormatMovementNumber(State.FlantY)) or "Flant đã tắt.", State.FlantEnabled and Theme.Success or Theme.Warning)
+    end
+end
+
+function Extensions.UpdateFlantPlatform(root)
+    if not State.FlantEnabled or not root or not root.Parent then
+        return
+    end
+    local platform = Extensions.EnsureFlantPlatform()
+    platform.CFrame = CFrame.new(root.Position.X, State.FlantY, root.Position.Z)
+    if root.Position.Y < State.FlantY + 2.4 then
+        local velocity = root.AssemblyLinearVelocity
+        root.CFrame = CFrame.new(root.Position.X, State.FlantY + 3.5, root.Position.Z) * (root.CFrame - root.Position)
+        root.AssemblyLinearVelocity = Vector3.new(velocity.X, math.max(0, velocity.Y), velocity.Z)
+    end
 end
 
 local function cancelActiveTravel()
@@ -1059,7 +1134,7 @@ local GuiParent = resolveGuiParent()
 
 for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
     pcall(function()
-        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden", "Raphael_Sovereign_V6_3_SmartMob", "Raphael_Sovereign_V6_4_ManualMob", "Raphael_Sovereign_V6_4_1_Stable", "Raphael_Sovereign_V6_4_2_RegisterFix", "Raphael_Sovereign_V6_4_Final", "Raphael_Sovereign_V6_4_Enhanced", "Raphael_Sovereign_V6_4_Enhanced_2", "Raphael_Sovereign_V6_4_Enhanced_3", "Raphael_Sovereign_V6_4_Enhanced_4", "Raphael_Sovereign_V6_4_Enhanced_5", "Raphael_Sovereign_V6_4_FinalSkin", "Raphael_Sovereign_V6_4_Optimized", "Raphael_Sovereign_V6_5_Aimbot", "Raphael_Sovereign_V6_5_1_HealthFix", "Raphael_Sovereign_V6_6_AimbotRefined", "Raphael_Sovereign_V6_7_MobilityVisual", "Raphael_Sovereign_V6_8_Ultimate"}) do
+        for _, interfaceName in ipairs({"Raphael_Sovereign_V6_1_Premium", "Raphael_Sovereign_V6_2_Golden", "Raphael_Sovereign_V6_3_SmartMob", "Raphael_Sovereign_V6_4_ManualMob", "Raphael_Sovereign_V6_4_1_Stable", "Raphael_Sovereign_V6_4_2_RegisterFix", "Raphael_Sovereign_V6_4_Final", "Raphael_Sovereign_V6_4_Enhanced", "Raphael_Sovereign_V6_4_Enhanced_2", "Raphael_Sovereign_V6_4_Enhanced_3", "Raphael_Sovereign_V6_4_Enhanced_4", "Raphael_Sovereign_V6_4_Enhanced_5", "Raphael_Sovereign_V6_4_FinalSkin", "Raphael_Sovereign_V6_4_Optimized", "Raphael_Sovereign_V6_5_Aimbot", "Raphael_Sovereign_V6_5_1_HealthFix", "Raphael_Sovereign_V6_6_AimbotRefined", "Raphael_Sovereign_V6_7_MobilityVisual", "Raphael_Sovereign_V6_8_Ultimate", "Raphael_Sovereign_V7_Ultimate"}) do
             local staleInterface = guiRoot:FindFirstChild(interfaceName)
             if staleInterface then
                 staleInterface:Destroy()
@@ -1069,7 +1144,7 @@ for _, guiRoot in ipairs({GuiParent, PlayerGui, CoreGui}) do
 end
 
 ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "Raphael_Sovereign_V6_8_Ultimate"
+ScreenGui.Name = "Raphael_Sovereign_V7_Ultimate"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1260,7 +1335,7 @@ local Brand = Instance.new("TextLabel")
 Brand.Size = UDim2.new(1, -168, 0, 27)
 Brand.Position = UDim2.fromOffset(59, 5)
 Brand.BackgroundTransparency = 1
-Brand.Text = "RAPHAEL  ·  SOVEREIGN"
+Brand.Text = "RAPHAEL  ·  SOVEREIGN V7"
 Brand.TextColor3 = Theme.Text
 Brand.Font = Enum.Font.GothamBlack
 Brand.TextSize = 16
@@ -3127,22 +3202,98 @@ function Extensions.GetStableMobScreenBounds(model, visualAnchor, anchorPoint)
     return Vector2.new(anchorPoint.X - estimatedWidth * 0.5, anchorPoint.Y - topOffset), Vector2.new(estimatedWidth, estimatedHeight)
 end
 
+function Extensions.IsGenericInspectorName(name)
+    local normalized = string.lower(tostring(name or ""))
+    return normalized == ""
+        or normalized == "part"
+        or normalized == "meshpart"
+        or normalized == "handle"
+        or normalized == "hitbox"
+        or normalized == "root"
+        or normalized == "rootpart"
+        or normalized == "humanoidrootpart"
+        or normalized == "model"
+        or normalized == "folder"
+        or normalized == "pathblock"
+        or normalized == "block"
+        or normalized == "map"
+        or normalized == "world"
+        or normalized == "workspace"
+end
+
+function Extensions.GetInspectorMetadataText(instance)
+    if not instance then
+        return nil
+    end
+    local attributeNames = {"DisplayName", "ItemName", "EntityName", "MobName", "NPCName", "PickupName", "Title", "Label", "ObjectName"}
+    local valueNames = {"DisplayName", "ItemName", "EntityName", "MobName", "NPCName", "PickupName", "Title", "Label", "ObjectName"}
+    local current = instance
+    local depth = 0
+    while current and current ~= Workspace and depth < 8 do
+        for _, attributeName in ipairs(attributeNames) do
+            local value = current:GetAttribute(attributeName)
+            if type(value) == "string" and value ~= "" and not Extensions.IsGenericInspectorName(value) then
+                return value
+            end
+        end
+        local prompt = current:FindFirstChildWhichIsA("ProximityPrompt", false)
+        if prompt then
+            if prompt.ObjectText ~= "" then
+                return prompt.ObjectText
+            end
+            if prompt.ActionText ~= "" then
+                return prompt.ActionText
+            end
+        end
+        for _, valueName in ipairs(valueNames) do
+            local valueObject = current:FindFirstChild(valueName)
+            if valueObject and valueObject:IsA("StringValue") and valueObject.Value ~= "" and not Extensions.IsGenericInspectorName(valueObject.Value) then
+                return valueObject.Value
+            end
+        end
+        for _, tag in ipairs(CollectionService:GetTags(current)) do
+            if not Extensions.IsGenericInspectorName(tag) then
+                local lowerTag = string.lower(tag)
+                if string.find(lowerTag, "item", 1, true)
+                    or string.find(lowerTag, "mob", 1, true)
+                    or string.find(lowerTag, "npc", 1, true)
+                    or string.find(lowerTag, "enemy", 1, true)
+                    or string.find(lowerTag, "pickup", 1, true)
+                    or string.find(lowerTag, "loot", 1, true) then
+                    return tag
+                end
+            end
+        end
+        current = current.Parent
+        depth = depth + 1
+    end
+    return nil
+end
+
 function Extensions.ResolveInspectorTarget(instance)
-    if not instance or not instance:IsDescendantOf(Workspace) then
-        return nil, "", Theme.Accent
+    if not instance or not instance:IsDescendantOf(Workspace) or instance:GetAttribute("RaphaelOwned") then
+        return nil, "", Theme.Accent, 0
     end
     local current = instance
     local candidate
+    local itemCandidate
     local humanoidModel
+    local mobClassification
     local depth = 0
-    while current and current ~= Workspace and depth < 10 do
-        if current:IsA("Tool") and not candidate then
-            candidate = current
+    while current and current ~= Workspace and depth < 12 do
+        if MobCache[current] then
+            humanoidModel = current
+            mobClassification = MobCache[current]
+            break
+        elseif ItemCache[current] then
+            itemCandidate = current
+        elseif current:IsA("Tool") and not itemCandidate then
+            itemCandidate = current
         elseif current:IsA("Model") then
             if current:FindFirstChildOfClass("Humanoid") then
                 humanoidModel = current
                 break
-            elseif not candidate then
+            elseif not candidate and not Extensions.IsGenericInspectorName(current.Name) then
                 candidate = current
             end
         end
@@ -3150,86 +3301,116 @@ function Extensions.ResolveInspectorTarget(instance)
         depth = depth + 1
     end
 
-    local target = humanoidModel or candidate or instance
-    local lowerName = string.lower(target.Name)
-    if target:IsA("Model") and (lowerName == "map" or lowerName == "workspace" or lowerName == "world") then
-        target = instance
-    end
-
     if humanoidModel then
         local player = Players:GetPlayerFromCharacter(humanoidModel)
         if player then
-            return target, player.DisplayName .. " (@" .. player.Name .. ")", Theme.Player
+            return humanoidModel, player.DisplayName .. " (@" .. player.Name .. ")", Theme.Player, 3
         end
         local humanoid = humanoidModel:FindFirstChildOfClass("Humanoid")
-        local displayName = humanoid and humanoid.DisplayName ~= "" and humanoid.DisplayName or humanoidModel.Name
-        return target, displayName, Theme.Mob
+        local displayName = mobClassification and mobClassification.DisplayName
+            or humanoid and humanoid.DisplayName ~= "" and humanoid.DisplayName
+            or Extensions.GetInspectorMetadataText(humanoidModel)
+            or humanoidModel.Name
+        return humanoidModel, displayName, Theme.Mob, 3
     end
-    if target:IsA("Tool") then
-        return target, target.Name, Theme.Item
+
+    local target = itemCandidate or candidate or instance
+    local metadata = Extensions.GetInspectorMetadataText(target)
+    if itemCandidate then
+        return itemCandidate, metadata or itemCandidate.Name, Theme.Item, 2
     end
-    return target, target.Name .. " · " .. target.ClassName, Theme.Accent
+    local prompt = target:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt then
+        local promptTarget = prompt:FindFirstAncestorOfClass("Tool") or prompt:FindFirstAncestorOfClass("Model") or target
+        local promptName = prompt.ObjectText ~= "" and prompt.ObjectText or metadata or prompt.ActionText ~= "" and prompt.ActionText or promptTarget.Name
+        return promptTarget, promptName, Theme.Item, 2
+    end
+    if metadata then
+        return target, metadata, Theme.Item, 2
+    end
+
+    local displayName = target.Name
+    if Extensions.IsGenericInspectorName(displayName) then
+        local ancestor = target.Parent
+        local ancestorDepth = 0
+        while ancestor and ancestor ~= Workspace and ancestorDepth < 6 do
+            if not Extensions.IsGenericInspectorName(ancestor.Name) then
+                displayName = ancestor.Name
+                if ancestor:IsA("Model") then
+                    target = ancestor
+                end
+                break
+            end
+            ancestor = ancestor.Parent
+            ancestorDepth = ancestorDepth + 1
+        end
+    end
+    return target, displayName .. " · " .. target.ClassName, Theme.Accent, 1
+end
+
+function Extensions.PurgeInspectorInstances()
+    if ScreenGui and ScreenGui.Parent then
+        for _, instance in ipairs(ScreenGui:GetDescendants()) do
+            if instance.Name == "RaphaelInspectorCrosshair"
+                or instance.Name == "RaphaelInspectorName"
+                or instance.Name == "RaphaelInspectorBox" then
+                instance:Destroy()
+            end
+        end
+    end
+    local highlight = Workspace:FindFirstChild("RaphaelInspectorHighlight")
+    while highlight do
+        highlight:Destroy()
+        highlight = Workspace:FindFirstChild("RaphaelInspectorHighlight")
+    end
+end
+
+function Extensions.DestroyInspectorVisuals()
+    for _, instance in ipairs({State.Inspector.CrosshairFrame, State.Inspector.Highlight, State.Inspector.NameLabel}) do
+        if instance then
+            pcall(function()
+                instance:Destroy()
+            end)
+        end
+    end
+    State.Inspector.CrosshairFrame = nil
+    State.Inspector.Highlight = nil
+    State.Inspector.NameLabel = nil
+    State.Inspector.Target = nil
+    State.Inspector.Root = nil
+    State.Inspector.DisplayName = ""
+    State.Inspector.HitPosition = nil
+    Extensions.PurgeInspectorInstances()
 end
 
 function Extensions.CreateInspectorVisuals()
-    if State.Inspector.NameLabel and State.Inspector.NameLabel.Parent then
+    local crosshairReady = State.Inspector.CrosshairFrame and State.Inspector.CrosshairFrame.Parent
+    local highlightReady = State.Inspector.Highlight and State.Inspector.Highlight.Parent
+    local labelReady = State.Inspector.NameLabel and State.Inspector.NameLabel.Parent
+    if crosshairReady and highlightReady and labelReady then
         return
     end
-    local crosshair = newDrawing("Circle")
-    if crosshair then
-        crosshair.Radius = 5
-        crosshair.Thickness = 1.5
-        crosshair.NumSides = 28
-        crosshair.Filled = false
-        crosshair.Color = Theme.Accent
-        crosshair.Transparency = 1
-        crosshair.Visible = false
-        State.Inspector.Crosshair = crosshair
-    else
-        local frame = Instance.new("Frame")
-        frame.Name = "RaphaelInspectorCrosshair"
-        frame.AnchorPoint = Vector2.new(0.5, 0.5)
-        frame.Size = UDim2.fromOffset(12, 12)
-        frame.BackgroundTransparency = 1
-        frame.BorderSizePixel = 0
-        frame.ZIndex = 920
-        frame:SetAttribute("RaphaelOwned", true)
-        frame.Parent = ScreenGui
-        Instance.new("UICorner", frame).CornerRadius = UDim.new(1, 0)
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = Theme.Accent
-        stroke.Thickness = 1.5
-        stroke.Parent = frame
-        State.Inspector.CrosshairFrame = frame
-    end
+    Extensions.DestroyInspectorVisuals()
 
-    local box = newDrawing("Square")
-    if box then
-        box.Thickness = 1.5
-        box.Filled = false
-        box.Transparency = 1
-        box.Visible = false
-        State.Inspector.Box = box
-    else
-        local boxFrame = Instance.new("Frame")
-        boxFrame.Name = "RaphaelInspectorBox"
-        boxFrame.BackgroundTransparency = 1
-        boxFrame.BorderSizePixel = 0
-        boxFrame.Visible = false
-        boxFrame.ZIndex = 918
-        boxFrame:SetAttribute("RaphaelOwned", true)
-        boxFrame.Parent = ScreenGui
-        local stroke = Instance.new("UIStroke")
-        stroke.Name = "InspectorStroke"
-        stroke.Color = Theme.Accent
-        stroke.Thickness = 1.5
-        stroke.Parent = boxFrame
-        State.Inspector.BoxFrame = boxFrame
-    end
+    local frame = Instance.new("Frame")
+    frame.Name = "RaphaelInspectorCrosshair"
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Size = UDim2.fromOffset(12, 12)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.ZIndex = 920
+    frame:SetAttribute("RaphaelOwned", true)
+    frame.Parent = ScreenGui
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(1, 0)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Theme.Accent
+    stroke.Thickness = 1.5
+    stroke.Parent = frame
+    State.Inspector.CrosshairFrame = frame
 
     local highlight = Instance.new("Highlight")
     highlight.Name = "RaphaelInspectorHighlight"
-    highlight.FillTransparency = 0.82
+    highlight.FillTransparency = 0.8
     highlight.OutlineTransparency = 0
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Enabled = false
@@ -3240,7 +3421,7 @@ function Extensions.CreateInspectorVisuals()
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "RaphaelInspectorName"
     nameLabel.AnchorPoint = Vector2.new(0.5, 0)
-    nameLabel.Size = UDim2.fromOffset(280, 24)
+    nameLabel.Size = UDim2.fromOffset(300, 24)
     nameLabel.BackgroundColor3 = Theme.Background
     nameLabel.BackgroundTransparency = 0.28
     nameLabel.BorderSizePixel = 0
@@ -3259,27 +3440,129 @@ function Extensions.CreateInspectorVisuals()
     State.Inspector.NameLabel = nameLabel
 end
 
-function Extensions.DestroyInspectorVisuals()
-    destroyDrawing(State.Inspector.Crosshair)
-    destroyDrawing(State.Inspector.Box)
-    State.Inspector.Crosshair = nil
-    State.Inspector.Box = nil
-    for _, instance in ipairs({State.Inspector.CrosshairFrame, State.Inspector.BoxFrame, State.Inspector.Highlight, State.Inspector.NameLabel}) do
-        if instance then
-            instance:Destroy()
+function Extensions.ScoreInspectorCandidate(instance, center, maximumDepth)
+    if not instance or not instance.Parent or instance:GetAttribute("RaphaelOwned") then
+        return nil
+    end
+    local preliminaryRoot = getAdorneeRoot(instance)
+    if not preliminaryRoot or not preliminaryRoot.Parent then
+        return nil
+    end
+    local preliminaryPoint, preliminaryVisible = Camera:WorldToViewportPoint(preliminaryRoot.Position)
+    if not preliminaryVisible or preliminaryPoint.Z <= 0 or (Vector2.new(preliminaryPoint.X, preliminaryPoint.Y) - center).Magnitude > math.max(State.Inspector.ScreenRadius * 4, 220) then
+        return nil
+    end
+    local target, displayName, color, priority = Extensions.ResolveInspectorTarget(instance)
+    if not target or priority < 2 then
+        return nil
+    end
+    local root = getAdorneeRoot(target)
+    if not root or not root.Parent then
+        return nil
+    end
+    local projected, onScreen = Camera:WorldToViewportPoint(root.Position)
+    if not onScreen or projected.Z <= 0 or projected.Z > State.Inspector.MaxDistance then
+        return nil
+    end
+    if maximumDepth and projected.Z > maximumDepth + math.max(6, maximumDepth * 0.015) then
+        return nil
+    end
+
+    local distance = (Vector2.new(projected.X, projected.Y) - center).Magnitude
+    local topLeft, boxSize = getScreenBounds(target)
+    local containsCenter = false
+    if topLeft and boxSize then
+        containsCenter = center.X >= topLeft.X - 4
+            and center.X <= topLeft.X + boxSize.X + 4
+            and center.Y >= topLeft.Y - 4
+            and center.Y <= topLeft.Y + boxSize.Y + 4
+    end
+    if not containsCenter and distance > State.Inspector.ScreenRadius then
+        return nil
+    end
+    local score = (containsCenter and 0 or distance + 8) * 10000 + projected.Z - priority * 100
+    return {
+        Target = target,
+        Root = root,
+        DisplayName = displayName,
+        Color = color,
+        Priority = priority,
+        Depth = projected.Z,
+        Score = score,
+        Position = root.Position
+    }
+end
+
+function Extensions.FindInspectorScreenCandidate(center, rayDepth)
+    local best
+    local seen = {}
+    local checked = 0
+    local function consider(instance)
+        if checked >= 280 or not instance or seen[instance] then
+            return
+        end
+        seen[instance] = true
+        checked = checked + 1
+        local candidate = Extensions.ScoreInspectorCandidate(instance, center, rayDepth)
+        if candidate and (not best or candidate.Score < best.Score) then
+            best = candidate
         end
     end
-    State.Inspector.CrosshairFrame = nil
-    State.Inspector.BoxFrame = nil
-    State.Inspector.Highlight = nil
-    State.Inspector.NameLabel = nil
-    State.Inspector.Target = nil
-    State.Inspector.Root = nil
-    State.Inspector.DisplayName = ""
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            consider(player.Character)
+        end
+    end
+    local mobChecked = 0
+    for model in pairs(MobCache) do
+        consider(model)
+        mobChecked = mobChecked + 1
+        if mobChecked >= 140 then
+            break
+        end
+    end
+    local itemChecked = 0
+    for item in pairs(ItemCache) do
+        consider(item)
+        itemChecked = itemChecked + 1
+        if itemChecked >= 80 then
+            break
+        end
+    end
+    for _, tag in ipairs(State.Inspector.Tags) do
+        for _, instance in ipairs(CollectionService:GetTagged(tag)) do
+            consider(instance)
+            if checked >= 240 then
+                break
+            end
+        end
+        if checked >= 240 then
+            break
+        end
+    end
+
+    if checked < 280 then
+        local character = LocalPlayer.Character
+        State.Inspector.OverlapParams.FilterType = Enum.RaycastFilterType.Exclude
+        State.Inspector.OverlapParams.FilterDescendantsInstances = character and {character} or {}
+        State.Inspector.OverlapParams.MaxParts = math.min(80, 280 - checked)
+        local corridorDepth = math.min(rayDepth or State.Inspector.MaxDistance, 1200)
+        local corridor = Camera.CFrame * CFrame.new(0, 0, -corridorDepth * 0.5)
+        local success, parts = pcall(function()
+            return Workspace:GetPartBoundsInBox(corridor, Vector3.new(30, 30, corridorDepth), State.Inspector.OverlapParams)
+        end)
+        if success then
+            for _, part in ipairs(parts) do
+                consider(part)
+            end
+        end
+    end
+    return best
 end
 
 function Extensions.ScanInspector(now)
-    if now - State.Inspector.LastScan < 0.05 then
+    if now - State.Inspector.LastScan < 0.08 then
         return
     end
     State.Inspector.LastScan = now
@@ -3292,19 +3575,35 @@ function Extensions.ScanInspector(now)
     State.Inspector.RaycastParams.FilterDescendantsInstances = character and {character} or {}
     State.Inspector.RaycastParams.IgnoreWater = false
     local result = Workspace:Raycast(ray.Origin, ray.Direction * State.Inspector.MaxDistance, State.Inspector.RaycastParams)
-    if not result then
-        State.Inspector.Target = nil
-        State.Inspector.Root = nil
-        State.Inspector.DisplayName = ""
-        State.Inspector.HitPosition = nil
-        return
+    local rayDepth = result and (result.Position - ray.Origin).Magnitude or State.Inspector.MaxDistance
+    local screenCandidate = Extensions.FindInspectorScreenCandidate(center, rayDepth)
+    local target
+    local displayName = ""
+    local color = Theme.Accent
+    local priority = 0
+    local hitPosition
+    local root
+
+    if result then
+        target, displayName, color, priority = Extensions.ResolveInspectorTarget(result.Instance)
+        root = result.Instance
+        hitPosition = result.Position
     end
-    local target, displayName, color = Extensions.ResolveInspectorTarget(result.Instance)
+    if screenCandidate and (not target or priority < 2 and screenCandidate.Priority >= 2 or screenCandidate.Depth + 2 < rayDepth) then
+        target = screenCandidate.Target
+        root = screenCandidate.Root
+        displayName = screenCandidate.DisplayName
+        color = screenCandidate.Color
+        priority = screenCandidate.Priority
+        hitPosition = screenCandidate.Position
+    end
+
     State.Inspector.Target = target
-    State.Inspector.Root = result.Instance
+    State.Inspector.Root = root
     State.Inspector.DisplayName = displayName
     State.Inspector.Color = color
-    State.Inspector.HitPosition = result.Position
+    State.Inspector.Priority = priority
+    State.Inspector.HitPosition = hitPosition
 end
 
 function Extensions.UpdateInspector(now)
@@ -3315,69 +3614,37 @@ function Extensions.UpdateInspector(now)
     Camera = Workspace.CurrentCamera or Camera
     local viewport = Camera.ViewportSize
     local center = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
-    if State.Inspector.Crosshair then
-        State.Inspector.Crosshair.Position = center
-        setDrawingVisible(State.Inspector.Crosshair, true)
-    elseif State.Inspector.CrosshairFrame then
+    if State.Inspector.CrosshairFrame then
         State.Inspector.CrosshairFrame.Position = UDim2.fromOffset(center.X, center.Y)
         State.Inspector.CrosshairFrame.Visible = true
     end
 
     Extensions.ScanInspector(now)
     local target = State.Inspector.Target
-    local hitPosition = State.Inspector.HitPosition
     local color = State.Inspector.Color or Theme.Accent
-    local valid = target and target.Parent and hitPosition ~= nil
+    local valid = target and target.Parent and State.Inspector.HitPosition ~= nil
     if State.Inspector.NameLabel then
         State.Inspector.NameLabel.Position = UDim2.fromOffset(center.X, center.Y + 12)
         State.Inspector.NameLabel.Text = valid and State.Inspector.DisplayName or ""
         State.Inspector.NameLabel.TextColor3 = color:Lerp(Theme.Text, 0.35)
         State.Inspector.NameLabel.Visible = not not valid
     end
-    if not valid then
-        setDrawingVisible(State.Inspector.Box, false)
-        if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
-        if State.Inspector.Highlight then State.Inspector.Highlight.Enabled = false end
-        return
-    end
 
-    local useSkin = State.Inspector.BoxMode == "Skin"
-    local highlightTarget = (target:IsA("Model") or target:IsA("BasePart")) and target or (State.Inspector.Root and State.Inspector.Root:IsA("BasePart") and State.Inspector.Root or nil)
+    local highlightTarget
+    if valid then
+        if target:IsA("Model") or target:IsA("BasePart") then
+            highlightTarget = target
+        elseif target:IsA("Tool") then
+            highlightTarget = getAdorneeRoot(target)
+        else
+            highlightTarget = State.Inspector.Root and State.Inspector.Root:IsA("BasePart") and State.Inspector.Root or getAdorneeRoot(target)
+        end
+    end
     if State.Inspector.Highlight then
         State.Inspector.Highlight.Adornee = highlightTarget
         State.Inspector.Highlight.FillColor = color
         State.Inspector.Highlight.OutlineColor = color:Lerp(Theme.Text, 0.25)
-        State.Inspector.Highlight.Enabled = useSkin and highlightTarget ~= nil
-    end
-
-    if useSkin then
-        setDrawingVisible(State.Inspector.Box, false)
-        if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
-        return
-    end
-
-    local topLeft, boxSize = getScreenBounds(target)
-    if not topLeft or not boxSize then
-        local projected, onScreen = Camera:WorldToViewportPoint(hitPosition)
-        if not onScreen or projected.Z <= 0 then
-            setDrawingVisible(State.Inspector.Box, false)
-            if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
-            return
-        end
-        topLeft = Vector2.new(projected.X - 13, projected.Y - 13)
-        boxSize = Vector2.new(26, 26)
-    end
-    if State.Inspector.Box then
-        State.Inspector.Box.Color = color
-        State.Inspector.Box.Position = topLeft
-        State.Inspector.Box.Size = boxSize
-        setDrawingVisible(State.Inspector.Box, true)
-    elseif State.Inspector.BoxFrame then
-        State.Inspector.BoxFrame.Position = UDim2.fromOffset(topLeft.X, topLeft.Y)
-        State.Inspector.BoxFrame.Size = UDim2.fromOffset(boxSize.X, boxSize.Y)
-        local stroke = State.Inspector.BoxFrame:FindFirstChild("InspectorStroke")
-        if stroke then stroke.Color = color end
-        State.Inspector.BoxFrame.Visible = true
+        State.Inspector.Highlight.Enabled = highlightTarget ~= nil
     end
 end
 
@@ -3386,6 +3653,10 @@ function Extensions.SetInspectorEnabled(enabled, silent)
     State.Inspector.LastScan = 0
     if State.Inspector.Enabled then
         Extensions.CreateInspectorVisuals()
+        task.spawn(rescanMobs)
+        task.spawn(function()
+            scanItems(false)
+        end)
     else
         Extensions.DestroyInspectorVisuals()
     end
@@ -3394,7 +3665,7 @@ function Extensions.SetInspectorEnabled(enabled, silent)
         control.Set(State.Inspector.Enabled, false)
     end
     if not silent then
-        notify(State.Inspector.Enabled and "Nhận diện tâm màn hình đã bật." or "Nhận diện tâm màn hình đã tắt.", State.Inspector.Enabled and Theme.Success or Theme.Warning)
+        notify(State.Inspector.Enabled and "Nhận diện tâm 3D đã bật." or "Nhận diện tâm đã tắt và toàn bộ visual đã được xoá.", State.Inspector.Enabled and Theme.Success or Theme.Warning)
     end
 end
 
@@ -3965,7 +4236,7 @@ local function considerMob(instance)
     end
 end
 
-local function rescanMobs()
+rescanMobs = function()
     if State.MobScanRunning then
         return
     end
@@ -5076,10 +5347,11 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
         root.Anchored = false
     end
 
+    local original = rememberHumanoid(humanoid)
     local velocity = root.AssemblyLinearVelocity
     local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
     local direction = humanoid.MoveDirection
-    local speed = math.max(State.SpeedValue, 0)
+    local speed = math.max(State.SpeedEnabled and State.SpeedValue or original and original.WalkSpeed or humanoid.WalkSpeed, 0)
     local now = os.clock()
     local grounded = humanoid.FloorMaterial ~= Enum.Material.Air
     local correctedHorizontal = horizontal
@@ -5099,7 +5371,9 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
     end
 
     local jumpLimit
-    if State.JumpMethod == "JumpHeight" then
+    if not State.JumpEnabled and original then
+        jumpLimit = original.UseJumpPower and original.JumpPower or math.sqrt(math.max(2 * Workspace.Gravity * original.JumpHeight, 0))
+    elseif State.JumpMethod == "JumpHeight" then
         jumpLimit = math.sqrt(math.max(2 * Workspace.Gravity * State.JumpValue, 0))
     else
         jumpLimit = State.JumpValue
@@ -5297,18 +5571,24 @@ local function setFPSBoost(enabled, silent)
 end
 
 Extensions.ConfigFolder = "RaphaelSovereign"
-Extensions.ConfigPath = "RaphaelSovereign/V6_4_Config.json"
+Extensions.ConfigPath = "RaphaelSovereign/V7_Config.json"
+Extensions.LegacyConfigPath = "RaphaelSovereign/V6_4_Config.json"
 
 function Extensions.BuildConfig()
     return {
-        Version = 6.8,
+        Version = 7,
         AutoLoad = State.ConfigAutoLoad,
         Movement = {
+            SpeedEnabled = State.SpeedEnabled,
             SpeedValue = State.SpeedValue,
             SpeedMethod = State.SpeedMethod,
+            JumpEnabled = State.JumpEnabled,
             JumpValue = State.JumpValue,
             JumpMethod = State.JumpMethod,
             InfiniteJump = State.InfiniteJump,
+            FlantEnabled = State.FlantEnabled,
+            FlantY = State.FlantY,
+            FlantYConfigured = State.FlantYConfigured,
             Noclip = State.Noclip,
             NoclipMethod = State.NoclipMethod,
             GravityValue = State.GravityValue
@@ -5355,7 +5635,7 @@ function Extensions.BuildConfig()
         },
         Inspector = {
             Enabled = State.Inspector.Enabled,
-            BoxMode = State.Inspector.BoxMode
+            ScreenRadius = State.Inspector.ScreenRadius
         },
         Aimbot = {
             Enabled = State.Aimbot.Enabled,
@@ -5411,6 +5691,7 @@ function Extensions.SyncConfigControls()
     local textValues = {
         SpeedValue = Extensions.FormatMovementNumber(State.SpeedValue),
         JumpValue = Extensions.FormatMovementNumber(State.JumpValue),
+        FlantY = Extensions.FormatMovementNumber(State.FlantY),
         GravityValue = Extensions.FormatMovementNumber(State.GravityValue),
         PlayerESPDistance = State.PlayerESP.MaxDistanceMeters,
         PlayerESPLookLength = State.PlayerESP.LookLength,
@@ -5420,6 +5701,7 @@ function Extensions.SyncConfigControls()
         MobESPLookLength = State.MobESP.LookLength,
         ItemExactName = State.ItemESP.ExactName,
         ItemRadius = State.ItemESP.RadiusMeters,
+        InspectorRadius = State.Inspector.ScreenRadius,
         FullBrightLevel = State.FullBrightLevel or 0,
         XRayTransparency = State.XRayWallTransparency,
         CameraFov = State.CameraFov,
@@ -5454,7 +5736,6 @@ function Extensions.SyncConfigControls()
         MobESPBoxMode = State.MobESP.BoxMode,
         ItemESPTracerOrigin = State.ItemESP.TracerOrigin,
         ItemESPBoxMode = State.ItemESP.BoxMode,
-        InspectorBoxMode = State.Inspector.BoxMode,
         XRayMethod = State.XRayMethod,
         TelePlayerMode = State.TelePlayerMode,
         TeleItemMode = State.TeleItemMode,
@@ -5472,7 +5753,10 @@ function Extensions.SyncConfigControls()
     end
 
     local toggleValues = {
+        SpeedEnabled = State.SpeedEnabled,
+        JumpEnabled = State.JumpEnabled,
         InfiniteJump = State.InfiniteJump,
+        FlantEnabled = State.FlantEnabled,
         Noclip = State.Noclip,
         PlayerESPEnabled = State.PlayerESP.Enabled,
         PlayerESPManualFilter = State.PlayerESP.ManualFilterEnabled,
@@ -5528,6 +5812,9 @@ function Extensions.ApplyConfig(config, silent)
 
     Extensions.SetAimbotEnabled(false, nil, true)
     Extensions.SetGodModeEnabled(false, true)
+    Extensions.SetFlantEnabled(false, true)
+    resetSpeedSideEffects()
+    Extensions.ResetJumpSideEffects()
 
     local function booleanValue(source, key, fallback)
         if type(source[key]) == "boolean" then
@@ -5540,11 +5827,16 @@ function Extensions.ApplyConfig(config, silent)
     end
 
     local movement = type(config.Movement) == "table" and config.Movement or {}
+    State.SpeedEnabled = booleanValue(movement, "SpeedEnabled", false)
     State.SpeedValue = math.clamp(tonumber(movement.SpeedValue) or State.SpeedValue, 0, 1000)
     State.SpeedMethod = allowed(movement.SpeedMethod, {"WalkSpeed", "Velocity", "CFrame"}, State.SpeedMethod)
+    State.JumpEnabled = booleanValue(movement, "JumpEnabled", false)
     State.JumpValue = math.clamp(tonumber(movement.JumpValue) or State.JumpValue, 0, 1000)
     State.JumpMethod = allowed(movement.JumpMethod, {"JumpPower", "JumpHeight", "Velocity"}, State.JumpMethod)
     State.InfiniteJump = booleanValue(movement, "InfiniteJump", State.InfiniteJump)
+    State.FlantEnabled = booleanValue(movement, "FlantEnabled", false)
+    State.FlantY = math.clamp(tonumber(movement.FlantY) or State.FlantY, -100000, 100000)
+    State.FlantYConfigured = booleanValue(movement, "FlantYConfigured", movement.FlantY ~= nil)
     State.Noclip = booleanValue(movement, "Noclip", State.Noclip)
     State.NoclipMethod = allowed(movement.NoclipMethod, {"Toàn thân", "Chỉ Root", "State + Parts"}, State.NoclipMethod)
     State.GravityValue = math.clamp(tonumber(movement.GravityValue) or State.GravityValue, 0, 1000)
@@ -5587,7 +5879,7 @@ function Extensions.ApplyConfig(config, silent)
     end
     local inspector = type(config.Inspector) == "table" and config.Inspector or {}
     State.Inspector.Enabled = booleanValue(inspector, "Enabled", State.Inspector.Enabled)
-    State.Inspector.BoxMode = allowed(inspector.BoxMode, {"2D", "Skin"}, State.Inspector.BoxMode)
+    State.Inspector.ScreenRadius = math.clamp(tonumber(inspector.ScreenRadius) or State.Inspector.ScreenRadius, 12, 120)
 
     local aimbot = type(config.Aimbot) == "table" and config.Aimbot or {}
     local applySavedAimbot = booleanValue(aimbot, "Enabled", false)
@@ -5641,6 +5933,13 @@ function Extensions.ApplyConfig(config, silent)
     end
 
     Extensions.SyncConfigControls()
+    if not State.SpeedEnabled then
+        resetSpeedSideEffects()
+    end
+    if not State.JumpEnabled then
+        Extensions.ResetJumpSideEffects()
+    end
+    Extensions.SetFlantEnabled(State.FlantEnabled, true)
     Extensions.SetScreenBlank(State.ScreenBlankEnabled, true)
     Extensions.SetInspectorEnabled(State.Inspector.Enabled, true)
     Extensions.SetAimbotReleaseButtonVisible(State.Aimbot.ReleaseButtonVisible, true)
@@ -5685,7 +5984,7 @@ function Extensions.ApplyConfig(config, silent)
         Extensions.SetAimbotEnabled(true, nil, true)
     end
     if not silent then
-        notify("Đã áp dụng config V6.8.", Theme.Success)
+        notify("Đã áp dụng config V7.", Theme.Success)
     end
     return true
 end
@@ -5695,12 +5994,13 @@ function Extensions.ReadConfig(silent)
         if not silent then notify("DeltaX không cung cấp readfile/isfile.", Theme.Danger) end
         return nil
     end
-    if not isfile(Extensions.ConfigPath) then
+    local path = isfile(Extensions.ConfigPath) and Extensions.ConfigPath or isfile(Extensions.LegacyConfigPath) and Extensions.LegacyConfigPath or nil
+    if not path then
         if not silent then notify("Chưa có config đã lưu.", Theme.Warning) end
         return nil
     end
     local success, result = pcall(function()
-        return HttpService:JSONDecode(readfile(Extensions.ConfigPath))
+        return HttpService:JSONDecode(readfile(path))
     end)
     if not success or type(result) ~= "table" then
         if not silent then notify("Không đọc được config: " .. tostring(result), Theme.Danger) end
@@ -5745,7 +6045,7 @@ function Extensions.DeleteConfig()
         end
     end)
     if success then
-        notify("Đã xoá config V6.8.", Theme.Success)
+        notify("Đã xoá config V7.", Theme.Success)
         return true
     end
     notify("Xoá config thất bại: " .. tostring(result), Theme.Danger)
@@ -5753,7 +6053,13 @@ function Extensions.DeleteConfig()
 end
 
 do
-local SpeedSection = createSection(MovementPage, "Speed", "Giá trị được áp dụng ngay khi nhập; không cần công tắc bật/tắt.")
+local SpeedSection = createSection(MovementPage, "Speed", "Bật công tắc để áp dụng tốc độ tùy chỉnh; khi tắt sẽ khôi phục WalkSpeed gốc.")
+State.ConfigControls.SpeedEnabled = createToggle(SpeedSection, "Bật Speed tùy chỉnh", State.SpeedEnabled, function(value)
+    State.SpeedEnabled = value
+    if not value then
+        resetSpeedSideEffects()
+    end
+end)
 State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", Extensions.FormatMovementNumber(State.SpeedValue), "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
@@ -5779,13 +6085,19 @@ end, Theme.SurfaceLight)
 end
 
 do
-local JumpSection = createSection(MovementPage, "Jump", "JumpPower và JumpHeight được duy trì phía client. Velocity phù hợp game ghi đè thuộc tính Humanoid.")
+local JumpSection = createSection(MovementPage, "Jump", "Bật công tắc để duy trì JumpPower hoặc JumpHeight tùy chỉnh; khi tắt sẽ khôi phục thiết lập gốc.")
+State.ConfigControls.JumpEnabled = createToggle(JumpSection, "Bật Jump Power tùy chỉnh", State.JumpEnabled, function(value)
+    State.JumpEnabled = value
+    if not value then
+        Extensions.ResetJumpSideEffects()
+    end
+end)
 State.ConfigControls.JumpValue = createInput(JumpSection, "Lực/độ cao nhảy", Extensions.FormatMovementNumber(State.JumpValue), "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
         State.JumpValue = math.clamp(value, 0, 1000)
         local _, humanoid = getCharacter()
-        if humanoid then
+        if humanoid and State.JumpEnabled then
             rememberHumanoid(humanoid)
             if State.JumpMethod == "JumpPower" then
                 humanoid.UseJumpPower = true
@@ -5798,11 +6110,35 @@ State.ConfigControls.JumpValue = createInput(JumpSection, "Lực/độ cao nhả
     end
 end)
 State.ConfigControls.JumpMethod = createSelector(JumpSection, "Phương thức", {"JumpPower", "JumpHeight", "Velocity"}, State.JumpMethod, function(value)
+    Extensions.ResetJumpSideEffects()
     State.JumpMethod = value
     notify("Jump Method: " .. value, Theme.Success)
 end)
 State.ConfigControls.InfiniteJump = createToggle(JumpSection, "Infinite Jump không delay", false, function(value)
     State.InfiniteJump = value
+end)
+
+end
+
+do
+local FlantSection = createSection(MovementPage, "Flant chống rơi", "Tạo một mặt phẳng theo X/Z dưới chân và khóa tại trục Y đã chọn, ngăn nhân vật rơi xuống thấp hơn.")
+State.ConfigControls.FlantEnabled = createToggle(FlantSection, "Bật Flant", State.FlantEnabled, function(value)
+    Extensions.SetFlantEnabled(value, false)
+end)
+State.ConfigControls.FlantY = createInput(FlantSection, "Toạ độ Y của mặt phẳng", State.FlantY, "Ví dụ: 25.5", false, function(text)
+    local value = tonumber(text)
+    if value then
+        State.FlantY = math.clamp(value, -100000, 100000)
+        State.FlantYConfigured = true
+        if State.FlantEnabled then
+            local _, _, root = getCharacter()
+            Extensions.UpdateFlantPlatform(root)
+        end
+        notify("Đã cập nhật Flant Y = " .. Extensions.FormatMovementNumber(State.FlantY), Theme.Success)
+    else
+        State.ConfigControls.FlantY.Text = Extensions.FormatMovementNumber(State.FlantY)
+        notify("Toạ độ Y không hợp lệ.", Theme.Warning)
+    end
 end)
 
 end
@@ -5859,13 +6195,24 @@ createColorLegend(ColorSection)
 end
 
 do
-local InspectorSection = createSection(ESPPage, "Nhận diện tâm màn hình", "Một tâm tròn nhỏ xác định vật thể đang được ngắm trong Workspace, gồm Player, quái, item, model và part. Không sử dụng tracer.")
-State.ConfigControls.InspectorEnabled = createToggle(InspectorSection, "Bật nhận diện mục tiêu", State.Inspector.Enabled, function(value)
+local InspectorSection = createSection(ESPPage, "Nhận diện tâm màn hình", "Tâm tròn nhỏ kết hợp raycast và phát hiện screen-space cho Player, quái, item, model và part. Visual luôn là highlight 3D, không có tracer.")
+State.ConfigControls.InspectorEnabled = createToggle(InspectorSection, "Bật nhận diện mục tiêu 3D", State.Inspector.Enabled, function(value)
     Extensions.SetInspectorEnabled(value, false)
 end)
-State.ConfigControls.InspectorBoxMode = createSelector(InspectorSection, "Kiểu khung", {"2D", "Skin"}, State.Inspector.BoxMode, function(value)
-    State.Inspector.BoxMode = value
+State.ConfigControls.InspectorRadius = createInput(InspectorSection, "Bán kính bắt mục tiêu quanh tâm (px)", State.Inspector.ScreenRadius, "12 - 120", true, function(text)
+    local value = tonumber(text)
+    if value then
+        State.Inspector.ScreenRadius = math.floor(math.clamp(value, 12, 120))
+    end
 end)
+createButton(InspectorSection, "Làm mới chỉ mục quái và item", function()
+    task.spawn(function()
+        rescanMobs()
+        scanItems(false)
+        State.Inspector.LastScan = 0
+        notify("Đã làm mới nguồn mục tiêu cho nhận diện tâm.", Theme.Success)
+    end)
+end, Theme.SurfaceLight)
 
 end
 
@@ -6543,7 +6890,7 @@ end)
 end
 
 do
-local ServerSection = createSection(MiscPage, "Server", "Quét tối đa bốn trang server, loại server hiện tại và server đầy.")
+local ServerSection = createSection(MiscPage, "Server", "Quét tối đa bốn trang, bỏ qua server đang dùng và các server đã đầy.")
 createDualButtons(ServerSection, "Hop ít người", function()
     hopServer(true)
 end, "Hop đông người", function()
@@ -6560,7 +6907,7 @@ end, Theme.SurfaceLight)
 end
 
 do
-local ConfigSection = createSection(MiscPage, "Lưu Config", "Lưu thiết lập vào bộ nhớ DeltaX và áp dụng lại khi cần. File: RaphaelSovereign/V6_4_Config.json")
+local ConfigSection = createSection(MiscPage, "Lưu Config", "Lưu thiết lập vào bộ nhớ DeltaX và áp dụng lại khi cần. File: RaphaelSovereign/V7_Config.json; tự đọc config V6 cũ nếu chưa có V7.")
 State.ConfigControls.ConfigAutoLoad = createToggle(ConfigSection, "Tự áp dụng config khi mở script", State.ConfigAutoLoad, function(value)
     State.ConfigAutoLoad = value
 end)
@@ -6677,7 +7024,6 @@ local RuntimeSection = createSection(InfoPage, "Game & Runtime", "Chỉ quét FP
 local GameNameValue = createInfoRow(RuntimeSection, "Game", "Mở Info để dò...")
 local PlaceIdValue = createInfoRow(RuntimeSection, "Place ID", tostring(game.PlaceId))
 local JobIdValue = createInfoRow(RuntimeSection, "Job ID", game.JobId ~= "" and game.JobId or "Studio / N/A")
-State.ServerTypeValue = createInfoRow(RuntimeSection, "Loại server", Extensions.GetServerType())
 local PlayersValue = createInfoRow(RuntimeSection, "Người chơi", #Players:GetPlayers() .. "/" .. Players.MaxPlayers)
 local PingValue = createInfoRow(RuntimeSection, "Ping", "Đang đo...")
 local FPSValue = createInfoRow(RuntimeSection, "FPS", "0")
@@ -6817,9 +7163,6 @@ refreshInfo = function()
     end
     PlayersValue.Text = #Players:GetPlayers() .. "/" .. Players.MaxPlayers
     FPSValue.Text = tostring(MeasuredFPS)
-    if State.ServerTypeValue and State.ServerTypeValue.Parent then
-        State.ServerTypeValue.Text = Extensions.GetServerType()
-    end
     UptimeValue.Text = formatDuration(Workspace.DistributedGameTime)
 
     local _, _, root = getCharacter()
@@ -6899,16 +7242,26 @@ end)
 
 connect(UserInputService.JumpRequest, function()
     State.LastJumpRequest = os.clock()
+    if not State.JumpEnabled and not State.InfiniteJump then
+        return
+    end
     local _, humanoid, root = getCharacter()
     if not humanoid or not root then
         return
     end
-    rememberHumanoid(humanoid)
+    local original = rememberHumanoid(humanoid)
     local canApply = State.InfiniteJump or humanoid.FloorMaterial ~= Enum.Material.Air
     if not canApply then
         return
     end
-    if State.JumpMethod == "Velocity" then
+    if not State.JumpEnabled then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        if State.InfiniteJump and original then
+            local velocity = root.AssemblyLinearVelocity
+            local minimumVelocity = original.UseJumpPower and original.JumpPower or math.sqrt(math.max(2 * Workspace.Gravity * original.JumpHeight, 0))
+            root.AssemblyLinearVelocity = Vector3.new(velocity.X, math.max(velocity.Y, minimumVelocity), velocity.Z)
+        end
+    elseif State.JumpMethod == "Velocity" then
         local velocity = root.AssemblyLinearVelocity
         root.AssemblyLinearVelocity = Vector3.new(velocity.X, State.JumpValue, velocity.Z)
     else
@@ -7014,36 +7367,42 @@ connect(RunService.Heartbeat, function(deltaTime)
         Extensions.ApplyGodMode(humanoid)
     end
 
-    if State.SpeedMethod == "WalkSpeed" then
-        if humanoid.WalkSpeed ~= State.SpeedValue then
-            humanoid.WalkSpeed = State.SpeedValue
-        end
-    elseif State.SpeedMethod == "Velocity" then
-        if humanoid.WalkSpeed ~= 0 then
-            humanoid.WalkSpeed = 0
-        end
-        local direction = humanoid.MoveDirection
-        local currentVelocity = root.AssemblyLinearVelocity
-        root.AssemblyLinearVelocity = Vector3.new(direction.X * State.SpeedValue, currentVelocity.Y, direction.Z * State.SpeedValue)
-    elseif State.SpeedMethod == "CFrame" then
-        local baseSpeed = original and original.WalkSpeed or 16
-        local targetWalkSpeed = math.min(State.SpeedValue, baseSpeed)
-        if humanoid.WalkSpeed ~= targetWalkSpeed then
-            humanoid.WalkSpeed = targetWalkSpeed
-        end
-        local extraSpeed = math.max(State.SpeedValue - baseSpeed, 0)
-        if extraSpeed > 0 and humanoid.MoveDirection.Magnitude > 0 then
-            root.CFrame = root.CFrame + humanoid.MoveDirection.Unit * extraSpeed * deltaTime
+    if State.SpeedEnabled then
+        if State.SpeedMethod == "WalkSpeed" then
+            if humanoid.WalkSpeed ~= State.SpeedValue then
+                humanoid.WalkSpeed = State.SpeedValue
+            end
+        elseif State.SpeedMethod == "Velocity" then
+            if humanoid.WalkSpeed ~= 0 then
+                humanoid.WalkSpeed = 0
+            end
+            local direction = humanoid.MoveDirection
+            local currentVelocity = root.AssemblyLinearVelocity
+            root.AssemblyLinearVelocity = Vector3.new(direction.X * State.SpeedValue, currentVelocity.Y, direction.Z * State.SpeedValue)
+        elseif State.SpeedMethod == "CFrame" then
+            local baseSpeed = original and original.WalkSpeed or 16
+            local targetWalkSpeed = math.min(State.SpeedValue, baseSpeed)
+            if humanoid.WalkSpeed ~= targetWalkSpeed then
+                humanoid.WalkSpeed = targetWalkSpeed
+            end
+            local extraSpeed = math.max(State.SpeedValue - baseSpeed, 0)
+            if extraSpeed > 0 and humanoid.MoveDirection.Magnitude > 0 then
+                root.CFrame = root.CFrame + humanoid.MoveDirection.Unit * extraSpeed * deltaTime
+            end
         end
     end
 
-    if State.JumpMethod == "JumpPower" then
-        if not humanoid.UseJumpPower then humanoid.UseJumpPower = true end
-        if humanoid.JumpPower ~= State.JumpValue then humanoid.JumpPower = State.JumpValue end
-    elseif State.JumpMethod == "JumpHeight" then
-        if humanoid.UseJumpPower then humanoid.UseJumpPower = false end
-        if humanoid.JumpHeight ~= State.JumpValue then humanoid.JumpHeight = State.JumpValue end
+    if State.JumpEnabled then
+        if State.JumpMethod == "JumpPower" then
+            if not humanoid.UseJumpPower then humanoid.UseJumpPower = true end
+            if humanoid.JumpPower ~= State.JumpValue then humanoid.JumpPower = State.JumpValue end
+        elseif State.JumpMethod == "JumpHeight" then
+            if humanoid.UseJumpPower then humanoid.UseJumpPower = false end
+            if humanoid.JumpHeight ~= State.JumpValue then humanoid.JumpHeight = State.JumpValue end
+        end
     end
+
+    Extensions.UpdateFlantPlatform(root)
 
     if Workspace.Gravity ~= State.GravityValue then
         Workspace.Gravity = State.GravityValue
@@ -7110,7 +7469,7 @@ connect(RunService.Heartbeat, function(deltaTime)
     local itemScanInterval = State.ItemESP.ExactName ~= "" and 15 or 1.5
     if now - LastItemScan >= itemScanInterval then
         LastItemScan = now
-        if State.ItemESP.Enabled or State.XRay then
+        if State.ItemESP.Enabled or State.XRay or State.Inspector.Enabled then
             task.spawn(function()
                 scanItems(false)
             end)
@@ -7119,7 +7478,7 @@ connect(RunService.Heartbeat, function(deltaTime)
 
     if now - LastMobRescan >= 120 then
         LastMobRescan = now
-        if State.MobESP.Enabled or State.XRay or (State.Aimbot.Enabled and State.Aimbot.TargetType == "NPC") then
+        if State.MobESP.Enabled or State.XRay or State.Inspector.Enabled or (State.Aimbot.Enabled and State.Aimbot.TargetType == "NPC") then
             task.spawn(rescanMobs)
         end
     end
@@ -7128,7 +7487,7 @@ end)
 
 connect(RunService.RenderStepped, function()
     local now = os.clock()
-    local needsFPSSample = ActiveTab == "Info" and State.InterfaceVisible or State.PlayerESP.Enabled or State.MobESP.Enabled or State.ItemESP.Enabled or State.XRay
+    local needsFPSSample = ActiveTab == "Info" and State.InterfaceVisible or State.PlayerESP.Enabled or State.MobESP.Enabled or State.ItemESP.Enabled or State.Inspector.Enabled or State.XRay
     if needsFPSSample then
         FrameCounter = FrameCounter + 1
         if now - FrameTimer >= 0.5 then
@@ -7151,10 +7510,7 @@ connect(RunService.RenderStepped, function()
                 hideVisual(visual)
             end
         end
-        setDrawingVisible(State.Inspector.Crosshair, false)
-        setDrawingVisible(State.Inspector.Box, false)
         if State.Inspector.CrosshairFrame then State.Inspector.CrosshairFrame.Visible = false end
-        if State.Inspector.BoxFrame then State.Inspector.BoxFrame.Visible = false end
         if State.Inspector.Highlight then State.Inspector.Highlight.Enabled = false end
         if State.Inspector.NameLabel then State.Inspector.NameLabel.Visible = false end
         return
@@ -7318,6 +7674,7 @@ cleanup = function()
     Extensions.SetAimbotReleaseButtonVisible(false, true)
     Extensions.DestroyAimbotFOV()
     Extensions.SetInspectorEnabled(false, true)
+    Extensions.SetFlantEnabled(false, true)
 
     restoreCollisions()
     restoreXRayOccluders()
@@ -7374,12 +7731,12 @@ task.spawn(function()
     end)
 end)
 
-notify("Raphael Sovereign V6.8 Ultimate đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
+notify("Raphael Sovereign V7 Ultimate đã khởi động. RightShift để ẩn/hiện.", Theme.Success)
 
 task.defer(function()
     local config = Extensions.ReadConfig(true)
     if config and config.AutoLoad == true and State.Running then
         Extensions.ApplyConfig(config, true)
-        notify("Đã tự áp dụng config V6.8.", Theme.Success)
+        notify("Đã tự áp dụng config V7.", Theme.Success)
     end
 end)
