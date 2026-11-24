@@ -655,10 +655,14 @@ local State = {
     SpeedCorrectionCount = 0,
     SpeedCorrectionWindow = 0,
     SpeedProbeFailures = 0,
+    SpeedProbeSuccesses = 0,
     SpeedProbeSamples = 0,
     SpeedProbeStarted = 0,
     SpeedProbeLastSample = 0,
+    SpeedProbeMovingSince = 0,
     SpeedProbeCharacter = nil,
+    SpeedMethodLocked = false,
+    SpeedCalibrationState = "Idle",
     SpeedStatusValue = nil,
     JumpEnabled = false,
     JumpValue = 50,
@@ -666,7 +670,7 @@ local State = {
     InfiniteJump = false,
     BunnyHop = false,
     BunnyHopConnection = nil,
-    BunnyHopFloatingVisible = true,
+    BunnyHopFloatingVisible = false,
     BunnyHopFloatingButton = nil,
     LastBunnyHop = 0,
     SkinApplying = false,
@@ -916,6 +920,10 @@ local State = {
     ESPRefreshMode = "Adaptive",
     DynamicESPFrame = 0,
     LastAntiStunMaintain = 0,
+    AntiStunRecoveryUntil = 0,
+    AntiStunLastTrigger = 0,
+    AntiStunLastHealthyVelocity = Vector3.zero,
+    AntiStunTriggerCount = 0,
     LastJumpRequest = 0,
     LastJumpExecution = 0,
     AntiStunMarkerNames = {"Stunned", "Stun", "Frozen", "Freeze", "Slowed", "Slow", "Rooted", "Knocked", "Knockback", "Ragdolled", "StunTime", "SlowTime", "stunned", "stun", "frozen", "freeze", "slowed", "slow", "rooted", "knocked", "knockback", "ragdolled"},
@@ -942,6 +950,8 @@ local State = {
         RenderBound = false,
         ReleasedModel = nil,
         ReleasedPlayer = nil,
+        ReleasedUntil = 0,
+        OccludedSince = 0,
         WallCheck = false,
         TeamCheck = false,
         TeamStatusValue = nil,
@@ -3727,13 +3737,31 @@ Extensions.SpeedMethodOrder = {"WalkSpeed", "Velocity", "CFrame"}
 
 function Extensions.RefreshSpeedMethodStatus(reason)
     local method = tostring(State.SpeedResolvedMethod or "WalkSpeed")
+    local status = "AUTO · chờ bật"
+    if State.SpeedEnabled then
+        status = State.SpeedMethodLocked and ("LOCK · " .. method) or ("ĐANG THỬ · " .. method)
+    end
     if State.SpeedStatusValue and State.SpeedStatusValue.Parent then
-        State.SpeedStatusValue.Text = State.SpeedEnabled and ("AUTO · " .. method) or "AUTO · chờ bật"
-        State.SpeedStatusValue.TextColor3 = State.SpeedEnabled and Theme.Text or Theme.SubText
+        State.SpeedStatusValue.Text = status
+        State.SpeedStatusValue.TextColor3 = State.SpeedEnabled and (State.SpeedMethodLocked and Theme.Success or Theme.Warning) or Theme.SubText
     end
     if reason and reason ~= "" then
-        setStatusText("Speed Auto · " .. method .. " · " .. reason, Theme.Warning)
+        setStatusText("Speed · " .. status .. " · " .. reason, State.SpeedMethodLocked and Theme.Success or Theme.Warning)
     end
+end
+
+function Extensions.LockSpeedMethod(reason, silent)
+    State.SpeedMethodLocked = true
+    State.SpeedCalibrationState = "Locked"
+    State.SpeedProbeFailures = 0
+    State.SpeedProbeSuccesses = 0
+    State.SpeedProbeSamples = 0
+    State.SpeedProbeMovingSince = 0
+    Extensions.RefreshSpeedMethodStatus(reason or "đã xác định phương thức ban đầu")
+    if not silent then
+        notify("Speed đã khóa " .. tostring(State.SpeedResolvedMethod) .. "; sẽ không tự quét lại khi đang di chuyển.", Theme.Success)
+    end
+    return State.SpeedResolvedMethod
 end
 
 function Extensions.SetResolvedSpeedMethod(method, reason, silent)
@@ -3746,14 +3774,18 @@ function Extensions.SetResolvedSpeedMethod(method, reason, silent)
     end
     State.SpeedMethod = "Auto"
     State.SpeedResolvedMethod = method
+    State.SpeedMethodLocked = false
+    State.SpeedCalibrationState = "Calibrating"
     State.SpeedProbeFailures = 0
+    State.SpeedProbeSuccesses = 0
     State.SpeedProbeSamples = 0
     State.SpeedProbeStarted = os.clock()
     State.SpeedProbeLastSample = 0
+    State.SpeedProbeMovingSince = 0
     State.LastSpeedApply = 0
     Extensions.RefreshSpeedMethodStatus(reason)
     if previous ~= method and not silent then
-        notify("Speed Auto chuyển sang " .. method .. (reason and (" · " .. reason) or ""), Theme.Warning)
+        notify("Speed đang thử " .. method .. (reason and (" · " .. reason) or ""), Theme.Warning)
     end
     return method
 end
@@ -3762,38 +3794,72 @@ function Extensions.ResetSpeedAutoDetection(silent)
     local character, humanoid = getCharacter()
     State.SpeedProbeCharacter = character
     State.SpeedAppliedValue = tonumber(humanoid and humanoid.WalkSpeed) or 16
-    return Extensions.SetResolvedSpeedMethod("WalkSpeed", "ưu tiên thử WalkSpeed", silent)
+    return Extensions.SetResolvedSpeedMethod("WalkSpeed", "chỉ kiểm tra một lần khi bắt đầu", silent)
 end
 
 function Extensions.AdvanceSpeedMethod(reason)
+    if State.SpeedMethodLocked then return State.SpeedResolvedMethod end
     local current = tostring(State.SpeedResolvedMethod or "WalkSpeed")
     local index = table.find(Extensions.SpeedMethodOrder, current) or 1
     local nextMethod = Extensions.SpeedMethodOrder[math.min(index + 1, #Extensions.SpeedMethodOrder)]
-    if nextMethod == current then return current end
-    return Extensions.SetResolvedSpeedMethod(nextMethod, reason or (current .. " không đạt tốc độ yêu cầu"), false)
+    if nextMethod == current then return Extensions.LockSpeedMethod(reason, false) end
+    Extensions.SetResolvedSpeedMethod(nextMethod, reason or (current .. " không đạt kiểm tra ban đầu"), false)
+    if nextMethod == "CFrame" then
+        return Extensions.LockSpeedMethod("dùng phương thức dự phòng cuối", false)
+    end
+    return nextMethod
 end
 
 function Extensions.EvaluateSpeedMethod(humanoid, root, original, observedWalkSpeed, observedHorizontalSpeed, appliedSpeed, now)
+    if State.SpeedMethodLocked or not humanoid or not root then return end
     local method = tostring(State.SpeedResolvedMethod or "WalkSpeed")
-    if method == "CFrame" or now - (State.SpeedProbeStarted or 0) < 0.8 or now - (State.SpeedProbeLastSample or 0) < 0.15 then return end
-    if not humanoid or not root or humanoid.MoveDirection.Magnitude < 0.15 or humanoid.FloorMaterial == Enum.Material.Air or humanoid.Sit then return end
+    if method == "CFrame" then
+        Extensions.LockSpeedMethod("dùng phương thức dự phòng cuối", true)
+        return
+    end
+    if now - (State.SpeedProbeStarted or 0) < 0.65 or now - (State.SpeedProbeLastSample or 0) < 0.18 then return end
+
+    local baseSpeed = tonumber(original and original.WalkSpeed) or 16
+    local target = math.max(tonumber(appliedSpeed) or baseSpeed, 0)
+    local passed = false
+    if method == "WalkSpeed" then
+        passed = math.abs((tonumber(observedWalkSpeed) or 0) - target) <= math.max(2, target * 0.12)
+    else
+        local direction = humanoid.MoveDirection
+        if humanoid.Sit or humanoid.FloorMaterial == Enum.Material.Air or direction.Magnitude < 0.2 then
+            State.SpeedProbeMovingSince = 0
+            return
+        end
+        if State.SpeedProbeMovingSince == 0 then
+            State.SpeedProbeMovingSince = now
+            return
+        end
+        if now - State.SpeedProbeMovingSince < 0.65 then return end
+        local velocity = root.AssemblyLinearVelocity
+        local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+        local horizontalSpeed = tonumber(observedHorizontalSpeed) or horizontal.Magnitude
+        local alignment = horizontalSpeed > 0.05 and horizontal.Unit:Dot(direction.Unit) or 0
+        if target <= 1 then
+            passed = horizontalSpeed <= 2
+        else
+            local threshold = math.max(math.min(baseSpeed, target) * 0.72, target * 0.48)
+            passed = horizontalSpeed >= threshold and alignment > 0.2
+        end
+    end
+
     State.SpeedProbeLastSample = now
     State.SpeedProbeSamples = (tonumber(State.SpeedProbeSamples) or 0) + 1
-    local velocity = root.AssemblyLinearVelocity
-    local currentHorizontalSpeed = math.sqrt(velocity.X * velocity.X + velocity.Z * velocity.Z)
-    local horizontalSpeed = method == "Velocity" and tonumber(observedHorizontalSpeed) or currentHorizontalSpeed
-    horizontalSpeed = tonumber(horizontalSpeed) or currentHorizontalSpeed
-    local baseSpeed = tonumber(original and original.WalkSpeed) or 16
-    local target = math.max(tonumber(appliedSpeed) or baseSpeed, baseSpeed)
-    local propertyRejected = method == "WalkSpeed" and math.abs((tonumber(observedWalkSpeed) or 0) - target) > math.max(2, target * 0.12)
-    local movementRejected = target > baseSpeed + 4 and horizontalSpeed < math.max(baseSpeed * 0.7, target * (method == "WalkSpeed" and 0.42 or 0.5))
-    if propertyRejected or movementRejected then
-        State.SpeedProbeFailures = (tonumber(State.SpeedProbeFailures) or 0) + 1
-    else
+    if passed then
+        State.SpeedProbeSuccesses = (tonumber(State.SpeedProbeSuccesses) or 0) + 1
         State.SpeedProbeFailures = math.max((tonumber(State.SpeedProbeFailures) or 0) - 1, 0)
+    else
+        State.SpeedProbeFailures = (tonumber(State.SpeedProbeFailures) or 0) + 1
+        State.SpeedProbeSuccesses = math.max((tonumber(State.SpeedProbeSuccesses) or 0) - 1, 0)
     end
-    if State.SpeedProbeSamples >= 6 and State.SpeedProbeFailures >= 5 then
-        Extensions.AdvanceSpeedMethod(method .. " bị map ghi đè hoặc giới hạn")
+    if State.SpeedProbeSuccesses >= 3 then
+        Extensions.LockSpeedMethod("kiểm tra ban đầu hoàn tất", false)
+    elseif State.SpeedProbeFailures >= (method == "WalkSpeed" and 4 or 5) then
+        Extensions.AdvanceSpeedMethod(method .. " không vượt kiểm tra ban đầu")
     end
 end
 
@@ -11209,7 +11275,8 @@ function Extensions.GetAimbotPart(model)
     end
     if State.Aimbot.AimPart == "Đầu" then
         local head = model:FindFirstChild("Head")
-        return head and head:IsA("BasePart") and head or nil
+        if head and head:IsA("BasePart") then return head end
+        -- Một số avatar/map thay Head trong thời gian ngắn; dùng thân để không làm Aim đứng chờ.
     end
     local body = model:FindFirstChild("UpperTorso")
         or model:FindFirstChild("Torso")
@@ -11415,6 +11482,11 @@ function Extensions.HasAimbotLineOfSight(model, aimPart)
 end
 
 function Extensions.FindAimbotTarget()
+    if State.Aimbot.ReleasedUntil > 0 and os.clock() >= State.Aimbot.ReleasedUntil then
+        State.Aimbot.ReleasedModel = nil
+        State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.ReleasedUntil = 0
+    end
     local bestModel
     local bestPlayer
     local bestHumanoid
@@ -11504,6 +11576,7 @@ function Extensions.ReleaseAimbotTarget(silent)
     end
     State.Aimbot.ReleasedModel = State.Aimbot.TargetModel
     State.Aimbot.ReleasedPlayer = State.Aimbot.TargetPlayer
+    State.Aimbot.ReleasedUntil = os.clock() + 0.65
     Extensions.ClearAimbotTarget(false)
     Extensions.UpdateAimbotStatus("Đã bỏ mục tiêu; đang chờ mục tiêu khác", Theme.Warning)
     if not silent then
@@ -11620,6 +11693,8 @@ function Extensions.SetAimbotEnabled(enabled, reason, silent)
         Extensions.ClearAimbotTarget(true)
         State.Aimbot.ReleasedModel = nil
         State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.ReleasedUntil = 0
+        State.Aimbot.OccludedSince = 0
         State.Aimbot.LastStickyCheck = 0
         State.Aimbot.Enabled = true
         if State.Aimbot.Mode == "Aim truyền thống (Góc 1)" and State.SpectatingPlayer then
@@ -11639,6 +11714,8 @@ function Extensions.SetAimbotEnabled(enabled, reason, silent)
         State.Aimbot.Enabled = false
         State.Aimbot.ReleasedModel = nil
         State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.ReleasedUntil = 0
+        State.Aimbot.OccludedSince = 0
         Extensions.ClearAimbotTarget(true)
         Extensions.UpdateAimbotFOV()
     end
@@ -11811,6 +11888,7 @@ function Extensions.UpdateAimbotFrame(now)
     if State.Aimbot.TargetModel and not Extensions.IsAimbotTargetValid() then
         Extensions.ClearAimbotTarget(true)
         State.Aimbot.LastScan = 0
+        State.Aimbot.OccludedSince = 0
         Extensions.UpdateAimbotStatus("Mục tiêu không còn hợp lệ; Aimbot vẫn bật và đang tìm lại", Theme.Warning)
     end
 
@@ -11821,12 +11899,23 @@ function Extensions.UpdateAimbotFrame(now)
 
     Extensions.TryStickyAimbotOverride(now)
 
-    if State.Aimbot.TargetModel and State.Aimbot.WallCheck and not Extensions.HasAimbotLineOfSight(State.Aimbot.TargetModel, State.Aimbot.TargetPart) then
-        Extensions.ClearAimbotTarget(false)
-        Extensions.UpdateAimbotStatus("Mục tiêu đã khuất tường; đang chờ mục tiêu nhìn thấy", Theme.Warning)
+    if State.Aimbot.TargetModel and State.Aimbot.WallCheck then
+        if Extensions.HasAimbotLineOfSight(State.Aimbot.TargetModel, State.Aimbot.TargetPart) then
+            State.Aimbot.OccludedSince = 0
+        elseif State.Aimbot.OccludedSince == 0 then
+            State.Aimbot.OccludedSince = now
+        elseif now - State.Aimbot.OccludedSince >= 0.16 then
+            Extensions.ClearAimbotTarget(true)
+            State.Aimbot.LastScan = 0
+            State.Aimbot.OccludedSince = 0
+            Extensions.UpdateAimbotStatus("Mục tiêu đã khuất tường; đang tìm mục tiêu nhìn thấy", Theme.Warning)
+        end
+    else
+        State.Aimbot.OccludedSince = 0
     end
 
-    if not State.Aimbot.TargetModel and now - State.Aimbot.LastScan >= 0.12 then
+    local scanInterval = State.IsDesktop and 0.06 or 0.1
+    if not State.Aimbot.TargetModel and now - State.Aimbot.LastScan >= scanInterval then
         State.Aimbot.LastScan = now
         Extensions.AcquireAimbotTarget()
     end
@@ -12092,25 +12181,115 @@ function Extensions.SetAntiAFKEnabled(enabled, silent)
     end
 end
 
-function Extensions.TrackAntiStunInstance(instance)
-    if not instance or not instance.Parent then
-        return
+function Extensions.IsAntiStunNameSuspicious(instance)
+    local lowerName = string.lower(tostring(instance and instance.Name or ""))
+    for _, hint in ipairs(State.AntiStunForceHints) do
+        if string.find(lowerName, hint, 1, true) then return true end
     end
+    return false
+end
+
+function Extensions.TriggerAntiStunRecovery(reason)
+    local now = os.clock()
+    State.AntiStunRecoveryUntil = math.max(State.AntiStunRecoveryUntil or 0, now + 0.55)
+    if now - (State.AntiStunLastTrigger or 0) > 0.12 then
+        State.AntiStunTriggerCount = (tonumber(State.AntiStunTriggerCount) or 0) + 1
+    end
+    State.AntiStunLastTrigger = now
+    return reason
+end
+
+function Extensions.TrackAntiStunInstance(instance)
+    if not instance or not instance.Parent then return end
     if instance:IsA("Motor6D") then
         State.AntiStunTrackedInstances[instance] = "Motor"
     elseif instance:IsA("BodyVelocity")
         or instance:IsA("BodyAngularVelocity")
+        or instance:IsA("BodyPosition")
+        or instance:IsA("BodyGyro")
         or instance:IsA("LinearVelocity")
         or instance:IsA("AngularVelocity")
         or instance:IsA("VectorForce")
         or instance:IsA("Torque")
+        or instance:IsA("AlignPosition")
+        or instance:IsA("AlignOrientation")
         or instance:IsA("BallSocketConstraint")
         or instance:IsA("HingeConstraint")
         or instance:IsA("BoolValue")
+        or instance:IsA("StringValue")
         or instance:IsA("NumberValue")
         or instance:IsA("IntValue") then
         State.AntiStunTrackedInstances[instance] = "Candidate"
     end
+end
+
+function Extensions.NeutralizeAntiStunInstance(instance)
+    if not instance or not instance.Parent or not Extensions.IsAntiStunNameSuspicious(instance) then return false end
+    local active = false
+    pcall(function()
+        if instance:IsA("BodyVelocity") then
+            active = instance.MaxForce.Magnitude > 0.01 and instance.Velocity.Magnitude > 2
+        elseif instance:IsA("BodyAngularVelocity") then
+            active = instance.MaxTorque.Magnitude > 0.01 and instance.AngularVelocity.Magnitude > 1
+        elseif instance:IsA("BodyPosition") then
+            active = instance.MaxForce.Magnitude > 0.01
+        elseif instance:IsA("BodyGyro") then
+            active = instance.MaxTorque.Magnitude > 0.01
+        elseif instance:IsA("LinearVelocity") or instance:IsA("AngularVelocity") or instance:IsA("VectorForce") or instance:IsA("Torque") or instance:IsA("AlignPosition") or instance:IsA("AlignOrientation") or instance:IsA("BallSocketConstraint") or instance:IsA("HingeConstraint") then
+            active = instance.Enabled
+        elseif instance:IsA("BoolValue") then
+            active = instance.Value == true
+        elseif instance:IsA("StringValue") then
+            active = instance.Value ~= ""
+        elseif instance:IsA("NumberValue") or instance:IsA("IntValue") then
+            active = tonumber(instance.Value) ~= nil and instance.Value > 0
+        end
+    end)
+    if not active then return false end
+
+    pcall(function()
+        local backup = State.AntiStunInstanceBackup[instance]
+        if not backup then
+            backup = {}
+            State.AntiStunInstanceBackup[instance] = backup
+            if instance:IsA("BodyVelocity") then
+                backup.Velocity = instance.Velocity
+                backup.MaxForce = instance.MaxForce
+            elseif instance:IsA("BodyAngularVelocity") then
+                backup.AngularVelocity = instance.AngularVelocity
+                backup.MaxTorque = instance.MaxTorque
+            elseif instance:IsA("BodyPosition") then
+                backup.MaxForce = instance.MaxForce
+            elseif instance:IsA("BodyGyro") then
+                backup.MaxTorque = instance.MaxTorque
+            elseif instance:IsA("LinearVelocity") or instance:IsA("AngularVelocity") or instance:IsA("VectorForce") or instance:IsA("Torque") or instance:IsA("AlignPosition") or instance:IsA("AlignOrientation") or instance:IsA("BallSocketConstraint") or instance:IsA("HingeConstraint") then
+                backup.Enabled = instance.Enabled
+            elseif instance:IsA("BoolValue") or instance:IsA("StringValue") or instance:IsA("NumberValue") or instance:IsA("IntValue") then
+                backup.Value = instance.Value
+            end
+        end
+        if instance:IsA("BodyVelocity") then
+            instance.Velocity = Vector3.zero
+            instance.MaxForce = Vector3.zero
+        elseif instance:IsA("BodyAngularVelocity") then
+            instance.AngularVelocity = Vector3.zero
+            instance.MaxTorque = Vector3.zero
+        elseif instance:IsA("BodyPosition") then
+            instance.MaxForce = Vector3.zero
+        elseif instance:IsA("BodyGyro") then
+            instance.MaxTorque = Vector3.zero
+        elseif instance:IsA("LinearVelocity") or instance:IsA("AngularVelocity") or instance:IsA("VectorForce") or instance:IsA("Torque") or instance:IsA("AlignPosition") or instance:IsA("AlignOrientation") or instance:IsA("BallSocketConstraint") or instance:IsA("HingeConstraint") then
+            instance.Enabled = false
+        elseif instance:IsA("BoolValue") then
+            instance.Value = false
+        elseif instance:IsA("StringValue") then
+            instance.Value = ""
+        elseif instance:IsA("NumberValue") or instance:IsA("IntValue") then
+            local lowerName = string.lower(instance.Name)
+            instance.Value = string.find(lowerName, "slow", 1, true) and not string.find(lowerName, "time", 1, true) and 1 or 0
+        end
+    end)
+    return true
 end
 
 function Extensions.RebuildAntiStunTracking(character)
@@ -12124,27 +12303,9 @@ function Extensions.RebuildAntiStunTracking(character)
 end
 
 function Extensions.MaintainAntiStun(character, humanoid, root)
-    if not State.AntiStun or not character or not humanoid or not root then
-        return
-    end
+    if not State.AntiStun or not character or not humanoid or not root then return end
 
-    local currentState = humanoid:GetState()
-    if humanoid.PlatformStand
-        or humanoid.Sit
-        or currentState == Enum.HumanoidStateType.FallingDown
-        or currentState == Enum.HumanoidStateType.Ragdoll
-        or currentState == Enum.HumanoidStateType.Physics then
-        humanoid.PlatformStand = false
-        humanoid.Sit = false
-        pcall(function()
-            humanoid:ChangeState(humanoid.FloorMaterial == Enum.Material.Air and Enum.HumanoidStateType.Freefall or Enum.HumanoidStateType.Running)
-        end)
-    end
-
-    if root.Anchored then
-        root.Anchored = false
-    end
-
+    local now = os.clock()
     local rememberFunction: any = rememberHumanoid
     local original: any = rememberFunction(humanoid)
     local velocity: any = root.AssemblyLinearVelocity
@@ -12155,23 +12316,6 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
         local effectiveSpeed = tonumber((Extensions.GetEffectiveSpeed(humanoid, original))) or speed
         speed = math.max(effectiveSpeed, 0)
     end
-    local now = os.clock()
-    local grounded = humanoid.FloorMaterial ~= Enum.Material.Air
-    local correctedHorizontal = horizontal
-
-    if grounded then
-        if direction.Magnitude <= 0.01 then
-            correctedHorizontal = Vector3.zero
-        elseif State.SpeedResolvedMethod ~= "CFrame" then
-            correctedHorizontal = direction.Unit * speed
-        elseif horizontal.Magnitude > math.max(speed * 1.6, 32) or horizontal:Dot(direction.Unit) < -1 then
-            correctedHorizontal = direction.Unit * speed
-        end
-    elseif direction.Magnitude <= 0.01 and horizontal.Magnitude > 3 then
-        correctedHorizontal = Vector3.zero
-    elseif horizontal.Magnitude > math.max(speed * 1.6, 36) or direction.Magnitude > 0.01 and horizontal:Dot(direction.Unit) < -1 then
-        correctedHorizontal = direction.Magnitude > 0.01 and direction.Unit * speed or Vector3.zero
-    end
 
     local jumpLimit
     if not State.JumpEnabled and original then
@@ -12181,101 +12325,113 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
     else
         jumpLimit = State.JumpValue
     end
-    local jumpGrace = now - State.LastJumpRequest <= 0.65
-    local verticalLimit = jumpGrace and math.max(jumpLimit * 1.25, 30) or 12
-    local vertical = math.min(velocity.Y, verticalLimit)
-    root.AssemblyLinearVelocity = Vector3.new(correctedHorizontal.X, vertical, correctedHorizontal.Z)
-    root.AssemblyAngularVelocity = Vector3.zero
+    jumpLimit = math.max(tonumber(jumpLimit) or 50, 20)
 
-    if now - State.LastAntiStunMaintain < 0.18 then
+    local currentState = humanoid:GetState()
+    local badState = humanoid.PlatformStand
+        or humanoid.Sit and humanoid.SeatPart == nil
+        or currentState == Enum.HumanoidStateType.FallingDown
+        or currentState == Enum.HumanoidStateType.Ragdoll
+        or currentState == Enum.HumanoidStateType.Physics
+    local jumpGrace = now - State.LastJumpRequest <= 0.7
+    local extremeHorizontal = horizontal.Magnitude > math.max(speed * 2.35, 48)
+    local extremeVertical = velocity.Y > math.max(jumpLimit * 1.7, 62) and not jumpGrace or velocity.Y < -115
+    local detected = badState or root.Anchored or extremeHorizontal or extremeVertical
+
+    if now - (State.LastAntiStunMaintain or 0) >= 0.1 then
+        State.LastAntiStunMaintain = now
+        for descendant, kind in pairs(State.AntiStunTrackedInstances) do
+            if not descendant or not descendant.Parent or not descendant:IsDescendantOf(character) then
+                State.AntiStunTrackedInstances[descendant] = nil
+            elseif kind == "Motor" then
+                if not descendant.Enabled then
+                    detected = true
+                    descendant.Enabled = true
+                end
+            elseif Extensions.NeutralizeAntiStunInstance(descendant) then
+                detected = true
+            end
+        end
+
+        for _, object in ipairs({character, humanoid, root}) do
+            for _, markerName in ipairs(State.AntiStunMarkerNames) do
+                local attribute = object:GetAttribute(markerName)
+                if attribute == true or type(attribute) == "number" and attribute > 0 then
+                    detected = true
+                    local lowerName = string.lower(markerName)
+                    local neutral = string.find(lowerName, "slow", 1, true) and not string.find(lowerName, "time", 1, true) and 1 or 0
+                    pcall(function()
+                        object:SetAttribute(markerName, type(attribute) == "number" and neutral or false)
+                    end)
+                end
+            end
+        end
+    end
+
+    if detected then Extensions.TriggerAntiStunRecovery("trạng thái bất lợi") end
+    local recovering = now < (State.AntiStunRecoveryUntil or 0)
+    if not recovering then
+        State.AntiStunLastHealthyVelocity = velocity
         return
     end
-    State.LastAntiStunMaintain = now
+
+    if root.Anchored then root.Anchored = false end
+    if humanoid.PlatformStand then humanoid.PlatformStand = false end
+    if badState then
+        humanoid.Sit = false
+        pcall(function()
+            humanoid:ChangeState(humanoid.FloorMaterial == Enum.Material.Air and Enum.HumanoidStateType.Freefall or Enum.HumanoidStateType.Running)
+        end)
+    end
     pcall(function()
-        humanoid.PlatformStand = false
         humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
     end)
 
-    for descendant, kind in pairs(State.AntiStunTrackedInstances) do
-        if not descendant or not descendant.Parent or not descendant:IsDescendantOf(character) then
-            State.AntiStunTrackedInstances[descendant] = nil
-        elseif kind == "Motor" then
-            if not descendant.Enabled then
-                descendant.Enabled = true
-            end
-        else
-            local lowerName = string.lower(descendant.Name)
-            local suspicious = false
-            for _, hint in ipairs(State.AntiStunForceHints) do
-                if string.find(lowerName, hint, 1, true) then
-                    suspicious = true
-                    break
-                end
-            end
-            if suspicious then
-                pcall(function()
-                    local backup = State.AntiStunInstanceBackup[descendant]
-                    if not backup then
-                        backup = {}
-                        State.AntiStunInstanceBackup[descendant] = backup
-                        if descendant:IsA("BodyVelocity") then
-                            backup.Velocity = descendant.Velocity
-                            backup.MaxForce = descendant.MaxForce
-                        elseif descendant:IsA("BodyAngularVelocity") then
-                            backup.AngularVelocity = descendant.AngularVelocity
-                            backup.MaxTorque = descendant.MaxTorque
-                        elseif descendant:IsA("LinearVelocity") or descendant:IsA("AngularVelocity") or descendant:IsA("VectorForce") or descendant:IsA("Torque") or descendant:IsA("BallSocketConstraint") or descendant:IsA("HingeConstraint") then
-                            backup.Enabled = descendant.Enabled
-                        elseif descendant:IsA("BoolValue") or descendant:IsA("NumberValue") or descendant:IsA("IntValue") then
-                            backup.Value = descendant.Value
-                        end
-                    end
-                    if descendant:IsA("BodyVelocity") then
-                        descendant.Velocity = Vector3.zero
-                        descendant.MaxForce = Vector3.zero
-                    elseif descendant:IsA("BodyAngularVelocity") then
-                        descendant.AngularVelocity = Vector3.zero
-                        descendant.MaxTorque = Vector3.zero
-                    elseif descendant:IsA("LinearVelocity") or descendant:IsA("AngularVelocity") or descendant:IsA("VectorForce") or descendant:IsA("Torque") or descendant:IsA("BallSocketConstraint") or descendant:IsA("HingeConstraint") then
-                        descendant.Enabled = false
-                    elseif descendant:IsA("BoolValue") then
-                        descendant.Value = false
-                    elseif descendant:IsA("NumberValue") or descendant:IsA("IntValue") then
-                        descendant.Value = string.find(lowerName, "slow", 1, true) and 1 or 0
-                    end
-                end)
-            end
-        end
+    local correctedHorizontal = horizontal
+    local wrongDirection = direction.Magnitude > 0.05 and horizontal.Magnitude > 1 and horizontal:Dot(direction.Unit) < -1
+    if direction.Magnitude > 0.05 and (horizontal.Magnitude < math.max(speed * 0.22, 3) or extremeHorizontal or wrongDirection) then
+        correctedHorizontal = direction.Unit * speed
+    elseif extremeHorizontal then
+        local healthy = State.AntiStunLastHealthyVelocity or Vector3.zero
+        local healthyHorizontal = Vector3.new(healthy.X, 0, healthy.Z)
+        correctedHorizontal = healthyHorizontal.Magnitude <= math.max(speed * 1.4, 28) and healthyHorizontal or Vector3.zero
     end
 
-    for _, object in ipairs({character, humanoid, root}) do
-        for _, markerName in ipairs(State.AntiStunMarkerNames) do
-            local attribute = object:GetAttribute(markerName)
-            if attribute == true or type(attribute) == "number" and attribute > 0 then
-                local neutral = string.lower(markerName) == "slow" and 1 or 0
-                pcall(function()
-                    object:SetAttribute(markerName, type(attribute) == "number" and neutral or false)
-                end)
-            end
-        end
+    local maxUp = jumpGrace and math.max(jumpLimit * 1.3, 36) or math.max(jumpLimit, 42)
+    local correctedY = math.clamp(velocity.Y, -90, maxUp)
+    local correctedVelocity = Vector3.new(correctedHorizontal.X, correctedY, correctedHorizontal.Z)
+    if (correctedVelocity - velocity).Magnitude > 0.5 then
+        root.AssemblyLinearVelocity = correctedVelocity
     end
-
+    if root.AssemblyAngularVelocity.Magnitude > 4 then
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
 end
 
 function Extensions.SetAntiStunEnabled(enabled, silent)
     State.AntiStun = not not enabled
     State.LastAntiStunMaintain = 0
+    State.AntiStunRecoveryUntil = 0
+    State.AntiStunLastTrigger = 0
+    State.AntiStunTriggerCount = 0
     local character, humanoid, root = getCharacter()
     if State.AntiStun then
+        State.AntiStunLastHealthyVelocity = root and root.AssemblyLinearVelocity or Vector3.zero
         Extensions.RebuildAntiStunTracking(character)
+        if humanoid then
+            pcall(function()
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+            end)
+        end
         Extensions.MaintainAntiStun(character, humanoid, root)
     elseif humanoid then
         local original = rememberHumanoid(humanoid)
         pcall(function()
             humanoid.PlatformStand = false
-            humanoid.Sit = false
             humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, original and original.FallingDownEnabled or true)
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, original and original.RagdollEnabled or true)
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, original and original.PhysicsEnabled or true)
@@ -12299,7 +12455,7 @@ function Extensions.SetAntiStunEnabled(enabled, silent)
         control.Set(State.AntiStun, false)
     end
     if not silent then
-        notify(State.AntiStun and "Anti Stun nâng cao đã bật: chặn marker, ragdoll, force bất lợi và khôi phục Motor6D." or "Anti Stun đã tắt và đã khôi phục constraint.", State.AntiStun and Theme.Success or Theme.Warning)
+        notify(State.AntiStun and "Anti Stun thích ứng đã bật: chỉ can thiệp khi phát hiện stun, ragdoll hoặc lực bất lợi." or "Anti Stun đã tắt và đã khôi phục constraint.", State.AntiStun and Theme.Success or Theme.Warning)
     end
 end
 
@@ -12907,6 +13063,8 @@ function Extensions.ApplyConfig(config, silent)
     State.SpeedMethod = "Auto"
     State.SpeedResolvedMethod = "WalkSpeed"
     State.SpeedProbeCharacter = nil
+    State.SpeedMethodLocked = false
+    State.SpeedCalibrationState = "Idle"
     local legacyCompatibility = booleanValue(movement, "MovementCompatibility", State.MovementCompatibility)
     local fallbackProfile = legacyCompatibility and "Tương thích" or "Cân bằng"
     State.SpeedProfile = allowed(movement.SpeedProfile, {"Tương thích", "Cân bằng"}, fallbackProfile)
@@ -13226,15 +13384,17 @@ function Extensions.HandleSpeedToggle(value: boolean)
         resetSpeedSideEffects()
         State.SpeedProbeCharacter = nil
         State.SpeedResolvedMethod = "WalkSpeed"
+        State.SpeedMethodLocked = false
+        State.SpeedCalibrationState = "Idle"
         Extensions.RefreshSpeedMethodStatus()
     end
-    notify(value and "Speed Auto đã bật · thử WalkSpeed → Velocity → CFrame." or "Speed đã tắt và khôi phục tốc độ gốc.", value and Theme.Success or Theme.Warning)
+    notify(value and "Speed Auto đã bật · xác định phương thức một lần rồi khóa." or "Speed đã tắt và khôi phục tốc độ gốc.", value and Theme.Success or Theme.Warning)
 end
 
 do
-local SpeedSection = createSection(MovementPage, "Speed", "Speed Auto tự thử theo đúng thứ tự WalkSpeed → Velocity → CFrame và chỉ chuyển phương thức khi map ghi đè hoặc giới hạn phương thức hiện tại.")
+local SpeedSection = createSection(MovementPage, "Speed", "Khi bật, Speed chỉ xác định một lần theo thứ tự WalkSpeed → Velocity → CFrame, sau đó khóa phương thức cho đến khi hồi sinh hoặc Ngài chủ động xác định lại.")
 State.ConfigControls.SpeedEnabled = createToggle(SpeedSection, "Speed tự động", State.SpeedEnabled, Extensions.HandleSpeedToggle)
-State.SpeedStatusValue = createInfoRow(SpeedSection, "Phương thức", State.SpeedEnabled and ("AUTO · " .. tostring(State.SpeedResolvedMethod)) or "AUTO · chờ bật")
+State.SpeedStatusValue = createInfoRow(SpeedSection, "Phương thức", State.SpeedEnabled and (State.SpeedMethodLocked and ("LOCK · " .. tostring(State.SpeedResolvedMethod)) or ("ĐANG THỬ · " .. tostring(State.SpeedResolvedMethod))) or "AUTO · chờ bật")
 State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", Extensions.FormatMovementNumber(State.SpeedValue), "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
@@ -13251,6 +13411,14 @@ State.ConfigControls.SpeedProfile = createSelector(SpeedSection, "Cách áp dụ
     if State.SpeedEnabled then Extensions.ResetSpeedAutoDetection(true) end
     notify(value == "Tương thích" and "Speed Auto Tương thích: ưu tiên nhịp áp dụng ổn định." or "Speed Auto Cân bằng: tăng tốc mượt trong phương thức đang dùng.", Theme.Success)
 end)
+createButton(SpeedSection, "Xác định lại phương thức Speed", function()
+    if not State.SpeedEnabled then
+        notify("Hãy bật Speed trước khi xác định phương thức.", Theme.Warning)
+        return
+    end
+    resetSpeedSideEffects()
+    Extensions.ResetSpeedAutoDetection(false)
+end, Theme.SurfaceLight)
 createButton(SpeedSection, "Khôi phục tốc độ mặc định", function()
     local _, humanoid = getCharacter()
     local rememberFunction: any = rememberHumanoid
@@ -13258,7 +13426,13 @@ createButton(SpeedSection, "Khôi phục tốc độ mặc định", function()
     State.SpeedValue = Extensions.RoundMovementNumber(original and original.WalkSpeed or 16)
     State.SpeedMethod = "Auto"
     resetSpeedSideEffects()
-    Extensions.ResetSpeedAutoDetection(true)
+    if State.SpeedEnabled then
+        Extensions.ResetSpeedAutoDetection(true)
+    else
+        State.SpeedMethodLocked = false
+        State.SpeedCalibrationState = "Idle"
+        Extensions.RefreshSpeedMethodStatus()
+    end
     if State.ConfigControls.SpeedValue then
         State.ConfigControls.SpeedValue.Text = Extensions.FormatMovementNumber(State.SpeedValue)
     end
@@ -13300,11 +13474,6 @@ State.ConfigControls.JumpMethod = createSelector(JumpSection, "Phương thức",
 end)
 State.ConfigControls.InfiniteJump = createToggle(JumpSection, "Infinite Jump không delay", false, function(value)
     State.InfiniteJump = value
-end)
-State.ConfigControls.BunnyHop = createToggle(JumpSection, "Bunny Hop khi vừa chạm đất", State.BunnyHop, function(value)
-    if State.BunnyHop ~= value then
-        Extensions.SetBunnyHopEnabled(value, false)
-    end
 end)
 State.ConfigControls.BunnyHopFloatingVisible = createToggle(JumpSection, "Hiện nút Bunny Hop ngoài giao diện", State.BunnyHopFloatingVisible, function(value)
     Extensions.SetBunnyHopFloatingButtonVisible(value, false)
@@ -13638,6 +13807,8 @@ State.ConfigControls.AimbotMode = createSelector(AimbotLockSection, "Cách Aim",
         Extensions.ClearAimbotTarget(true)
         State.Aimbot.ReleasedModel = nil
         State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.ReleasedUntil = 0
+        State.Aimbot.OccludedSince = 0
         State.Aimbot.Mode = value
         if State.Aimbot.Enabled and value == "Aim truyền thống (Góc 1)" and State.SpectatingPlayer then
             setSpectating(nil)
@@ -13650,6 +13821,8 @@ State.ConfigControls.AimbotTargetType = createSelector(AimbotLockSection, "Loạ
         Extensions.ClearAimbotTarget(false)
         State.Aimbot.ReleasedModel = nil
         State.Aimbot.ReleasedPlayer = nil
+        State.Aimbot.ReleasedUntil = 0
+        State.Aimbot.OccludedSince = 0
         State.Aimbot.TargetType = value
         if State.Aimbot.Enabled and value == "NPC" and next(MobCache) == nil then
             task.spawn(rescanMobs)
@@ -14287,7 +14460,7 @@ State.ConfigControls.AntiAFK = createToggle(UtilitySection, "Anti AFK nâng cao"
         Extensions.SetAntiAFKEnabled(value, false)
     end
 end)
-State.ConfigControls.AntiStun = createToggle(UtilitySection, "Anti Stun nâng cao", false, function(value)
+State.ConfigControls.AntiStun = createToggle(UtilitySection, "Anti Stun thích ứng", false, function(value)
     if State.AntiStun ~= value then
         Extensions.SetAntiStunEnabled(value, false)
     end
@@ -14899,7 +15072,17 @@ connect(LocalPlayer.CharacterAdded, function(character: any)
             end
         end
         if State.AntiStun then
+            State.AntiStunRecoveryUntil = 0
+            State.AntiStunLastTrigger = 0
+            State.AntiStunLastHealthyVelocity = root and root.AssemblyLinearVelocity or Vector3.zero
             Extensions.RebuildAntiStunTracking(character)
+            if humanoid then
+                pcall(function()
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+                end)
+            end
         end
         if State.Noclip and State.NoclipMethod ~= "Chỉ Root" then
             Extensions.RebuildNoclipTracking(character)
@@ -15127,24 +15310,10 @@ connect(RunService.Stepped, Extensions.UpdateNoclipStep)
 
 function Extensions.ApplyWalkSpeedRuntime(runtimeState: any, humanoid: any, appliedSpeed: number, now: number)
     local currentSpeed: number = tonumber(humanoid.WalkSpeed) or 0
-    local delay: number = runtimeState.MovementCompatibility and 0.35 or 0
+    local delay: number = runtimeState.MovementCompatibility and 0.28 or 0
     if math.abs(currentSpeed - appliedSpeed) <= 0.05 or now - runtimeState.LastSpeedApply < delay then return end
-    if not runtimeState.MovementCompatibility then
-        humanoid.WalkSpeed = appliedSpeed
-        runtimeState.LastSpeedApply = now
-        return
-    end
-    if now - runtimeState.SpeedCorrectionWindow > 2 then
-        runtimeState.SpeedCorrectionWindow = now
-        runtimeState.SpeedCorrectionCount = 0
-    end
-    runtimeState.SpeedCorrectionCount = (tonumber(runtimeState.SpeedCorrectionCount) or 0) + 1
-    if runtimeState.SpeedCorrectionCount < 5 then
-        humanoid.WalkSpeed = appliedSpeed
-        runtimeState.LastSpeedApply = now
-        return
-    end
-    Extensions.AdvanceSpeedMethod("WalkSpeed bị map ghi đè liên tục")
+    humanoid.WalkSpeed = appliedSpeed
+    runtimeState.LastSpeedApply = now
 end
 
 function Extensions.ApplyVelocitySpeedRuntime(speedProfile: string, speedAcceleration: number, humanoid: any, root: any, original: any, appliedSpeed: number, deltaTime: number)
@@ -15152,6 +15321,7 @@ function Extensions.ApplyVelocitySpeedRuntime(speedProfile: string, speedAcceler
     local controllerSpeed: number = math.min(appliedSpeed, baseSpeed)
     if math.abs((tonumber(humanoid.WalkSpeed) or 0) - controllerSpeed) > 0.05 then humanoid.WalkSpeed = controllerSpeed end
     local direction: any = humanoid.MoveDirection
+    if (tonumber(direction.Magnitude) or 0) <= 0.02 then return end
     local currentVelocity: any = root.AssemblyLinearVelocity
     local targetX: number = (tonumber(direction.X) or 0) * appliedSpeed
     local targetZ: number = (tonumber(direction.Z) or 0) * appliedSpeed
@@ -15162,7 +15332,9 @@ function Extensions.ApplyVelocitySpeedRuntime(speedProfile: string, speedAcceler
     end
     local makeVector: any = Vector3.new
     local targetVelocity: any = makeVector(targetX, tonumber(currentVelocity.Y) or 0, targetZ)
-    root.AssemblyLinearVelocity = targetVelocity
+    if (targetVelocity - currentVelocity).Magnitude > 0.25 then
+        root.AssemblyLinearVelocity = targetVelocity
+    end
 end
 
 function Extensions.ApplyCFrameSpeedRuntime(humanoid: any, root: any, original: any, appliedSpeed: number, deltaTime: number)
@@ -15175,7 +15347,8 @@ function Extensions.ApplyCFrameSpeedRuntime(humanoid: any, root: any, original: 
     local extraSpeed: number = math.max(appliedSpeed - baseSpeed, 0)
     local moveDirection: any = humanoid.MoveDirection
     if extraSpeed > 0 and (tonumber(moveDirection.Magnitude) or 0) > 0 then
-        root.CFrame = root.CFrame + moveDirection.Unit * extraSpeed * deltaTime
+        local safeDelta = math.clamp(deltaTime, 0, 0.05)
+        root.CFrame = root.CFrame + moveDirection.Unit * extraSpeed * safeDelta
     end
 end
 
@@ -15202,8 +15375,8 @@ function Extensions.ApplyRuntimeSpeed(humanoid: any, root: any, original: any, d
         Extensions.ApplyWalkSpeedRuntime(runtimeState, humanoid, appliedSpeed, now)
     end
     local evaluateMethod: any = rawget(Extensions, "EvaluateSpeedMethod")
-    if evaluateMethod then
-        evaluateMethod(humanoid, root, original, method == "WalkSpeed" and (tonumber(humanoid.WalkSpeed) or observedWalkSpeed) or observedWalkSpeed, observedHorizontalSpeed, appliedSpeed, now)
+    if evaluateMethod and not runtimeState.SpeedMethodLocked then
+        evaluateMethod(humanoid, root, original, observedWalkSpeed, observedHorizontalSpeed, appliedSpeed, now)
     end
 end
 
