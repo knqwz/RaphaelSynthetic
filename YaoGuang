@@ -659,6 +659,8 @@ local State = {
     InfiniteJump = false,
     BunnyHop = false,
     BunnyHopConnection = nil,
+    BunnyHopFloatingVisible = true,
+    BunnyHopFloatingButton = nil,
     LastBunnyHop = 0,
     SkinApplying = false,
     SkinActive = false,
@@ -784,22 +786,22 @@ local State = {
         DragMode = nil,
         Targets = {
             {Key = "PlayerBox", Name = "ESP Player · Box", Search = "player nguoi choi box khung hop 2d 3d skin", Default = Theme.Player},
-            {Key = "PlayerName", Name = "ESP Player · Name/Outline", Search = "player nguoi choi name outline ten nhan vien", Default = Theme.Player},
+            {Key = "PlayerName", Name = "ESP Player · Viền chữ (Tên/HP/Khoảng cách)", Search = "player nguoi choi name outline text stroke ten hp khoang cach studs", Default = Theme.Player},
             {Key = "PlayerTracer", Name = "ESP Player · Tracer", Search = "player nguoi choi tracer duong noi tia", Default = Theme.Player},
             {Key = "PlayerLook", Name = "ESP Player · Look Ray", Search = "player nguoi choi look ray huong nhin tia mat", Default = Theme.Player},
             {Key = "MobBox", Name = "ESP Quái · Box", Search = "quai mob npc box khung hop 2d 3d skin", Default = Theme.Mob},
-            {Key = "MobName", Name = "ESP Quái · Name/Outline", Search = "quai mob npc name outline ten nhan vien", Default = Theme.Mob},
+            {Key = "MobName", Name = "ESP Quái · Viền chữ (Tên/HP/Khoảng cách)", Search = "quai mob npc name outline text stroke ten hp khoang cach studs", Default = Theme.Mob},
             {Key = "MobTracer", Name = "ESP Quái · Tracer", Search = "quai mob npc tracer duong noi tia", Default = Theme.Mob},
             {Key = "MobLook", Name = "ESP Quái · Look Ray", Search = "quai mob npc look ray huong nhin tia mat", Default = Theme.Mob},
             {Key = "ItemBox", Name = "ESP Item · Box", Search = "item vat pham tool loot box khung hop 2d 3d skin", Default = Theme.Item},
-            {Key = "ItemName", Name = "ESP Item · Name/Outline", Search = "item vat pham tool loot name outline ten nhan vien", Default = Theme.Item},
+            {Key = "ItemName", Name = "ESP Item · Viền chữ (Tên/HP/Khoảng cách)", Search = "item vat pham tool loot name outline text stroke ten hp khoang cach studs", Default = Theme.Item},
             {Key = "ItemTracer", Name = "ESP Item · Tracer", Search = "item vat pham tool loot tracer duong noi tia", Default = Theme.Item},
             {Key = "UniversalScanBox", Name = "Quét Đa Năng · Box", Search = "quet da nang universal scan box khung hop", Default = Theme.Accent},
-            {Key = "UniversalScanName", Name = "Quét Đa Năng · Name/Outline", Search = "quet da nang universal scan name outline ten nhan vien", Default = Theme.Accent},
+            {Key = "UniversalScanName", Name = "Quét Đa Năng · Viền chữ", Search = "quet da nang universal scan name outline text stroke ten khoang cach studs", Default = Theme.Accent},
             {Key = "UniversalScanTracer", Name = "Quét Đa Năng · Tracer", Search = "quet da nang universal scan tracer duong noi tia", Default = Theme.Accent},
             {Key = "UniversalScanLook", Name = "Quét Đa Năng · Look Ray", Search = "quet da nang universal scan look ray huong nhin tia mat", Default = Theme.Accent},
             {Key = "InspectorHighlight", Name = "Inspector · Highlight", Search = "inspector inspect highlight box khung target", Default = Theme.Accent},
-            {Key = "InspectorName", Name = "Inspector · Name/Outline", Search = "inspector inspect name outline ten nhan vien", Default = Theme.Accent},
+            {Key = "InspectorName", Name = "Inspector · Viền chữ", Search = "inspector inspect name outline text stroke ten nhan vien", Default = Theme.Accent},
             {Key = "AimbotFOV", Name = "Aimbot FOV", Search = "aimbot fov vong tron circle", Default = Theme.Accent},
             {Key = "Flant", Name = "Flant", Search = "flant san chong roi platform", Default = Theme.Accent}
         }
@@ -3711,14 +3713,10 @@ local function resetSpeedSideEffects()
 end
 
 function Extensions.GetEffectiveSpeed(humanoid, original)
-    local requested = math.max(State.SpeedValue, 0)
-    local compatible = State.SpeedProfile == "Tương thích"
-    State.MovementCompatibility = compatible
-    if not compatible then
-        return requested, State.SpeedMethod
-    end
-    local baseSpeed = original and original.WalkSpeed or humanoid and humanoid.WalkSpeed or 16
-    return math.min(requested, math.max(baseSpeed, 1) * State.MovementCompatibilityMultiplier), "WalkSpeed"
+    local requested = math.max(tonumber(State.SpeedValue) or 0, 0)
+    State.MovementCompatibility = State.SpeedProfile == "Tương thích"
+    State.SpeedMethod = "WalkSpeed"
+    return requested, "WalkSpeed"
 end
 
 function Extensions.GetAppliedSpeed(targetSpeed, deltaTime)
@@ -3797,6 +3795,8 @@ function Extensions.SetBunnyHopEnabled(enabled, silent)
     if State.BunnyHop and humanoid and humanoid.FloorMaterial ~= Enum.Material.Air then
         task.defer(Extensions.TriggerBunnyHop, humanoid)
     end
+    local refreshFloatingButton = rawget(Extensions, "RefreshBunnyHopFloatingButton")
+    if refreshFloatingButton then refreshFloatingButton() end
     if not silent then
         notify(State.BunnyHop and (State.IsDesktop and "Bunny Hop đã bật bằng tín hiệu Space trên máy tính." or "Bunny Hop đã bật bằng trạng thái Jump trên thiết bị cảm ứng.") or "Bunny Hop đã tắt.", State.BunnyHop and Theme.Success or Theme.Warning)
     end
@@ -4546,9 +4546,10 @@ local TopAccent = Instance.new("Frame")
 TopAccent.Name = "TopAccent"
 TopAccent.Size = UDim2.new(1, 0, 0, 3)
 TopAccent.BackgroundColor3 = Theme.Accent
-TopAccent.BackgroundTransparency = 0.42
+TopAccent.BackgroundTransparency = 1
 TopAccent.BorderSizePixel = 0
 TopAccent.ZIndex = 8
+TopAccent.Visible = false
 TopAccent.Parent = MainFrame
 local TopAccentGradient = Instance.new("UIGradient")
 TopAccentGradient.Color = UI.PaletteSequence.Accent
@@ -4590,6 +4591,7 @@ UI.HeaderStroke = Instance.new("UIStroke")
 UI.HeaderStroke.Color = Theme.GlassBorder
 UI.HeaderStroke.Transparency = UI.SurfaceStyle.BorderTransparency
 UI.HeaderStroke.Thickness = 0.75
+UI.HeaderStroke.Enabled = false
 UI.HeaderStroke.Parent = Header
 
 local BrandMark = Instance.new("ImageLabel")
@@ -4815,7 +4817,8 @@ function Extensions.ApplyUnifiedInterfacePalette()
     State.InterfaceBackground.ImageColor3 = Color3.fromRGB(255, 255, 255)
     State.InterfaceBackground.ImageTransparency = UI.SurfaceStyle.BackgroundImageTransparency
     TopAccent.BackgroundColor3 = Theme.Accent
-    TopAccent.BackgroundTransparency = 0.42
+    TopAccent.BackgroundTransparency = 1
+    TopAccent.Visible = false
     TopAccentGradient.Color = UI.PaletteSequence.Accent
     AmbientGlow.BackgroundColor3 = Theme.Accent
     AmbientGlow.BackgroundTransparency = 0.95
@@ -4824,7 +4827,8 @@ function Extensions.ApplyUnifiedInterfacePalette()
     HeaderGradient.Color = UI.PaletteSequence.Surface
     HeaderGradient.Enabled = false
     UI.HeaderStroke.Color = Theme.GlassBorder
-    UI.HeaderStroke.Transparency = UI.SurfaceStyle.BorderTransparency
+    UI.HeaderStroke.Transparency = 1
+    UI.HeaderStroke.Enabled = false
     Sidebar.BackgroundColor3 = Theme.Surface
     Sidebar.BackgroundTransparency = UI.SurfaceStyle.SidebarTransparency
     if UI.SidebarGradient then
@@ -5580,8 +5584,9 @@ function Extensions.SetVisualTargetColor(key, color)
     if key == "InspectorName" then
         State.Inspector.NameColor = color
         if State.Inspector.NameLabel then
-            State.Inspector.NameLabel.TextColor3 = color
-            State.Inspector.NameLabel.TextStrokeColor3 = color:Lerp(Theme.Background, 0.62)
+            State.Inspector.NameLabel.TextColor3 = Theme.Text
+            State.Inspector.NameLabel.TextStrokeColor3 = color
+            State.Inspector.NameLabel.TextStrokeTransparency = 0
         end
         return
     end
@@ -6347,15 +6352,17 @@ function Extensions.CreateSentinelPlayerRow(container, player, order)
     row.Name = "Player_" .. player.Name
     row.Size = UDim2.new(1, -8, 0, 80)
     row.BackgroundColor3 = Theme.Surface
-    row.BackgroundTransparency = hasFinding and 0.48 or 0.68
+    row.BackgroundTransparency = hasFinding and 0.26 or 0.38
     row.BorderSizePixel = 0
     row.LayoutOrder = order
     row.ZIndex = 322
     row.Parent = container
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 13)
+    local rowGradient = UI.AddSmoothGradient(row, Theme.Background, hasFinding and Theme.Warning:Lerp(Theme.Surface, 0.84) or Theme.SurfaceLight, 0)
+    UI.StyleGlassGradient(rowGradient, hasFinding)
     local rowStroke = Instance.new("UIStroke")
     rowStroke.Color = Color3.fromRGB(255, 255, 255)
-    rowStroke.Transparency = hasFinding and 0.26 or 0.78
+    rowStroke.Transparency = hasFinding and 0.44 or 0.72
     rowStroke.Thickness = 0.75
     rowStroke.Parent = row
 
@@ -6368,6 +6375,11 @@ function Extensions.CreateSentinelPlayerRow(container, player, order)
     avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=100&h=100"
     avatar.Parent = row
     Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
+    local avatarStroke = Instance.new("UIStroke")
+    avatarStroke.Color = hasFinding and Theme.Warning or Theme.GlassBorder
+    avatarStroke.Transparency = hasFinding and 0.3 or 0.68
+    avatarStroke.Thickness = 0.75
+    avatarStroke.Parent = avatar
 
     local display = Instance.new("TextLabel")
     display.Position = UDim2.fromOffset(56, 8)
@@ -6387,7 +6399,7 @@ function Extensions.CreateSentinelPlayerRow(container, player, order)
     score.Position = UDim2.new(1, -8, 0, 8)
     score.Size = UDim2.fromOffset(66, 22)
     score.BackgroundColor3 = hasFinding and Color3.fromRGB(119, 72, 35) or Color3.fromRGB(50, 55, 65)
-    score.BackgroundTransparency = 0.46
+    score.BackgroundTransparency = 0.32
     score.BorderSizePixel = 0
     score.Text = tostring(confidence) .. "%"
     score.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -6428,7 +6440,7 @@ function Extensions.CreateActivityLogRow(container, entry, order)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -8, 0, 58)
     row.BackgroundColor3 = Theme.Surface
-    row.BackgroundTransparency = 0.66
+    row.BackgroundTransparency = 0.4
     row.BorderSizePixel = 0
     row.LayoutOrder = order
     row.ZIndex = 322
@@ -6520,10 +6532,12 @@ function Extensions.RefreshAnomalyPanel()
     if monitor.ScanButton then
         monitor.ScanButton.Text = monitor.Enabled and "DỪNG QUÉT" or "BẬT QUÉT"
         monitor.ScanButton.BackgroundColor3 = monitor.Enabled and Theme.Danger or Theme.Accent
+        monitor.ScanButton.BackgroundTransparency = monitor.Enabled and 0.28 or 0.38
     end
     if monitor.LogButton then
         monitor.LogButton.Text = State.ActivityLog.Enabled and "DỪNG LOG" or "BẬT LOG"
         monitor.LogButton.BackgroundColor3 = State.ActivityLog.Enabled and Theme.Danger or Theme.Accent2
+        monitor.LogButton.BackgroundTransparency = State.ActivityLog.Enabled and 0.28 or 0.38
     end
     if monitor.Status then
         if monitor.Tab == "Self" then
@@ -7149,8 +7163,13 @@ function Extensions.SetAnomalyTab(tabName)
     for name, button in pairs(monitor.TabButtons) do
         local selected = name == tabName
         button.BackgroundColor3 = selected and Theme.Accent or Theme.Surface
-        button.BackgroundTransparency = selected and 0.48 or 0.68
-        button.TextTransparency = selected and 0 or 0.2
+        button.BackgroundTransparency = selected and 0.38 or 0.52
+        button.TextTransparency = selected and 0 or 0.16
+        local gradient = button:FindFirstChildOfClass("UIGradient")
+        if gradient then
+            gradient.Color = ColorSequence.new(Theme.Background, selected and Theme.Accent or Theme.SurfaceLight)
+            UI.StyleGlassGradient(gradient, selected)
+        end
     end
     if monitor.List then monitor.List.Visible = monitor.Expanded and tabName == "Players" end
     if monitor.SelfList then monitor.SelfList.Visible = monitor.Expanded and tabName == "Self" end
@@ -7194,7 +7213,7 @@ function Extensions.EnsureAnomalyPanel()
     panel.Position = UDim2.new(0.5, 0, 1, -8)
     panel.Size = UDim2.fromOffset(310, 44)
     panel.BackgroundColor3 = Theme.Background
-    panel.BackgroundTransparency = 0.46
+    panel.BackgroundTransparency = 0.14
     panel.BorderSizePixel = 0
     panel.ClipsDescendants = true
     panel.Visible = true
@@ -7203,18 +7222,22 @@ function Extensions.EnsureAnomalyPanel()
     Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 18)
     local panelStroke = Instance.new("UIStroke")
     panelStroke.Color = Color3.fromRGB(255, 255, 255)
-    panelStroke.Transparency = 0.58
+    panelStroke.Transparency = 0.54
     panelStroke.Thickness = 0.75
     panelStroke.Parent = panel
-    local drawerGradient = UI.AddSmoothGradient(panel, Theme.Background, Theme.Accent2:Lerp(Theme.Background, 0.76), 0)
-    UI.StyleGlassGradient(drawerGradient, false)
+    local drawerGradient = UI.AddSmoothGradient(panel, Theme.Background, Theme.Accent2:Lerp(Theme.Background, 0.84), 0)
+    drawerGradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(0.52, 0.38),
+        NumberSequenceKeypoint.new(1, 0.16)
+    })
 
     local header = Instance.new("TextButton")
     header.Name = "DrawerTab"
     header.Position = UDim2.fromOffset(6, 4)
     header.Size = UDim2.new(1, -12, 0, 38)
     header.BackgroundColor3 = Theme.Surface
-    header.BackgroundTransparency = 0.66
+    header.BackgroundTransparency = 0.34
     header.BorderSizePixel = 0
     header.Text = "ANOMALY CHECKER"
     header.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -7225,6 +7248,13 @@ function Extensions.EnsureAnomalyPanel()
     header.ZIndex = 323
     header.Parent = panel
     Instance.new("UICorner", header).CornerRadius = UDim.new(0, 14)
+    local headerStroke = Instance.new("UIStroke")
+    headerStroke.Color = Theme.GlassBorder
+    headerStroke.Transparency = 0.76
+    headerStroke.Thickness = 0.75
+    headerStroke.Parent = header
+    local headerGradient = UI.AddSmoothGradient(header, Theme.Background, Theme.SurfaceLight, 0)
+    UI.StyleGlassGradient(headerGradient, false)
     local headerPadding = Instance.new("UIPadding")
     headerPadding.PaddingLeft = UDim.new(0, 38)
     headerPadding.Parent = header
@@ -7242,7 +7272,7 @@ function Extensions.EnsureAnomalyPanel()
     status.Position = UDim2.fromOffset(12, 52)
     status.Size = UDim2.new(1, -204, 0, 42)
     status.BackgroundColor3 = Theme.Surface
-    status.BackgroundTransparency = 0.64
+    status.BackgroundTransparency = 0.4
     status.BorderSizePixel = 0
     status.Text = "Sentinel chỉ dùng dữ liệu replicate/quan sát được."
     status.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -7254,6 +7284,11 @@ function Extensions.EnsureAnomalyPanel()
     status.ZIndex = 321
     status.Parent = panel
     Instance.new("UICorner", status).CornerRadius = UDim.new(0, 12)
+    local statusStroke = Instance.new("UIStroke")
+    statusStroke.Color = Theme.GlassBorder
+    statusStroke.Transparency = 0.8
+    statusStroke.Thickness = 0.75
+    statusStroke.Parent = status
     local statusPadding = Instance.new("UIPadding")
     statusPadding.PaddingLeft = UDim.new(0, 10)
     statusPadding.PaddingRight = UDim.new(0, 8)
@@ -7264,7 +7299,7 @@ function Extensions.EnsureAnomalyPanel()
     scan.Position = UDim2.new(1, -100, 0, 52)
     scan.Size = UDim2.fromOffset(84, 42)
     scan.BackgroundColor3 = Theme.Accent
-    scan.BackgroundTransparency = 0.48
+    scan.BackgroundTransparency = 0.38
     scan.BorderSizePixel = 0
     scan.Text = monitor.Enabled and "DỪNG QUÉT" or "BẬT QUÉT"
     scan.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -7275,6 +7310,13 @@ function Extensions.EnsureAnomalyPanel()
     scan.ZIndex = 324
     scan.Parent = panel
     Instance.new("UICorner", scan).CornerRadius = UDim.new(0, 12)
+    local scanStroke = Instance.new("UIStroke")
+    scanStroke.Color = Theme.GlassBorder
+    scanStroke.Transparency = 0.68
+    scanStroke.Thickness = 0.75
+    scanStroke.Parent = scan
+    local scanGradient = UI.AddSmoothGradient(scan, Theme.Background, Theme.Accent, 0)
+    UI.StyleGlassGradient(scanGradient, true)
     connect(scan.Activated, function() Extensions.SetAnomalyContinuousEnabled(not monitor.Enabled, false) end)
 
     local logButton = Instance.new("TextButton")
@@ -7282,7 +7324,7 @@ function Extensions.EnsureAnomalyPanel()
     logButton.Position = UDim2.new(1, -12, 0, 52)
     logButton.Size = UDim2.fromOffset(84, 42)
     logButton.BackgroundColor3 = Theme.Accent2
-    logButton.BackgroundTransparency = 0.48
+    logButton.BackgroundTransparency = 0.38
     logButton.BorderSizePixel = 0
     logButton.Text = State.ActivityLog.Enabled and "DỪNG LOG" or "BẬT LOG"
     logButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -7293,6 +7335,13 @@ function Extensions.EnsureAnomalyPanel()
     logButton.ZIndex = 324
     logButton.Parent = panel
     Instance.new("UICorner", logButton).CornerRadius = UDim.new(0, 12)
+    local logStroke = Instance.new("UIStroke")
+    logStroke.Color = Theme.GlassBorder
+    logStroke.Transparency = 0.68
+    logStroke.Thickness = 0.75
+    logStroke.Parent = logButton
+    local logGradient = UI.AddSmoothGradient(logButton, Theme.Background, Theme.Accent2, 0)
+    UI.StyleGlassGradient(logGradient, true)
     connect(logButton.Activated, function() Extensions.SetActivityLogEnabled(not State.ActivityLog.Enabled, false) end)
 
     local tabHolder = Instance.new("Frame")
@@ -7312,7 +7361,7 @@ function Extensions.EnsureAnomalyPanel()
         local button = Instance.new("TextButton")
         button.Size = UDim2.new(1 / 3, -4, 1, 0)
         button.BackgroundColor3 = data[1] == monitor.Tab and Theme.Accent or Theme.Surface
-        button.BackgroundTransparency = data[1] == monitor.Tab and 0.48 or 0.68
+        button.BackgroundTransparency = data[1] == monitor.Tab and 0.38 or 0.52
         button.BorderSizePixel = 0
         button.Text = data[2]
         button.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -7324,6 +7373,13 @@ function Extensions.EnsureAnomalyPanel()
         button.ZIndex = 323
         button.Parent = tabHolder
         Instance.new("UICorner", button).CornerRadius = UDim.new(0, 11)
+        local tabStroke = Instance.new("UIStroke")
+        tabStroke.Color = Theme.GlassBorder
+        tabStroke.Transparency = 0.76
+        tabStroke.Thickness = 0.75
+        tabStroke.Parent = button
+        local tabGradient = UI.AddSmoothGradient(button, Theme.Background, data[1] == monitor.Tab and Theme.Accent or Theme.SurfaceLight, 0)
+        UI.StyleGlassGradient(tabGradient, data[1] == monitor.Tab)
         monitor.TabButtons[data[1]] = button
         connect(button.Activated, function() Extensions.SetAnomalyTab(data[1]) end)
     end
@@ -7334,7 +7390,7 @@ function Extensions.EnsureAnomalyPanel()
         scroll.Position = UDim2.fromOffset(10, 148)
         scroll.Size = UDim2.new(1, -20, 1, -158)
         scroll.BackgroundColor3 = Theme.Surface
-        scroll.BackgroundTransparency = 0.62
+        scroll.BackgroundTransparency = 0.28
         scroll.BorderSizePixel = 0
         scroll.ScrollBarThickness = 3
         scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
@@ -7345,7 +7401,7 @@ function Extensions.EnsureAnomalyPanel()
         Instance.new("UICorner", scroll).CornerRadius = UDim.new(0, 14)
         local stroke = Instance.new("UIStroke")
         stroke.Color = Color3.fromRGB(255, 255, 255)
-        stroke.Transparency = 0.8
+        stroke.Transparency = 0.7
         stroke.Thickness = 0.75
         stroke.Parent = scroll
         local padding = Instance.new("UIPadding")
@@ -7829,9 +7885,9 @@ function Extensions.RepairInterfaceGeometry()
     TopAccent.Position = UDim2.fromOffset(0, 0)
     TopAccent.Size = UDim2.new(1, 0, 0, 3)
     TopAccent.BackgroundColor3 = Theme.Accent
-    TopAccent.BackgroundTransparency = 0.42
+    TopAccent.BackgroundTransparency = 1
     TopAccent.Rotation = 0
-    TopAccent.Visible = true
+    TopAccent.Visible = false
     Header.BackgroundColor3 = Theme.Surface
     Header.BackgroundTransparency = UI.SurfaceStyle.HeaderTransparency
     if State.InterfaceBackground and State.InterfaceBackground.Parent then
@@ -8390,12 +8446,6 @@ connect(UserInputService.InputEnded, function(input)
     elseif input == flight.LookInput then
         flight.LookInput = nil
         flight.LookLastPosition = nil
-    end
-end)
-
-connect(RunService.RenderStepped, function(deltaTime)
-    if State.Running then
-        Extensions.UpdateFlight(deltaTime)
     end
 end)
 
@@ -8975,8 +9025,8 @@ local function createVisual(category, key)
     visual.InfoName.Name = "Name"
     visual.InfoName.Size = UDim2.new(1, 0, 0, 19)
     visual.InfoName.BackgroundTransparency = 1
-    visual.InfoName.TextColor3 = nameColor:Lerp(Color3.fromRGB(255, 255, 255), 0.08)
-    visual.InfoName.TextStrokeColor3 = nameColor:Lerp(Theme.Background, 0.58)
+    visual.InfoName.TextColor3 = Theme.Text
+    visual.InfoName.TextStrokeColor3 = nameColor
     visual.InfoName.TextStrokeTransparency = 0
     visual.InfoName.Font = Enum.Font.GothamBold
     visual.InfoName.TextSize = 14
@@ -8989,8 +9039,8 @@ local function createVisual(category, key)
     visual.InfoHealth.Name = "Health"
     visual.InfoHealth.Size = UDim2.new(1, 0, 0, 19)
     visual.InfoHealth.BackgroundTransparency = 1
-    visual.InfoHealth.TextColor3 = Color3.fromRGB(235, 255, 235)
-    visual.InfoHealth.TextStrokeColor3 = config.Color
+    visual.InfoHealth.TextColor3 = Theme.Text
+    visual.InfoHealth.TextStrokeColor3 = nameColor
     visual.InfoHealth.TextStrokeTransparency = 0
     visual.InfoHealth.Font = Enum.Font.GothamBold
     visual.InfoHealth.TextSize = 13
@@ -9003,10 +9053,10 @@ local function createVisual(category, key)
     visual.InfoDistance.Name = "Distance"
     visual.InfoDistance.Size = UDim2.new(1, 0, 0, 19)
     visual.InfoDistance.BackgroundTransparency = 1
-    visual.InfoDistance.TextColor3 = config.Color:Lerp(Color3.fromRGB(255, 255, 255), 0.58)
-    visual.InfoDistance.TextStrokeColor3 = config.Color
+    visual.InfoDistance.TextColor3 = Theme.Text
+    visual.InfoDistance.TextStrokeColor3 = nameColor
     visual.InfoDistance.TextStrokeTransparency = 0
-    visual.InfoDistance.Font = Enum.Font.Gotham
+    visual.InfoDistance.Font = Enum.Font.GothamBold
     visual.InfoDistance.TextSize = 13
     visual.InfoDistance.TextScaled = false
     visual.InfoDistance.Text = ""
@@ -9475,9 +9525,9 @@ function Extensions.CreateInspectorVisuals()
     nameLabel.AutoButtonColor = false
     nameLabel.Active = true
     nameLabel.Text = ""
-    nameLabel.TextColor3 = State.Inspector.NameColor
-    nameLabel.TextStrokeColor3 = State.Inspector.NameColor:Lerp(Theme.Background, 0.62)
-    nameLabel.TextStrokeTransparency = 1
+    nameLabel.TextColor3 = Theme.Text
+    nameLabel.TextStrokeColor3 = State.Inspector.NameColor
+    nameLabel.TextStrokeTransparency = 0
     nameLabel.Font = Enum.Font.GothamMedium
     nameLabel.TextSize = 12
     nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -9714,8 +9764,9 @@ function Extensions.UpdateInspector(now)
     if State.Inspector.NameLabel then
         State.Inspector.NameLabel.Position = UDim2.fromOffset(center.X, center.Y + 12)
         State.Inspector.NameLabel.Text = valid and State.Inspector.DisplayName or ""
-        State.Inspector.NameLabel.TextColor3 = nameColor
-        State.Inspector.NameLabel.TextStrokeColor3 = nameColor:Lerp(Theme.Background, 0.62)
+        State.Inspector.NameLabel.TextColor3 = Theme.Text
+        State.Inspector.NameLabel.TextStrokeColor3 = nameColor
+        State.Inspector.NameLabel.TextStrokeTransparency = 0
         State.Inspector.NameLabel.Visible = not not valid
     end
 
@@ -10059,8 +10110,8 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
     local showDistance = espEnabled and config.Distance
 
     if visual.InfoName.Text ~= displayName then visual.InfoName.Text = displayName end
-    local nameTextColor: any = nameColor:Lerp(Color3.fromRGB(255, 255, 255), 0.08)
-    local nameOutlineColor: any = nameColor:Lerp(Theme.Background, 0.58)
+    local nameTextColor: any = Theme.Text
+    local nameOutlineColor: any = nameColor
     if visual.InfoName.TextColor3 ~= nameTextColor then visual.InfoName.TextColor3 = nameTextColor end
     if visual.InfoName.TextStrokeColor3 ~= nameOutlineColor then visual.InfoName.TextStrokeColor3 = nameOutlineColor end
     if visual.InfoName.Visible ~= showName then visual.InfoName.Visible = showName end
@@ -10072,7 +10123,8 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
 
     local currentHealthText = healthText or ""
     if visual.InfoHealth.Text ~= currentHealthText then visual.InfoHealth.Text = currentHealthText end
-    if visual.InfoHealth.TextStrokeColor3 ~= config.Color then visual.InfoHealth.TextStrokeColor3 = config.Color end
+    if visual.InfoHealth.TextColor3 ~= Theme.Text then visual.InfoHealth.TextColor3 = Theme.Text end
+    if visual.InfoHealth.TextStrokeColor3 ~= nameColor then visual.InfoHealth.TextStrokeColor3 = nameColor end
     if visual.InfoHealth.Visible ~= showHealth then visual.InfoHealth.Visible = showHealth end
     if showHealth then
         local healthPosition = UDim2.fromOffset(0, lineCount * 19)
@@ -10090,8 +10142,8 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
     elseif visual.InfoDistance.Text ~= "" then
         visual.InfoDistance.Text = ""
     end
-    if visual.InfoDistance.TextColor3 ~= config.DistanceColor then visual.InfoDistance.TextColor3 = config.DistanceColor end
-    if visual.InfoDistance.TextStrokeColor3 ~= config.Color then visual.InfoDistance.TextStrokeColor3 = config.Color end
+    if visual.InfoDistance.TextColor3 ~= Theme.Text then visual.InfoDistance.TextColor3 = Theme.Text end
+    if visual.InfoDistance.TextStrokeColor3 ~= nameColor then visual.InfoDistance.TextStrokeColor3 = nameColor end
     if visual.InfoDistance.Visible ~= showDistance then visual.InfoDistance.Visible = showDistance end
 
     local billboardSize = UDim2.fromOffset(230, math.max(24, lineCount * 19))
@@ -11564,6 +11616,86 @@ function Extensions.SetAimbotReleaseButtonVisible(visible, silent)
     end
 end
 
+function Extensions.RefreshBunnyHopFloatingButton()
+    local button = State.BunnyHopFloatingButton
+    if not button or not button.Parent then return end
+    button.Text = State.BunnyHop and "BHOP ON" or "BHOP OFF"
+    button.BackgroundColor3 = State.BunnyHop and Theme.Accent or Theme.SurfaceLight
+    button.BackgroundTransparency = State.BunnyHop and 0.4 or 0.62
+    local label = button:FindFirstChild("RaphaelButtonText")
+    if label then label.Text = button.Text end
+    local icon = button:FindFirstChild("Icon_rabbit")
+    if icon then icon.ImageColor3 = State.BunnyHop and Theme.AccentSoft or Theme.Text end
+    local gradient = button:FindFirstChild("RaphaelStateGradient")
+    if gradient then
+        gradient.Color = ColorSequence.new(Theme.Background, State.BunnyHop and Theme.Accent or Theme.SurfaceLight)
+        UI.StyleGlassGradient(gradient, State.BunnyHop)
+    end
+end
+
+function Extensions.CreateBunnyHopFloatingButton()
+    if State.BunnyHopFloatingButton and State.BunnyHopFloatingButton.Parent then
+        Extensions.RefreshBunnyHopFloatingButton()
+        return State.BunnyHopFloatingButton
+    end
+    local button = Instance.new("TextButton")
+    button.Name = "BunnyHopFloatingButton"
+    button:SetAttribute("RaphaelButtonArtworkExempt", true)
+    button.Size = UDim2.fromOffset(64, 64)
+    button.Position = UDim2.new(0, 18, 0.5, 76)
+    button.BackgroundColor3 = State.BunnyHop and Theme.Accent or Theme.SurfaceLight
+    button.BackgroundTransparency = State.BunnyHop and 0.4 or 0.62
+    button.BorderSizePixel = 0
+    button.Text = State.BunnyHop and "BHOP ON" or "BHOP OFF"
+    button.TextColor3 = Theme.Text
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 9
+    button.TextWrapped = true
+    button.AutoButtonColor = false
+    button.ZIndex = 90
+    button.Parent = Overlay
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 12)
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "RaphaelStateStroke"
+    stroke.Color = Theme.GlassBorder
+    stroke.Transparency = 0.7
+    stroke.Thickness = 0.75
+    stroke.Parent = button
+    local gradient = UI.AddSmoothGradient(button, Theme.Background, State.BunnyHop and Theme.Accent or Theme.SurfaceLight, 0)
+    gradient.Name = "RaphaelStateGradient"
+    UI.StyleGlassGradient(gradient, State.BunnyHop)
+    UI.ProtectButtonText(button, 0)
+    UI.ApplyExternalButtonArtwork(button, State.ExternalButtonImage)
+    local icon = UI.CreateIcon(button, "rabbit", 22, State.BunnyHop and Theme.AccentSoft or Theme.Text)
+    icon.AnchorPoint = Vector2.new(0.5, 0.5)
+    icon.Position = UDim2.new(0.5, 0, 0.38, 0)
+    icon.ZIndex = button.ZIndex + 4
+    UI.AddRipple(button, Theme.Text)
+    State.BunnyHopFloatingButton = button
+    UI.Motion.Pop(button)
+    connect(button.Activated, function()
+        Extensions.SetBunnyHopEnabled(not State.BunnyHop, false)
+    end)
+    Extensions.RefreshBunnyHopFloatingButton()
+    return button
+end
+
+function Extensions.SetBunnyHopFloatingButtonVisible(visible, silent)
+    State.BunnyHopFloatingVisible = not not visible
+    if State.BunnyHopFloatingVisible then
+        Extensions.CreateBunnyHopFloatingButton()
+    elseif State.BunnyHopFloatingButton then
+        State.BunnyHopFloatingButton:Destroy()
+        State.BunnyHopFloatingButton = nil
+    end
+    local control = State.ConfigControls.BunnyHopFloatingVisible
+    if control and control.Set then control.Set(State.BunnyHopFloatingVisible, false) end
+    if not silent then
+        notify(State.BunnyHopFloatingVisible and "Đã hiện nút Bunny Hop ngoài giao diện." or "Đã ẩn nút Bunny Hop ngoài giao diện.", Theme.Success)
+    end
+    return true
+end
+
 function Extensions.UpdateAimbotFrame(now)
     if not State.Aimbot.Enabled then
         return
@@ -12352,6 +12484,7 @@ function Extensions.BuildConfig()
             JumpMethod = State.JumpMethod,
             InfiniteJump = State.InfiniteJump,
             BunnyHop = State.BunnyHop,
+            BunnyHopFloatingVisible = State.BunnyHopFloatingVisible,
             FlantEnabled = State.FlantEnabled,
             FlantY = State.FlantY,
             FlantYConfigured = State.FlantYConfigured,
@@ -12582,6 +12715,7 @@ function Extensions.SyncConfigControls()
         JumpEnabled = State.JumpEnabled,
         InfiniteJump = State.InfiniteJump,
         BunnyHop = State.BunnyHop,
+        BunnyHopFloatingVisible = State.BunnyHopFloatingVisible,
         FlantEnabled = State.FlantEnabled,
         Noclip = State.Noclip,
         GravityEnabled = State.GravityEnabled,
@@ -12668,14 +12802,11 @@ function Extensions.ApplyConfig(config, silent)
     local movement = type(config.Movement) == "table" and config.Movement or {}
     State.SpeedEnabled = booleanValue(movement, "SpeedEnabled", false)
     State.SpeedValue = math.clamp(tonumber(movement.SpeedValue) or State.SpeedValue, 0, 1000)
-    State.SpeedMethod = allowed(movement.SpeedMethod, {"WalkSpeed", "Velocity", "CFrame"}, State.SpeedMethod)
+    State.SpeedMethod = "WalkSpeed"
     local legacyCompatibility = booleanValue(movement, "MovementCompatibility", State.MovementCompatibility)
     local fallbackProfile = legacyCompatibility and "Tương thích" or "Cân bằng"
-    State.SpeedProfile = allowed(movement.SpeedProfile, {"Tương thích", "Cân bằng", "Hiệu suất"}, fallbackProfile)
+    State.SpeedProfile = allowed(movement.SpeedProfile, {"Tương thích", "Cân bằng"}, fallbackProfile)
     State.MovementCompatibility = State.SpeedProfile == "Tương thích"
-    if State.MovementCompatibility then
-        State.SpeedMethod = "WalkSpeed"
-    end
     State.SpeedAcceleration = math.clamp(tonumber(movement.SpeedAcceleration) or State.SpeedAcceleration, 1, 30)
     State.MovementCompatibilityMultiplier = math.clamp(tonumber(movement.MovementCompatibilityMultiplier) or State.MovementCompatibilityMultiplier, 1, 2)
     State.JumpEnabled = booleanValue(movement, "JumpEnabled", false)
@@ -12683,6 +12814,7 @@ function Extensions.ApplyConfig(config, silent)
     State.JumpMethod = allowed(movement.JumpMethod, {"JumpPower", "JumpHeight", "Velocity"}, State.JumpMethod)
     State.InfiniteJump = booleanValue(movement, "InfiniteJump", State.InfiniteJump)
     State.BunnyHop = booleanValue(movement, "BunnyHop", State.BunnyHop)
+    State.BunnyHopFloatingVisible = booleanValue(movement, "BunnyHopFloatingVisible", State.BunnyHopFloatingVisible)
     State.FlantEnabled = booleanValue(movement, "FlantEnabled", false)
     State.FlantY = math.clamp(tonumber(movement.FlantY) or State.FlantY, -100000, 100000)
     State.FlantYConfigured = booleanValue(movement, "FlantYConfigured", movement.FlantY ~= nil)
@@ -12847,6 +12979,7 @@ function Extensions.ApplyConfig(config, silent)
         Extensions.ResetJumpSideEffects()
     end
     Extensions.SetBunnyHopEnabled(State.BunnyHop, true)
+    Extensions.SetBunnyHopFloatingButtonVisible(State.BunnyHopFloatingVisible, true)
     Extensions.SetFlantEnabled(State.FlantEnabled, true)
     Extensions.SetScreenBlank(State.ScreenBlankEnabled, true)
     Extensions.SetInspectorEnabled(State.Inspector.Enabled, true)
@@ -12981,11 +13114,11 @@ function Extensions.HandleSpeedToggle(value: boolean)
     local original: any = rememberHumanoid(humanoid)
     State.SpeedAppliedValue = tonumber(original and original.WalkSpeed) or 16
     if not value then resetSpeedSideEffects() end
-    notify(value and ("Speed đã bật · " .. State.SpeedProfile .. " · " .. State.SpeedMethod) or "Speed đã tắt và khôi phục tốc độ gốc.", value and Theme.Success or Theme.Warning)
+    notify(value and ("Speed đã bật · " .. State.SpeedProfile .. " · WalkSpeed") or "Speed đã tắt và khôi phục tốc độ gốc.", value and Theme.Success or Theme.Warning)
 end
 
 do
-local SpeedSection = createSection(MovementPage, "Speed", "Bộ điều khiển Speed có ba hồ sơ rõ ràng: Tương thích ưu tiên ổn định, Cân bằng tăng tốc mượt và Hiệu suất phản hồi trực tiếp.")
+local SpeedSection = createSection(MovementPage, "Speed", "Speed được rút gọn về WalkSpeed: nhập tốc độ, chọn áp dụng ổn định hoặc tăng dần mượt, rồi bật công tắc.")
 State.ConfigControls.SpeedEnabled = createToggle(SpeedSection, "Speed tùy chỉnh", State.SpeedEnabled, Extensions.HandleSpeedToggle)
 State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", Extensions.FormatMovementNumber(State.SpeedValue), "1 - 1000", true, function(text)
     local value = tonumber(text)
@@ -12993,57 +13126,21 @@ State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", Exten
         State.SpeedValue = math.clamp(value, 0, 1000)
     end
 end)
-State.ConfigControls.SpeedProfile = createSelector(SpeedSection, "Hồ sơ Speed", {"Tương thích", "Cân bằng", "Hiệu suất"}, State.SpeedProfile, function(value)
+State.ConfigControls.SpeedProfile = createSelector(SpeedSection, "Cách áp dụng", {"Tương thích", "Cân bằng"}, State.SpeedProfile, function(value)
     State.SpeedProfile = value
+    State.SpeedMethod = "WalkSpeed"
     State.MovementCompatibility = value == "Tương thích"
-    if State.MovementCompatibility and State.SpeedMethod ~= "WalkSpeed" then
-        State.SpeedMethod = "WalkSpeed"
-        if State.ConfigControls.SpeedMethod then
-            State.ConfigControls.SpeedMethod.Set("WalkSpeed", false)
-        end
-    end
     State.SpeedCorrectionCount = 0
     State.SpeedCorrectionWindow = 0
     resetSpeedSideEffects()
-    if value == "Tương thích" then
-        notify("Hồ sơ Tương thích: WalkSpeed có giới hạn và tự dừng khi game liên tục ghi đè.", Theme.Success)
-    elseif value == "Cân bằng" then
-        notify("Hồ sơ Cân bằng: tăng tốc mượt theo phương thức đã chọn.", Theme.Success)
-    else
-        notify("Hồ sơ Hiệu suất: phản hồi trực tiếp; máy chủ vẫn có thể từ chối chuyển động.", Theme.Warning)
-    end
-end)
-State.ConfigControls.SpeedMethod = createSelector(SpeedSection, "Phương thức", {"WalkSpeed", "Velocity", "CFrame"}, State.SpeedMethod, function(value)
-    resetSpeedSideEffects()
-    State.SpeedMethod = value
-    if value ~= "WalkSpeed" and State.SpeedProfile == "Tương thích" then
-        State.SpeedProfile = "Cân bằng"
-        State.MovementCompatibility = false
-        if State.ConfigControls.SpeedProfile then
-            State.ConfigControls.SpeedProfile.Set("Cân bằng", false)
-        end
-        notify("Đã chuyển sang hồ sơ Cân bằng để thực thi " .. value .. ". Máy chủ vẫn có thể từ chối chuyển động.", Theme.Warning)
-    else
-        notify("Phương thức Speed · " .. value, Theme.Success)
-    end
-end)
-State.ConfigControls.SpeedAcceleration = createInput(SpeedSection, "Độ mượt gia tốc", Extensions.FormatMovementNumber(State.SpeedAcceleration), "1 - 30", true, function(text)
-    local value = tonumber(text)
-    if value then
-        State.SpeedAcceleration = math.clamp(value, 1, 30)
-    end
-end)
-State.ConfigControls.MovementCompatibilityMultiplier = createInput(SpeedSection, "Giới hạn hồ sơ Tương thích", State.MovementCompatibilityMultiplier, "1.0 - 2.0", true, function(text)
-    local value = tonumber(text)
-    if value then
-        State.MovementCompatibilityMultiplier = math.clamp(value, 1, 2)
-    end
+    notify(value == "Tương thích" and "Speed Tương thích: áp dụng thưa hơn và tự dừng nếu game liên tục ghi đè." or "Speed Cân bằng: tăng tốc mượt bằng WalkSpeed.", Theme.Success)
 end)
 createButton(SpeedSection, "Khôi phục tốc độ mặc định", function()
     local _, humanoid = getCharacter()
     local rememberFunction: any = rememberHumanoid
     local original: any = rememberFunction(humanoid)
     State.SpeedValue = Extensions.RoundMovementNumber(original and original.WalkSpeed or 16)
+    State.SpeedMethod = "WalkSpeed"
     resetSpeedSideEffects()
     if State.ConfigControls.SpeedValue then
         State.ConfigControls.SpeedValue.Text = Extensions.FormatMovementNumber(State.SpeedValue)
@@ -13092,6 +13189,10 @@ State.ConfigControls.BunnyHop = createToggle(JumpSection, "Bunny Hop khi vừa c
         Extensions.SetBunnyHopEnabled(value, false)
     end
 end)
+State.ConfigControls.BunnyHopFloatingVisible = createToggle(JumpSection, "Hiện nút Bunny Hop ngoài giao diện", State.BunnyHopFloatingVisible, function(value)
+    Extensions.SetBunnyHopFloatingButtonVisible(value, false)
+end)
+Extensions.SetBunnyHopFloatingButtonVisible(State.BunnyHopFloatingVisible, true)
 
 end
 
@@ -14730,6 +14831,7 @@ end
 local LastVisionApply = 0
 local LastNoVoidCheck = 0
 local LastXRayUpdate = 0
+local LastRuntimeHousekeeping = 0
 local ESPLastUpdate = {Player = 0, Mob = 0, Item = 0, Scan = 0}
 local ESPWorkOrder = {"Mob", "Item", "Scan"}
 local ESPWorkPhase = 1
@@ -14840,41 +14942,40 @@ function Extensions.ApplyRuntimeSpeed(humanoid: any, root: any, original: any, d
     if not runtimeState.SpeedEnabled then return end
     local getEffectiveSpeed: any = rawget(Extensions, "GetEffectiveSpeed")
     local getAppliedSpeed: any = rawget(Extensions, "GetAppliedSpeed")
-    local rawSpeed: any, rawMethod: any = getEffectiveSpeed(humanoid, original)
+    local rawSpeed: any = getEffectiveSpeed(humanoid, original)
     local effectiveSpeed: number = tonumber(rawSpeed) or 16
     local appliedSpeed: number = tonumber(getAppliedSpeed(effectiveSpeed, deltaTime)) or effectiveSpeed
-    local method: string = tostring(rawMethod or "WalkSpeed")
-    if method == "WalkSpeed" then
-        Extensions.ApplyWalkSpeedRuntime(runtimeState, humanoid, appliedSpeed, now)
-    elseif method == "Velocity" then
-        Extensions.ApplyVelocitySpeedRuntime(tostring(runtimeState.SpeedProfile or ""), tonumber(runtimeState.SpeedAcceleration) or 1, humanoid, root, original, appliedSpeed, deltaTime)
-    elseif method == "CFrame" then
-        Extensions.ApplyCFrameSpeedRuntime(humanoid, root, original, appliedSpeed, deltaTime)
-    end
+    runtimeState.SpeedMethod = "WalkSpeed"
+    Extensions.ApplyWalkSpeedRuntime(runtimeState, humanoid, appliedSpeed, now)
 end
 
 function Extensions.UpdateRuntimeHeartbeat(deltaTime: number)
-    if not State.Running then
-        return
-    end
-    local antiAFKNow = os.clock()
-    if State.AntiAFK and antiAFKNow - State.LastAntiAFKPulse >= State.AntiAFKPulseInterval then
-        State.LastAntiAFKPulse = antiAFKNow
-        task.spawn(Extensions.PulseAntiAFK)
-    end
-    Camera = Workspace.CurrentCamera or Camera
-    if State.AnomalyMonitor.Enabled and antiAFKNow - State.AnomalyMonitor.LastScan >= State.AnomalyMonitor.Interval then
-        State.AnomalyMonitor.LastScan = antiAFKNow
-        task.spawn(Extensions.ScanPlayerAnomalies, false)
-    end
-    Extensions.CheckSelfActivity()
-    if State.AnomalyMonitor.Panel and State.AnomalyMonitor.Expanded and (State.ActivityLog.Dirty or State.ActivityLog.SelfDirty) then
-        Extensions.RefreshAnomalyPanel()
-    end
+    if not State.Running then return end
     local needsRuntime = State.GodMode or State.SpeedEnabled or State.JumpEnabled or State.FlantEnabled or State.GravityEnabled or State.NoVoid or State.SpectatingPlayer ~= nil or State.XRay and State.XRayMethod ~= "Outline" or State.ClockTime ~= nil or Camera.FieldOfView ~= State.CameraFov
-    if not needsRuntime then
-        return
+    local monitor = State.AnomalyMonitor
+    local activity = State.ActivityLog
+    local needsHousekeeping = State.AntiAFK or monitor.Enabled or activity.Enabled or monitor.Panel and monitor.Expanded and (activity.Dirty or activity.SelfDirty)
+    if not needsRuntime and not needsHousekeeping then return end
+
+    local antiAFKNow = os.clock()
+    if needsHousekeeping and antiAFKNow - LastRuntimeHousekeeping >= 0.1 then
+        LastRuntimeHousekeeping = antiAFKNow
+        if State.AntiAFK and antiAFKNow - State.LastAntiAFKPulse >= State.AntiAFKPulseInterval then
+            State.LastAntiAFKPulse = antiAFKNow
+            task.spawn(Extensions.PulseAntiAFK)
+        end
+        if monitor.Enabled and antiAFKNow - monitor.LastScan >= monitor.Interval then
+            monitor.LastScan = antiAFKNow
+            task.spawn(Extensions.ScanPlayerAnomalies, false)
+        end
+        if activity.Enabled then Extensions.CheckSelfActivity() end
+        if monitor.Panel and monitor.Expanded and (activity.Dirty or activity.SelfDirty) then
+            Extensions.RefreshAnomalyPanel()
+        end
     end
+    if not needsRuntime then return end
+
+    Camera = Workspace.CurrentCamera or Camera
     local character: any, humanoid: any, root: any = getCharacter()
     if not character or not humanoid or not root then
         return
@@ -15064,16 +15165,27 @@ function Extensions.RefreshVisualWork(runtimeState: any, now: number, localRoot:
     end
 end
 
-function Extensions.UpdateVisualRuntime()
+function Extensions.UpdateVisualRuntime(deltaTime: number)
     local runtimeState: any = State
+    if not runtimeState.Running then return end
+    local flight: any = runtimeState.Flight
+    if flight.CharacterEnabled or flight.CameraEnabled then
+        Extensions.UpdateFlight(deltaTime)
+    end
+    if not Extensions.NeedsVisualRuntime(runtimeState) then
+        if FrameCounter ~= 0 or MeasuredFPS ~= 0 then
+            FrameCounter = 0
+            FrameTimer = os.clock()
+            MeasuredFPS = 0
+        end
+        return
+    end
     local now: number = os.clock()
     Extensions.UpdateVisualFPSSample(runtimeState, now)
-    if not runtimeState.Running then return end
     if runtimeState.ScreenBlankEnabled then
         Extensions.HideRuntimeVisuals(runtimeState)
         return
     end
-    if not Extensions.NeedsVisualRuntime(runtimeState) then return end
     Extensions.UpdateVisualOverlays(runtimeState, now)
     if not Extensions.NeedsWorldVisualRefresh(runtimeState) then return end
     Camera = Workspace.CurrentCamera or Camera
