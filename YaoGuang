@@ -644,7 +644,8 @@ local State = {
     DesktopSavedTeleEnabled = false,
     SpeedEnabled = false,
     SpeedValue = 16,
-    SpeedMethod = "WalkSpeed",
+    SpeedMethod = "Auto",
+    SpeedResolvedMethod = "WalkSpeed",
     SpeedProfile = "Tương thích",
     SpeedAcceleration = 10,
     SpeedAppliedValue = 16,
@@ -653,6 +654,12 @@ local State = {
     LastSpeedApply = 0,
     SpeedCorrectionCount = 0,
     SpeedCorrectionWindow = 0,
+    SpeedProbeFailures = 0,
+    SpeedProbeSamples = 0,
+    SpeedProbeStarted = 0,
+    SpeedProbeLastSample = 0,
+    SpeedProbeCharacter = nil,
+    SpeedStatusValue = nil,
     JumpEnabled = false,
     JumpValue = 50,
     JumpMethod = "JumpPower",
@@ -730,6 +737,10 @@ local State = {
         SelfSignature = nil,
         LogSignature = nil,
         ScanRunning = false
+    },
+    DeathNotifications = {
+        HookedPlayers = setmetatable({}, {__mode = "k"}),
+        HookedCharacters = setmetatable({}, {__mode = "k"}),
     },
     ActivityLog = {
         Enabled = false,
@@ -3712,11 +3723,85 @@ local function resetSpeedSideEffects()
     State.SpeedAppliedValue = original and original.WalkSpeed or 16
 end
 
+Extensions.SpeedMethodOrder = {"WalkSpeed", "Velocity", "CFrame"}
+
+function Extensions.RefreshSpeedMethodStatus(reason)
+    local method = tostring(State.SpeedResolvedMethod or "WalkSpeed")
+    if State.SpeedStatusValue and State.SpeedStatusValue.Parent then
+        State.SpeedStatusValue.Text = State.SpeedEnabled and ("AUTO · " .. method) or "AUTO · chờ bật"
+        State.SpeedStatusValue.TextColor3 = State.SpeedEnabled and Theme.Text or Theme.SubText
+    end
+    if reason and reason ~= "" then
+        setStatusText("Speed Auto · " .. method .. " · " .. reason, Theme.Warning)
+    end
+end
+
+function Extensions.SetResolvedSpeedMethod(method, reason, silent)
+    if not table.find(Extensions.SpeedMethodOrder, method) then method = "WalkSpeed" end
+    local previous = State.SpeedResolvedMethod
+    if previous ~= method then
+        local _, humanoid = getCharacter()
+        local original = rememberHumanoid(humanoid)
+        if humanoid and original then humanoid.WalkSpeed = original.WalkSpeed end
+    end
+    State.SpeedMethod = "Auto"
+    State.SpeedResolvedMethod = method
+    State.SpeedProbeFailures = 0
+    State.SpeedProbeSamples = 0
+    State.SpeedProbeStarted = os.clock()
+    State.SpeedProbeLastSample = 0
+    State.LastSpeedApply = 0
+    Extensions.RefreshSpeedMethodStatus(reason)
+    if previous ~= method and not silent then
+        notify("Speed Auto chuyển sang " .. method .. (reason and (" · " .. reason) or ""), Theme.Warning)
+    end
+    return method
+end
+
+function Extensions.ResetSpeedAutoDetection(silent)
+    local character, humanoid = getCharacter()
+    State.SpeedProbeCharacter = character
+    State.SpeedAppliedValue = tonumber(humanoid and humanoid.WalkSpeed) or 16
+    return Extensions.SetResolvedSpeedMethod("WalkSpeed", "ưu tiên thử WalkSpeed", silent)
+end
+
+function Extensions.AdvanceSpeedMethod(reason)
+    local current = tostring(State.SpeedResolvedMethod or "WalkSpeed")
+    local index = table.find(Extensions.SpeedMethodOrder, current) or 1
+    local nextMethod = Extensions.SpeedMethodOrder[math.min(index + 1, #Extensions.SpeedMethodOrder)]
+    if nextMethod == current then return current end
+    return Extensions.SetResolvedSpeedMethod(nextMethod, reason or (current .. " không đạt tốc độ yêu cầu"), false)
+end
+
+function Extensions.EvaluateSpeedMethod(humanoid, root, original, observedWalkSpeed, observedHorizontalSpeed, appliedSpeed, now)
+    local method = tostring(State.SpeedResolvedMethod or "WalkSpeed")
+    if method == "CFrame" or now - (State.SpeedProbeStarted or 0) < 0.8 or now - (State.SpeedProbeLastSample or 0) < 0.15 then return end
+    if not humanoid or not root or humanoid.MoveDirection.Magnitude < 0.15 or humanoid.FloorMaterial == Enum.Material.Air or humanoid.Sit then return end
+    State.SpeedProbeLastSample = now
+    State.SpeedProbeSamples = (tonumber(State.SpeedProbeSamples) or 0) + 1
+    local velocity = root.AssemblyLinearVelocity
+    local currentHorizontalSpeed = math.sqrt(velocity.X * velocity.X + velocity.Z * velocity.Z)
+    local horizontalSpeed = method == "Velocity" and tonumber(observedHorizontalSpeed) or currentHorizontalSpeed
+    horizontalSpeed = tonumber(horizontalSpeed) or currentHorizontalSpeed
+    local baseSpeed = tonumber(original and original.WalkSpeed) or 16
+    local target = math.max(tonumber(appliedSpeed) or baseSpeed, baseSpeed)
+    local propertyRejected = method == "WalkSpeed" and math.abs((tonumber(observedWalkSpeed) or 0) - target) > math.max(2, target * 0.12)
+    local movementRejected = target > baseSpeed + 4 and horizontalSpeed < math.max(baseSpeed * 0.7, target * (method == "WalkSpeed" and 0.42 or 0.5))
+    if propertyRejected or movementRejected then
+        State.SpeedProbeFailures = (tonumber(State.SpeedProbeFailures) or 0) + 1
+    else
+        State.SpeedProbeFailures = math.max((tonumber(State.SpeedProbeFailures) or 0) - 1, 0)
+    end
+    if State.SpeedProbeSamples >= 6 and State.SpeedProbeFailures >= 5 then
+        Extensions.AdvanceSpeedMethod(method .. " bị map ghi đè hoặc giới hạn")
+    end
+end
+
 function Extensions.GetEffectiveSpeed(humanoid, original)
     local requested = math.max(tonumber(State.SpeedValue) or 0, 0)
     State.MovementCompatibility = State.SpeedProfile == "Tương thích"
-    State.SpeedMethod = "WalkSpeed"
-    return requested, "WalkSpeed"
+    State.SpeedMethod = "Auto"
+    return requested, State.SpeedResolvedMethod or "WalkSpeed"
 end
 
 function Extensions.GetAppliedSpeed(targetSpeed, deltaTime)
@@ -4441,6 +4526,16 @@ UI.InterfaceTint.ZIndex = 0
 UI.InterfaceTint.Parent = MainFrame
 Instance.new("UICorner", UI.InterfaceTint).CornerRadius = UDim.new(0, 18)
 
+-- Square top cap: keeps the lower glass corners rounded while the top edge meets the accent bar cleanly.
+UI.TopCornerFill = Instance.new("Frame")
+UI.TopCornerFill.Name = "TopSquareCap"
+UI.TopCornerFill.Size = UDim2.new(1, 0, 0, 18)
+UI.TopCornerFill.BackgroundColor3 = Theme.Surface
+UI.TopCornerFill.BackgroundTransparency = UI.SurfaceStyle.HeaderTransparency
+UI.TopCornerFill.BorderSizePixel = 0
+UI.TopCornerFill.ZIndex = 0
+UI.TopCornerFill.Parent = MainFrame
+
 task.spawn(function()
     local assetPath = Extensions.ResolveInterfaceBackground()
     if State.Running and State.InterfaceBackground and State.InterfaceBackground.Parent then
@@ -4546,10 +4641,10 @@ local TopAccent = Instance.new("Frame")
 TopAccent.Name = "TopAccent"
 TopAccent.Size = UDim2.new(1, 0, 0, 3)
 TopAccent.BackgroundColor3 = Theme.Accent
-TopAccent.BackgroundTransparency = 1
+TopAccent.BackgroundTransparency = 0.34
 TopAccent.BorderSizePixel = 0
 TopAccent.ZIndex = 8
-TopAccent.Visible = false
+TopAccent.Visible = true
 TopAccent.Parent = MainFrame
 local TopAccentGradient = Instance.new("UIGradient")
 TopAccentGradient.Color = UI.PaletteSequence.Accent
@@ -4591,7 +4686,7 @@ UI.HeaderStroke = Instance.new("UIStroke")
 UI.HeaderStroke.Color = Theme.GlassBorder
 UI.HeaderStroke.Transparency = UI.SurfaceStyle.BorderTransparency
 UI.HeaderStroke.Thickness = 0.75
-UI.HeaderStroke.Enabled = false
+UI.HeaderStroke.Enabled = true
 UI.HeaderStroke.Parent = Header
 
 local BrandMark = Instance.new("ImageLabel")
@@ -4817,9 +4912,13 @@ function Extensions.ApplyUnifiedInterfacePalette()
     State.InterfaceBackground.ImageColor3 = Color3.fromRGB(255, 255, 255)
     State.InterfaceBackground.ImageTransparency = UI.SurfaceStyle.BackgroundImageTransparency
     TopAccent.BackgroundColor3 = Theme.Accent
-    TopAccent.BackgroundTransparency = 1
-    TopAccent.Visible = false
+    TopAccent.BackgroundTransparency = 0.34
+    TopAccent.Visible = true
     TopAccentGradient.Color = UI.PaletteSequence.Accent
+    if UI.TopCornerFill then
+        UI.TopCornerFill.BackgroundColor3 = Theme.Surface
+        UI.TopCornerFill.BackgroundTransparency = UI.SurfaceStyle.HeaderTransparency
+    end
     AmbientGlow.BackgroundColor3 = Theme.Accent
     AmbientGlow.BackgroundTransparency = 0.95
     Header.BackgroundColor3 = Theme.Surface
@@ -4827,8 +4926,8 @@ function Extensions.ApplyUnifiedInterfacePalette()
     HeaderGradient.Color = UI.PaletteSequence.Surface
     HeaderGradient.Enabled = false
     UI.HeaderStroke.Color = Theme.GlassBorder
-    UI.HeaderStroke.Transparency = 1
-    UI.HeaderStroke.Enabled = false
+    UI.HeaderStroke.Transparency = UI.SurfaceStyle.BorderTransparency
+    UI.HeaderStroke.Enabled = true
     Sidebar.BackgroundColor3 = Theme.Surface
     Sidebar.BackgroundTransparency = UI.SurfaceStyle.SidebarTransparency
     if UI.SidebarGradient then
@@ -6753,9 +6852,7 @@ function Extensions.HookActivityCharacter(player, character)
     Extensions.PushActivityLog((isSelf and "[SELF] " or "[SPAWN] ") .. player.DisplayName .. " xuất hiện nhân vật", "info", isSelf)
     local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 8)
     if humanoid then
-        Extensions.TrackActivityConnection(humanoid.Died:Connect(function()
-            Extensions.PushActivityLog("[DEATH] " .. player.DisplayName .. " (@" .. player.Name .. ")", "warn", isSelf)
-        end))
+        -- Deaths are reported by the always-on lifecycle tracker so notifications and logs share killer attribution.
         local lastStateLog = 0
         Extensions.TrackActivityConnection(humanoid.StateChanged:Connect(function(_, state)
             if not State.ActivityLog.Enabled then return end
@@ -7885,9 +7982,13 @@ function Extensions.RepairInterfaceGeometry()
     TopAccent.Position = UDim2.fromOffset(0, 0)
     TopAccent.Size = UDim2.new(1, 0, 0, 3)
     TopAccent.BackgroundColor3 = Theme.Accent
-    TopAccent.BackgroundTransparency = 1
+    TopAccent.BackgroundTransparency = 0.34
     TopAccent.Rotation = 0
-    TopAccent.Visible = false
+    TopAccent.Visible = true
+    if UI.TopCornerFill then
+        UI.TopCornerFill.Position = UDim2.fromOffset(0, 0)
+        UI.TopCornerFill.Size = UDim2.new(1, 0, 0, 18)
+    end
     Header.BackgroundColor3 = Theme.Surface
     Header.BackgroundTransparency = UI.SurfaceStyle.HeaderTransparency
     if State.InterfaceBackground and State.InterfaceBackground.Parent then
@@ -11708,8 +11809,9 @@ function Extensions.UpdateAimbotFrame(now)
     end
 
     if State.Aimbot.TargetModel and not Extensions.IsAimbotTargetValid() then
-        Extensions.SetAimbotEnabled(false, "Mục tiêu đã chết hoặc không còn hợp lệ; Aimbot đã dừng.", false)
-        return
+        Extensions.ClearAimbotTarget(true)
+        State.Aimbot.LastScan = 0
+        Extensions.UpdateAimbotStatus("Mục tiêu không còn hợp lệ; Aimbot vẫn bật và đang tìm lại", Theme.Warning)
     end
 
     if State.Aimbot.TargetPlayer and Extensions.IsAimbotPlayerBlacklisted(State.Aimbot.TargetPlayer) then
@@ -12060,7 +12162,7 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
     if grounded then
         if direction.Magnitude <= 0.01 then
             correctedHorizontal = Vector3.zero
-        elseif State.SpeedMethod ~= "CFrame" then
+        elseif State.SpeedResolvedMethod ~= "CFrame" then
             correctedHorizontal = direction.Unit * speed
         elseif horizontal.Magnitude > math.max(speed * 1.6, 32) or horizontal:Dot(direction.Unit) < -1 then
             correctedHorizontal = direction.Unit * speed
@@ -12802,7 +12904,9 @@ function Extensions.ApplyConfig(config, silent)
     local movement = type(config.Movement) == "table" and config.Movement or {}
     State.SpeedEnabled = booleanValue(movement, "SpeedEnabled", false)
     State.SpeedValue = math.clamp(tonumber(movement.SpeedValue) or State.SpeedValue, 0, 1000)
-    State.SpeedMethod = "WalkSpeed"
+    State.SpeedMethod = "Auto"
+    State.SpeedResolvedMethod = "WalkSpeed"
+    State.SpeedProbeCharacter = nil
     local legacyCompatibility = booleanValue(movement, "MovementCompatibility", State.MovementCompatibility)
     local fallbackProfile = legacyCompatibility and "Tương thích" or "Cân bằng"
     State.SpeedProfile = allowed(movement.SpeedProfile, {"Tương thích", "Cân bằng"}, fallbackProfile)
@@ -12974,6 +13078,9 @@ function Extensions.ApplyConfig(config, silent)
     Extensions.UpdateAutoExecutorSettings(true)
     if not State.SpeedEnabled then
         resetSpeedSideEffects()
+        Extensions.RefreshSpeedMethodStatus()
+    else
+        Extensions.ResetSpeedAutoDetection(true)
     end
     if not State.JumpEnabled then
         Extensions.ResetJumpSideEffects()
@@ -13113,13 +13220,21 @@ function Extensions.HandleSpeedToggle(value: boolean)
     local _, humanoid = getCharacter()
     local original: any = rememberHumanoid(humanoid)
     State.SpeedAppliedValue = tonumber(original and original.WalkSpeed) or 16
-    if not value then resetSpeedSideEffects() end
-    notify(value and ("Speed đã bật · " .. State.SpeedProfile .. " · WalkSpeed") or "Speed đã tắt và khôi phục tốc độ gốc.", value and Theme.Success or Theme.Warning)
+    if value then
+        Extensions.ResetSpeedAutoDetection(true)
+    else
+        resetSpeedSideEffects()
+        State.SpeedProbeCharacter = nil
+        State.SpeedResolvedMethod = "WalkSpeed"
+        Extensions.RefreshSpeedMethodStatus()
+    end
+    notify(value and "Speed Auto đã bật · thử WalkSpeed → Velocity → CFrame." or "Speed đã tắt và khôi phục tốc độ gốc.", value and Theme.Success or Theme.Warning)
 end
 
 do
-local SpeedSection = createSection(MovementPage, "Speed", "Speed được rút gọn về WalkSpeed: nhập tốc độ, chọn áp dụng ổn định hoặc tăng dần mượt, rồi bật công tắc.")
-State.ConfigControls.SpeedEnabled = createToggle(SpeedSection, "Speed tùy chỉnh", State.SpeedEnabled, Extensions.HandleSpeedToggle)
+local SpeedSection = createSection(MovementPage, "Speed", "Speed Auto tự thử theo đúng thứ tự WalkSpeed → Velocity → CFrame và chỉ chuyển phương thức khi map ghi đè hoặc giới hạn phương thức hiện tại.")
+State.ConfigControls.SpeedEnabled = createToggle(SpeedSection, "Speed tự động", State.SpeedEnabled, Extensions.HandleSpeedToggle)
+State.SpeedStatusValue = createInfoRow(SpeedSection, "Phương thức", State.SpeedEnabled and ("AUTO · " .. tostring(State.SpeedResolvedMethod)) or "AUTO · chờ bật")
 State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", Extensions.FormatMovementNumber(State.SpeedValue), "1 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
@@ -13128,20 +13243,22 @@ State.ConfigControls.SpeedValue = createInput(SpeedSection, "Tốc độ", Exten
 end)
 State.ConfigControls.SpeedProfile = createSelector(SpeedSection, "Cách áp dụng", {"Tương thích", "Cân bằng"}, State.SpeedProfile, function(value)
     State.SpeedProfile = value
-    State.SpeedMethod = "WalkSpeed"
+    State.SpeedMethod = "Auto"
     State.MovementCompatibility = value == "Tương thích"
     State.SpeedCorrectionCount = 0
     State.SpeedCorrectionWindow = 0
     resetSpeedSideEffects()
-    notify(value == "Tương thích" and "Speed Tương thích: áp dụng thưa hơn và tự dừng nếu game liên tục ghi đè." or "Speed Cân bằng: tăng tốc mượt bằng WalkSpeed.", Theme.Success)
+    if State.SpeedEnabled then Extensions.ResetSpeedAutoDetection(true) end
+    notify(value == "Tương thích" and "Speed Auto Tương thích: ưu tiên nhịp áp dụng ổn định." or "Speed Auto Cân bằng: tăng tốc mượt trong phương thức đang dùng.", Theme.Success)
 end)
 createButton(SpeedSection, "Khôi phục tốc độ mặc định", function()
     local _, humanoid = getCharacter()
     local rememberFunction: any = rememberHumanoid
     local original: any = rememberFunction(humanoid)
     State.SpeedValue = Extensions.RoundMovementNumber(original and original.WalkSpeed or 16)
-    State.SpeedMethod = "WalkSpeed"
+    State.SpeedMethod = "Auto"
     resetSpeedSideEffects()
+    Extensions.ResetSpeedAutoDetection(true)
     if State.ConfigControls.SpeedValue then
         State.ConfigControls.SpeedValue.Text = Extensions.FormatMovementNumber(State.SpeedValue)
     end
@@ -14526,7 +14643,132 @@ function Extensions.RefreshInfoView()
     end)
 end
 
-connect(Players.PlayerAdded, function()
+function Extensions.PlayerFromDeathValue(value)
+    if typeof(value) == "Instance" then
+        if value:IsA("Player") then return value end
+        if value:IsA("Model") then return Players:GetPlayerFromCharacter(value) end
+        if value:IsA("BasePart") then
+            local model = value:FindFirstAncestorOfClass("Model")
+            return model and Players:GetPlayerFromCharacter(model) or nil
+        end
+    elseif type(value) == "number" then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.UserId == value then return player end
+        end
+    elseif type(value) == "string" and value ~= "" then
+        local numeric = tonumber(value)
+        local normalized = string.lower(value)
+        local uniqueDisplay = nil
+        local displayMatches = 0
+        for _, player in ipairs(Players:GetPlayers()) do
+            if string.lower(player.Name) == normalized or numeric and player.UserId == numeric then return player end
+            if string.lower(player.DisplayName) == normalized then
+                uniqueDisplay = player
+                displayMatches = displayMatches + 1
+            end
+        end
+        if displayMatches == 1 then return uniqueDisplay end
+    end
+    return nil
+end
+
+function Extensions.ResolveObservableKiller(victim, character, humanoid)
+    local accepted = {
+        creator = true,
+        killer = true,
+        killertag = true,
+        lastdamager = true,
+        lastattacker = true,
+        lasthitby = true,
+        attacker = true,
+        damageowner = true,
+    }
+    local function keyAccepted(name)
+        return accepted[string.lower(tostring(name)):gsub("[^%w]", "")] == true
+    end
+    for _, container in ipairs({humanoid, character}) do
+        if container then
+            for _, child in ipairs(container:GetChildren()) do
+                if keyAccepted(child.Name) and (child:IsA("ObjectValue") or child:IsA("StringValue") or child:IsA("IntValue") or child:IsA("NumberValue")) then
+                    local killer = Extensions.PlayerFromDeathValue(child.Value)
+                    if killer then return killer, child.Name end
+                end
+            end
+            for attribute, value in pairs(container:GetAttributes()) do
+                if keyAccepted(attribute) then
+                    local killer = Extensions.PlayerFromDeathValue(value)
+                    if killer then return killer, attribute end
+                end
+            end
+        end
+    end
+    if victim then
+        for attribute, value in pairs(victim:GetAttributes()) do
+            if keyAccepted(attribute) then
+                local killer = Extensions.PlayerFromDeathValue(value)
+                if killer then return killer, attribute end
+            end
+        end
+    end
+    return nil, nil
+end
+
+function Extensions.NotifyPlayerDeath(victim, character, humanoid)
+    local killer, source = Extensions.ResolveObservableKiller(victim, character, humanoid)
+    local victimLabel = victim.DisplayName .. " (@" .. victim.Name .. ")"
+    local text
+    if killer then
+        local killerLabel = killer.DisplayName .. " (@" .. killer.Name .. ")"
+        text = "☠ " .. victimLabel .. " đã chết · Killer: " .. killerLabel
+        if killer == victim then text = "☠ " .. victimLabel .. " đã chết · Tự gây sát thương" end
+    else
+        text = "☠ " .. victimLabel .. " đã chết · Killer: không rõ"
+    end
+    notify(text, killer and Theme.Danger or Theme.Warning)
+    if State.ActivityLog.Enabled then
+        Extensions.PushActivityLog("[DEATH] " .. text .. (source and (" · nguồn: " .. source) or ""), "warn", victim == LocalPlayer)
+    end
+end
+
+function Extensions.HookDeathNotificationCharacter(player, character)
+    local tracker = State.DeathNotifications
+    if not character or tracker.HookedCharacters[character] then return end
+    tracker.HookedCharacters[character] = true
+    task.spawn(function()
+        local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 8)
+        if not State.Running or not humanoid or not humanoid.Parent then return end
+        local reported = false
+        connect(humanoid.Died, function()
+            if reported then return end
+            reported = true
+            local immediateKiller = Extensions.ResolveObservableKiller(player, character, humanoid)
+            if immediateKiller then
+                Extensions.NotifyPlayerDeath(player, character, humanoid)
+            else
+                task.delay(0.12, function()
+                    if State.Running then Extensions.NotifyPlayerDeath(player, character, humanoid) end
+                end)
+            end
+        end)
+    end)
+end
+
+function Extensions.HookDeathNotificationPlayer(player)
+    local tracker = State.DeathNotifications
+    if not player or tracker.HookedPlayers[player] then return end
+    tracker.HookedPlayers[player] = true
+    connect(player.CharacterAdded, function(character)
+        Extensions.HookDeathNotificationCharacter(player, character)
+    end)
+    if player.Character then Extensions.HookDeathNotificationCharacter(player, player.Character) end
+end
+
+for _, trackedPlayer in ipairs(Players:GetPlayers()) do
+    Extensions.HookDeathNotificationPlayer(trackedPlayer)
+end
+
+connect(Players.PlayerAdded, function(player)
+    Extensions.HookDeathNotificationPlayer(player)
     if State.SmartSearchEnabled and State.PlayerESP.ManualFilterEnabled and State.PlayerESP.ManualFilterText ~= "" then
         task.defer(function()
             local _, completedText = Extensions.ParsePlayerESPFilter(State.PlayerESP.ManualFilterText)
@@ -14540,7 +14782,10 @@ connect(Players.PlayerAdded, function()
 end)
 connect(Players.PlayerRemoving, function(player)
     if State.Aimbot.TargetPlayer == player then
-        Extensions.SetAimbotEnabled(false, "Player đang Aim đã rời server; Aimbot đã dừng.", false)
+        Extensions.ClearAimbotTarget(true)
+        State.Aimbot.LastScan = 0
+        Extensions.UpdateAimbotStatus("Mục tiêu đã rời server; Aimbot vẫn bật và đang tìm lại", Theme.Warning)
+        notify("Player đang Aim đã rời server; Aimbot tiếp tục tìm mục tiêu.", Theme.Warning)
     end
     if State.SpectatingPlayer == player then
         setSpectating(nil)
@@ -14899,10 +15144,7 @@ function Extensions.ApplyWalkSpeedRuntime(runtimeState: any, humanoid: any, appl
         runtimeState.LastSpeedApply = now
         return
     end
-    runtimeState.SpeedEnabled = false
-    resetSpeedSideEffects()
-    if runtimeState.ConfigControls.SpeedEnabled then runtimeState.ConfigControls.SpeedEnabled.Set(false, false) end
-    notify("Speed đã tự dừng vì game liên tục ghi đè chuyển động. Không tiếp tục đối đầu hệ thống máy chủ.", Theme.Warning)
+    Extensions.AdvanceSpeedMethod("WalkSpeed bị map ghi đè liên tục")
 end
 
 function Extensions.ApplyVelocitySpeedRuntime(speedProfile: string, speedAcceleration: number, humanoid: any, root: any, original: any, appliedSpeed: number, deltaTime: number)
@@ -14940,13 +15182,29 @@ end
 function Extensions.ApplyRuntimeSpeed(humanoid: any, root: any, original: any, deltaTime: number, now: number)
     local runtimeState: any = State
     if not runtimeState.SpeedEnabled then return end
+    if runtimeState.SpeedProbeCharacter ~= humanoid.Parent then
+        Extensions.ResetSpeedAutoDetection(true)
+    end
     local getEffectiveSpeed: any = rawget(Extensions, "GetEffectiveSpeed")
     local getAppliedSpeed: any = rawget(Extensions, "GetAppliedSpeed")
     local rawSpeed: any = getEffectiveSpeed(humanoid, original)
     local effectiveSpeed: number = tonumber(rawSpeed) or 16
     local appliedSpeed: number = tonumber(getAppliedSpeed(effectiveSpeed, deltaTime)) or effectiveSpeed
-    runtimeState.SpeedMethod = "WalkSpeed"
-    Extensions.ApplyWalkSpeedRuntime(runtimeState, humanoid, appliedSpeed, now)
+    local method: string = tostring(runtimeState.SpeedResolvedMethod or "WalkSpeed")
+    local observedWalkSpeed: number = tonumber(humanoid.WalkSpeed) or 0
+    local observedVelocity: any = root.AssemblyLinearVelocity
+    local observedHorizontalSpeed: number = math.sqrt((tonumber(observedVelocity.X) or 0) ^ 2 + (tonumber(observedVelocity.Z) or 0) ^ 2)
+    if method == "Velocity" then
+        Extensions.ApplyVelocitySpeedRuntime(runtimeState.SpeedProfile, runtimeState.SpeedAcceleration, humanoid, root, original, appliedSpeed, deltaTime)
+    elseif method == "CFrame" then
+        Extensions.ApplyCFrameSpeedRuntime(humanoid, root, original, appliedSpeed, deltaTime)
+    else
+        Extensions.ApplyWalkSpeedRuntime(runtimeState, humanoid, appliedSpeed, now)
+    end
+    local evaluateMethod: any = rawget(Extensions, "EvaluateSpeedMethod")
+    if evaluateMethod then
+        evaluateMethod(humanoid, root, original, method == "WalkSpeed" and (tonumber(humanoid.WalkSpeed) or observedWalkSpeed) or observedWalkSpeed, observedHorizontalSpeed, appliedSpeed, now)
+    end
 end
 
 function Extensions.UpdateRuntimeHeartbeat(deltaTime: number)
