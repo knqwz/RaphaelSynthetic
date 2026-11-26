@@ -114,11 +114,14 @@ local UI = {
     },
     TabIcons = {
         Movement = "footprints",
-        Player = "person-standing",
+        Fun = "sparkles",
+        Vision = "sun",
+        Tele = "map-pin",
         ESP = "scan-eye",
-        Info = "info",
-        Misc = "settings-2",
-        World = "sun"
+        Aim = "crosshair",
+        Anti = "shield",
+        Custom = "settings-2",
+        Info = "info"
     },
     IconFallbacks = {
         search = "user-round-search",
@@ -181,54 +184,63 @@ UI.SectionOrder = {
     ["Noclip"] = 40,
     ["Flant chống rơi"] = 50,
     ["Gravity"] = 60,
-    ["Tele Player"] = 70,
-    ["Tele Item"] = 80,
-    ["Tele toạ độ"] = 90,
-    ["Tele đã lưu"] = 100,
-    ["Tele cảm ứng"] = 110,
-    ["Thiết lập di chuyển"] = 120,
+    ["Shift Lock"] = 70,
+    ["Player Viewer"] = 10,
+    ["Theo dõi Player"] = 20,
+    ["Reset nhanh"] = 30,
+    ["Spin Me"] = 40,
+    ["Ghi chú"] = 50,
+    ["Boombox"] = 60,
+    ["Full Bright + No Fog"] = 10,
+    ["X-Ray"] = 20,
+    ["Camera"] = 30,
+    ["Sky"] = 40,
+    ["Mini Map"] = 50,
+    ["Hiệu năng"] = 60,
+    ["Screen White / Black"] = 70,
+    ["Tele Player"] = 10,
+    ["Tele Item"] = 20,
+    ["Tele toạ độ"] = 30,
+    ["Tele đã lưu"] = 40,
+    ["Tele cảm ứng"] = 50,
+    ["Thiết lập di chuyển"] = 60,
+    ["Server Browser"] = 70,
+    ["Join Server ID"] = 80,
+    ["ESP Player"] = 10,
+    ["ESP Quái"] = 20,
+    ["ESP Vật Phẩm Đa Năng"] = 30,
+    ["Nhận diện tâm màn hình"] = 40,
+    ["Function Color"] = 50,
+    ["Trung tâm tùy chỉnh ESP"] = 60,
+    ["Hiển thị ESP"] = 70,
     ["Aimbot"] = 10,
     ["Ưu tiên & Danh sách đen"] = 20,
     ["FOV & Bỏ Aim"] = 30,
     ["Aim nâng cao"] = 40,
     ["Giao diện Aimbot"] = 50,
-    ["Theo dõi Player"] = 60,
-    ["Player Viewer"] = 70,
-    ["Bảo vệ nhân vật"] = 80,
-    ["Anti Stun nâng cao"] = 90,
-    ["Anti Kick Shield"] = 100,
-    ["ESP Player"] = 10,
-    ["ESP Quái"] = 20,
-    ["ESP Vật Phẩm Đa Năng"] = 30,
-    ["Trung tâm tùy chỉnh ESP"] = 40,
-    ["ESP Style"] = 50,
-    ["Quét Đa Năng"] = 60,
-    ["Nhận diện tâm màn hình"] = 70,
-    ["Function Color"] = 80,
-    ["Mini Map"] = 10,
-    ["Full Bright + No Fog"] = 20,
-    ["X-Ray"] = 30,
-    ["Camera"] = 40,
-    ["Sky"] = 50,
-    ["No Void"] = 60,
-    ["Hiệu năng"] = 70,
-    ["Screen White / Black"] = 80,
+    ["Tâm FPS"] = 60,
+    ["Bảo vệ chung"] = 10,
+    ["Anti Stun"] = 20,
+    ["Anti Fling"] = 30,
+    ["Anti Kick Shield"] = 40,
+    ["No Void"] = 50,
+    ["Quét Đa Năng"] = 10,
+    ["Tìm kiếm thông minh"] = 20,
+    ["Lưu Config"] = 30,
+    ["Auto Executor · Raphael"] = 40,
+    ["Dynamic Island"] = 50,
+    ["Kích thước ESP"] = 10,
+    ["Kích thước Mini Map"] = 20,
+    ["Kích thước Dynamic Island"] = 30,
+    ["Kích thước tâm FPS"] = 40,
+    ["Kiểu nút ngoài menu"] = 50,
+    ["Edit Button Studio"] = 60,
+    ["PC Keybind Studio"] = 70,
     ["Quét thông tin"] = 10,
     ["Hồ sơ"] = 20,
     ["Game & Runtime"] = 30,
     ["Danh sách người chơi"] = 40,
-    ["Sentinel · Anomaly & Server Log"] = 50,
-    ["Server Browser"] = 10,
-    ["Join Server ID"] = 20,
-    ["Lưu Config"] = 30,
-    ["Auto Executor · Raphael"] = 40,
-    ["Dynamic Island"] = 50,
-    ["Tìm kiếm thông minh"] = 60,
-    ["Ghi chú"] = 70,
-    ["Boombox"] = 80,
-    ["Kiểu nút ngoài menu"] = 90,
-    ["Edit Button Studio"] = 100,
-    ["PC Keybind Studio"] = 110
+    ["Sentinel · Anomaly & Server Log"] = 50
 }
 
 UI.Motion = {
@@ -548,6 +560,12 @@ end
 function UI.GetSectionIcon(title)
     local normalized = string.lower(title)
     local rules = {
+        {"shift lock", "lock"},
+        {"reset nhanh", "rotate-ccw"},
+        {"hitbox", "box"},
+        {"tâm fps", "crosshair"},
+        {"tiện ích cục bộ", "map-pin"},
+        {"cảnh báo", "users-round"},
         {"sentinel", "shield"},
         {"anti", "shield"},
         {"bảo vệ", "shield"},
@@ -1310,6 +1328,7 @@ State.ESPStyle = {
     BarColorMode = "Gradient máu",
     TextStroke = 0,
     BoxThickness = 1.5,
+    BoxFillTransparency = 0.72,
     TracerThickness = 1.5,
     DistanceFade = false,
     HideTeammates = false,
@@ -1332,13 +1351,12 @@ State.AimESP = {
 
 State.AntiStunOptions = {
     Level = "Mạnh",
-    NoFling = true,
     NoKnockback = true,
     NoSlide = true,
     NoFall = true,
-    KeepSpeed = true,
-    GhostPlayers = false
+    KeepSpeed = true
 }
+State.AntiFling = false
 
 State.AntiKick = {
     Enabled = true,
@@ -1558,6 +1576,7 @@ function Extensions.InstallCoreSettings()
     choiceSetting("ESPBarColorMode", espStyle, "BarColorMode", {"Gradient máu", "Màu ESP"}, "Gradient máu", nil)
     numberSetting("ESPTextStroke", espStyle, "TextStroke", 0, 1, 0, false, 2, nil)
     numberSetting("ESPBoxThickness", espStyle, "BoxThickness", 0.5, 8, 1.5, false, 1, nil)
+    numberSetting("ESPBoxFillTransparency", espStyle, "BoxFillTransparency", 0, 0.95, 0.72, false, 2, nil)
     numberSetting("ESPTracerThickness", espStyle, "TracerThickness", 0.5, 8, 1.5, false, 1, nil)
     booleanSetting("ESPDistanceFade", espStyle, "DistanceFade", false, nil)
     booleanSetting("ESPHideTeammates", espStyle, "HideTeammates", false, nil)
@@ -1596,13 +1615,8 @@ function Extensions.InstallCoreSettings()
 
     local stun = State.AntiStunOptions
     choiceSetting("AntiStunLevel", stun, "Level", {"Cân bằng", "Mạnh", "Tối đa"}, "Mạnh", nil)
-    booleanSetting("AntiStunNoFling", stun, "NoFling", true, nil)
-    booleanSetting("AntiStunNoKnockback", stun, "NoKnockback", true, nil)
-    booleanSetting("AntiStunNoSlide", stun, "NoSlide", true, nil)
-    booleanSetting("AntiStunNoFall", stun, "NoFall", true, nil)
-    booleanSetting("AntiStunKeepSpeed", stun, "KeepSpeed", true, nil)
-    booleanSetting("AntiStunGhostPlayers", stun, "GhostPlayers", false, function()
-        if Extensions.RefreshAntiStunGhosts then Extensions.RefreshAntiStunGhosts() end
+    booleanSetting("AntiFlingEnabled", State, "AntiFling", false, function(value, silent)
+        if Extensions.SetAntiFlingEnabled then Extensions.SetAntiFlingEnabled(value, silent) end
     end)
 
     local antiKick = State.AntiKick
@@ -1681,6 +1695,131 @@ function Extensions.ReleaseNamecallHandlers()
 end
 
 Extensions.InstallCoreSettings()
+
+State.OfficialFeatures = {
+    ShiftLockEnabled = false,
+    ShiftLockOffset = 1.75,
+    ShiftLockKey = "LeftShift",
+    ShiftLockButtonVisible = not State.IsDesktop,
+    ShiftLockButton = nil,
+    ShiftLockAutoRotateBackup = setmetatable({}, {__mode = "k"}),
+    QuickResetKey = "F8",
+    QuickResetButtonVisible = not State.IsDesktop,
+    QuickResetButton = nil,
+    CenterReticleEnabled = false,
+    CenterReticleDotSize = 5,
+    CenterReticleBoxSize = 20,
+    CenterReticleThickness = 2,
+    CenterReticleRoot = nil,
+    SpinMeEnabled = false,
+    SpinMeSpeed = 360,
+    SpinMeDirection = "Phải",
+    SpinAngle = 0,
+    SpinJoint = nil,
+    SpinTransform = nil
+}
+
+State.ESPStyle.BarSquare = false
+State.ESPStyle.BarText = false
+State.ESPStyle.BarTextMode = "Phần trăm"
+State.PlayerESPStatusColors = true
+State.SentinelDetailedLog = false
+
+function Extensions.InstallOfficialSettings()
+    local features = State.OfficialFeatures
+    local style = State.ESPStyle
+    local function defineBoolean(identifier, group, field, default, callback)
+        Extensions.DefineSetting({
+            Id = identifier, Type = "boolean", Default = default,
+            Get = function() return group[field] end,
+            Set = function(value) group[field] = value end,
+            OnChange = callback
+        })
+    end
+    local function defineNumber(identifier, group, field, minimum, maximum, default, integer, decimals, callback)
+        Extensions.DefineSetting({
+            Id = identifier, Type = "number", Min = minimum, Max = maximum, Default = default, Integer = integer, Decimals = decimals,
+            Get = function() return group[field] end,
+            Set = function(value) group[field] = value end,
+            OnChange = callback
+        })
+    end
+    local function defineChoice(identifier, group, field, options, default, callback)
+        Extensions.DefineSetting({
+            Id = identifier, Type = "choice", Options = options, Default = default,
+            Get = function() return group[field] end,
+            Set = function(value) group[field] = value end,
+            OnChange = callback
+        })
+    end
+    local function refreshFeatures()
+        if Extensions.RefreshOfficialFeatures then Extensions.RefreshOfficialFeatures() end
+    end
+    defineBoolean("ShiftLockEnabled", features, "ShiftLockEnabled", false, refreshFeatures)
+    defineNumber("ShiftLockOffset", features, "ShiftLockOffset", 0, 4, 1.75, false, 2, refreshFeatures)
+    defineChoice("ShiftLockKey", features, "ShiftLockKey", {"LeftShift", "RightShift", "C"}, "LeftShift", nil)
+    defineBoolean("ShiftLockButtonVisible", features, "ShiftLockButtonVisible", not State.IsDesktop, refreshFeatures)
+    defineChoice("QuickResetKey", features, "QuickResetKey", {"F8", "R", "Delete"}, "F8", nil)
+    defineBoolean("QuickResetButtonVisible", features, "QuickResetButtonVisible", not State.IsDesktop, refreshFeatures)
+    defineBoolean("CenterReticleEnabled", features, "CenterReticleEnabled", false, refreshFeatures)
+    defineNumber("CenterReticleDotSize", features, "CenterReticleDotSize", 2, 12, 5, true, nil, refreshFeatures)
+    defineNumber("CenterReticleBoxSize", features, "CenterReticleBoxSize", 10, 60, 20, true, nil, refreshFeatures)
+    defineNumber("CenterReticleThickness", features, "CenterReticleThickness", 1, 5, 2, true, nil, refreshFeatures)
+    defineBoolean("SpinMeEnabled", features, "SpinMeEnabled", false, refreshFeatures)
+    defineNumber("SpinMeSpeed", features, "SpinMeSpeed", 60, 1080, 360, true, nil, nil)
+    defineChoice("SpinMeDirection", features, "SpinMeDirection", {"Phải", "Trái"}, "Phải", nil)
+    defineBoolean("PlayerESPStatusColors", State, "PlayerESPStatusColors", true, nil)
+    defineBoolean("SentinelDetailedLog", State, "SentinelDetailedLog", false, nil)
+    defineBoolean("ESPBarSquare", style, "BarSquare", false, nil)
+    defineBoolean("ESPBarText", style, "BarText", false, nil)
+    defineChoice("ESPBarTextMode", style, "BarTextMode", {"Phần trăm", "Hiện tại / Tối đa"}, "Phần trăm", nil)
+end
+
+Extensions.InstallOfficialSettings()
+
+State.PlayerESPStates = setmetatable({}, {__mode = "k"})
+
+function Extensions.MarkPlayerESPDead(player)
+    if not player then return end
+    local state = State.PlayerESPStates[player] or {}
+    state.DeadUntil = os.clock() + 30
+    state.RespawnUntil = 0
+    state.DiedAt = os.clock()
+    State.PlayerESPStates[player] = state
+end
+
+function Extensions.MarkPlayerESPRespawn(player)
+    if not player then return end
+    local state = State.PlayerESPStates[player] or {}
+    state.DeadUntil = 0
+    state.RespawnUntil = os.clock() + 30
+    state.RespawnAt = os.clock()
+    State.PlayerESPStates[player] = state
+end
+
+function Extensions.GetPlayerESPStatus(player)
+    if not State.PlayerESPStatusColors or not player then return nil end
+    local now = os.clock()
+    local state = State.PlayerESPStates[player]
+    if state then
+        if now < (state.DeadUntil or 0) then
+            return {Color = Color3.fromRGB(255, 72, 88), Prefix = "[ĐÃ CHẾT] ", Kind = "Dead"}
+        end
+        if now < (state.RespawnUntil or 0) then
+            return {Color = Color3.fromRGB(255, 205, 72), Prefix = "[VỪA HỒI SINH] ", Kind = "Respawn"}
+        end
+    end
+    local monitor = State.AnomalyMonitor
+    local finding = monitor.Enabled and monitor.Findings[player] or nil
+    local rawConfidence = finding and (tonumber(finding.Confidence) or 0) or 0
+    local confidence = rawConfidence > 0 and math.max(1, math.floor(rawConfidence + 0.5)) or 0
+    if finding and finding.Signature ~= "" and confidence >= 1 then
+        local reason = tostring(finding.ShortReason or "Bất thường")
+        return {Color = Color3.fromRGB(157, 101, 62), Prefix = "[" .. tostring(math.max(confidence, 1)) .. "% · " .. reason .. "] ", Kind = "Sentinel"}
+    end
+    return nil
+end
+
 
 function Extensions.SuppressTransientCorePopup(instance)
     if not instance or not instance.Parent then
@@ -4177,8 +4316,12 @@ Extensions.SearchAliasRules = {
     {"anti kick", "chong kick khong bi kick shield"},
     {"anti afk", "chong afk treo may khong bi out"},
     {"anti stun", "chong choang chong hat tung ragdoll fling"},
+    {"anti fling", "xuyen nguoi chong va cham hat tung"},
+    {"shift lock", "khoa camera khoa huong goc nhin mobile pc"},
+    {"tam fps", "crosshair reticle cham giua man hinh khung tam"},
+    {"spin me", "xoay vong tron chong chong hai huoc"},
     {"god", "bat tu khong chet"},
-    {"reset", "chet hoi sinh respawn"},
+    {"reset", "reset nhanh chet hoi sinh respawn"},
     {"sentinel", "phat hien gian lan anomaly log theo doi"},
     {"viewer", "xem skin xem nguoi choi avatar"},
     {"theo doi", "spectate xem nguoi choi camera"},
@@ -5299,13 +5442,17 @@ Extensions.InstallIsland = function()
         ["Bật Mini Map"] = {"Mini Map", "map-pinned"},
         ["No Void"] = {"No Void", "shield"},
         ["Anti AFK nâng cao"] = {"Anti AFK", "clock-3"},
-        ["Anti Stun nâng cao"] = {"Anti Stun", "shield"},
+        ["Bật Anti Stun"] = {"Anti Stun", "shield"},
+        ["Bật Anti Fling"] = {"Anti Fling", "shield"},
+        ["Bật Shift Lock"] = {"Shift Lock", "lock"},
+        ["Hiện tâm FPS"] = {"Tâm FPS", "crosshair"},
+        ["Bật Spin Me"] = {"Spin Me", "cycle"},
         ["God Mode · duy trì Humanoid"] = {"God", "shield"},
         ["Fast Mode · màu phẳng giữ màu gốc"] = {"Fast", "zap"},
         ["Quét Sentinel liên tục"] = {"Sentinel", "activity"},
         ["Server Activity Log quan sát được"] = {"Log", "database"},
         ["Bật Auto Executor Raphael"] = {"Auto Exec", "circle-power"},
-        ["Anti Kick Shield"] = {"Anti Kick", "shield"}
+        ["Bật Anti Kick Shield"] = {"Anti Kick", "shield"}
     }
 
     local shellColor = Color3.fromRGB(8, 8, 12)
@@ -5320,6 +5467,15 @@ Extensions.InstallIsland = function()
         local success, bounds = pcall(TextService.GetTextSize, TextService, tostring(text), size, font, Vector2.new(4000, 200))
         if success and bounds then return bounds.X end
         return #tostring(text) * size * 0.56
+    end
+
+    local function clockText()
+        local success, value = pcall(os.date, "%H:%M")
+        return success and tostring(value) or "--:--"
+    end
+
+    local function playerCount()
+        return #Players:GetPlayers()
     end
 
     local function getScale()
@@ -5368,16 +5524,11 @@ Extensions.InstallIsland = function()
     compact.ZIndex = 905
     compact.Parent = root
 
-    local compactDot = Instance.new("Frame")
-    compactDot.Name = "StatusDot"
-    compactDot.AnchorPoint = Vector2.new(0, 0.5)
-    compactDot.Position = UDim2.new(0, 14, 0.5, 0)
-    compactDot.Size = UDim2.fromOffset(8, 8)
-    compactDot.BackgroundColor3 = Theme.Success
-    compactDot.BorderSizePixel = 0
-    compactDot.ZIndex = 906
-    compactDot.Parent = compact
-    Instance.new("UICorner", compactDot).CornerRadius = UDim.new(1, 0)
+    local compactStar = UI.CreateIcon(compact, "sparkles", 17, Theme.AccentSoft)
+    compactStar.Name = "FourPointStar"
+    compactStar.AnchorPoint = Vector2.new(0, 0.5)
+    compactStar.Position = UDim2.new(0, 11, 0.5, 0)
+    compactStar.ZIndex = 906
 
     local compactLabel = Instance.new("TextLabel")
     compactLabel.Name = "Label"
@@ -5503,8 +5654,8 @@ Extensions.InstallIsland = function()
     listTitle.Name = "Title"
     listTitle.BackgroundTransparency = 1
     listTitle.Position = UDim2.fromOffset(16, 0)
-    listTitle.Size = UDim2.new(1, -150, 0, listHeaderHeight)
-    listTitle.Text = "Đang hoạt động"
+    listTitle.Size = UDim2.new(1, -176, 0, listHeaderHeight)
+    listTitle.Text = "Đang bật"
     listTitle.TextColor3 = textColor
     listTitle.Font = Enum.Font.GothamBold
     listTitle.TextSize = 14
@@ -5513,23 +5664,19 @@ Extensions.InstallIsland = function()
     listTitle.ZIndex = 906
     listTitle.Parent = listFrame
 
-    local menuButton = Instance.new("TextButton")
-    menuButton.Name = "MenuButton"
-    menuButton:SetAttribute("RaphaelButtonArtworkExempt", true)
-    menuButton.AnchorPoint = Vector2.new(1, 0.5)
-    menuButton.Position = UDim2.new(1, -12, 0, listHeaderHeight / 2)
-    menuButton.Size = UDim2.fromOffset(104, 28)
-    menuButton.BackgroundColor3 = Theme.Accent
-    menuButton.BackgroundTransparency = 0.55
-    menuButton.BorderSizePixel = 0
-    menuButton.AutoButtonColor = false
-    menuButton.Text = "Mở menu"
-    menuButton.TextColor3 = textColor
-    menuButton.Font = Enum.Font.GothamBold
-    menuButton.TextSize = 12
-    menuButton.ZIndex = 908
-    menuButton.Parent = listFrame
-    Instance.new("UICorner", menuButton).CornerRadius = UDim.new(1, 0)
+    local listStats = Instance.new("TextLabel")
+    listStats.Name = "Stats"
+    listStats.AnchorPoint = Vector2.new(1, 0)
+    listStats.Position = UDim2.new(1, -14, 0, 0)
+    listStats.Size = UDim2.fromOffset(150, listHeaderHeight)
+    listStats.BackgroundTransparency = 1
+    listStats.Text = ""
+    listStats.TextColor3 = dimColor
+    listStats.Font = Enum.Font.GothamMedium
+    listStats.TextSize = 11
+    listStats.TextXAlignment = Enum.TextXAlignment.Right
+    listStats.ZIndex = 906
+    listStats.Parent = listFrame
 
     local listScroll = Instance.new("ScrollingFrame")
     listScroll.Name = "Chips"
@@ -5562,7 +5709,7 @@ Extensions.InstallIsland = function()
     listEmpty.BackgroundTransparency = 1
     listEmpty.Position = UDim2.fromOffset(16, listHeaderHeight)
     listEmpty.Size = UDim2.new(1, -32, 1, -listHeaderHeight - 10)
-    listEmpty.Text = "Chưa có chức năng nào đang chạy.\nBật một chức năng để nó xuất hiện tại đây."
+    listEmpty.Text = "Chưa bật chức năng\nChạm lại để thu gọn"
     listEmpty.TextColor3 = dimColor
     listEmpty.Font = Enum.Font.Gotham
     listEmpty.TextSize = 12
@@ -5688,20 +5835,20 @@ Extensions.InstallIsland = function()
             text = Island.StatusText
             color = Island.StatusColor
         elseif islandState.ShowStats then
-            text = string.format("Raphael · %d FPS · %d ms", math.floor(Island.DisplayFrameRate + 0.5), math.floor(Island.Ping + 0.5))
+            text = string.format("%dP · %s · %dF · %dms", playerCount(), clockText(), math.floor(Island.DisplayFrameRate + 0.5), math.floor(Island.Ping + 0.5))
             color = Theme.Success
-            fixedWidth = 190
+            fixedWidth = 214
         else
-            text = "Raphael · sẵn sàng"
-            color = Theme.Success
+            text = string.format("%dP · %s", playerCount(), clockText())
+            color = Theme.AccentSoft
         end
         local signature = tostring(text) .. "|" .. tostring(color)
         if signature == Island.CompactSignature and not withPop then return end
         Island.CompactSignature = signature
 
-        compactDot.Visible = true
-        compactDot.BackgroundColor3 = color or Theme.Success
-        local labelX = 32
+        compactStar.Visible = true
+        compactStar.ImageColor3 = color or Theme.AccentSoft
+        local labelX = 36
         local textWidth = measure(text, compactLabel.TextSize, compactLabel.Font)
         local width = labelX + textWidth + 16
         width = math.floor(math.clamp(math.max(width, fixedWidth or 0), 112, getMaxWidth()))
@@ -5946,8 +6093,11 @@ Extensions.InstallIsland = function()
         end
         listEmpty.Visible = count == 0
         listScroll.Visible = count > 0
-        listTitle.Text = count > 0 and ("Đang hoạt động · " .. tostring(count)) or "Đang hoạt động"
-        menuButton.Text = State.InterfaceVisible and "Ẩn menu" or "Mở menu"
+        listTitle.Text = count > 0 and ("Đang bật · " .. tostring(count)) or "Đang bật · 0"
+        listStats.Text = string.format("%d Player · %s", playerCount(), clockText())
+        if count == 0 then
+            listEmpty.Text = string.format("Chưa bật chức năng\n%d Player · %d FPS · %d ms", playerCount(), math.floor(Island.DisplayFrameRate + 0.5), math.floor(Island.Ping + 0.5))
+        end
         Island.ListOpenedAt = os.clock()
         Island.NoticeToken = Island.NoticeToken + 1
         setMode("List")
@@ -5972,12 +6122,6 @@ Extensions.InstallIsland = function()
             Island.Queue = {}
             Island.ShowCompact()
         end
-    end)
-
-    menuButton.Activated:Connect(function()
-        UI.Motion.Press(menuButton)
-        Extensions.SetInterfaceVisible(not State.InterfaceVisible)
-        Island.HideList()
     end)
 
     function Island.Refresh()
@@ -6007,6 +6151,7 @@ Extensions.InstallIsland = function()
             end
             Island.RenderCompact(false)
         elseif Island.Mode == "List" then
+            if listStats and listStats.Parent then listStats.Text = string.format("%d Player · %s", playerCount(), clockText()) end
             if now - Island.LastActivityScan >= 0.5 then
                 Island.LastActivityScan = now
                 local activities = Island.CollectActivities()
@@ -6653,8 +6798,8 @@ function Extensions.GetFunctionPresentation(text, page)
         end
     end
     local pageIcons = {
-        Movement = "footprints", Player = "person-standing", ESP = "scan-eye", Info = "info",
-        Misc = "settings-2", World = "sun"
+        Movement = "footprints", Fun = "sparkles", Vision = "sun", Tele = "map-pin", ESP = "scan-eye",
+        Aim = "crosshair", Anti = "shield", Misc = "sparkles", Custom = "settings-2", Info = "info"
     }
     return pageIcons[tostring(page)] or "mouse-pointer-click", Extensions.MakeShortFunctionName(text, 9)
 end
@@ -7305,7 +7450,7 @@ function Extensions.FindSection(page, title)
     return nil
 end
 
-Extensions.TabOrder = {Movement = 1, Player = 2, ESP = 3, Info = 4, Misc = 5, World = 6}
+Extensions.TabOrder = {Movement = 1, Fun = 2, Vision = 3, Tele = 4, ESP = 5, Aim = 6, Anti = 7, Misc = 8, Custom = 9, Info = 10}
 
 function Extensions.SortToggleRegistry()
     local registry = State.ToggleRegistry
@@ -7943,7 +8088,9 @@ function Extensions.SentinelEngine.NewTracker(now)
         HighJumpFlagged = false,
         BigT = nil,
         BigStreak = 0,
-        PrevVy = nil
+        PrevVy = nil,
+        LastWalkSpeed = nil,
+        LastJumpHeight = nil
     }
 end
 
@@ -8056,6 +8203,21 @@ function Extensions.SentinelEngine.Step(tracker, s, hooks)
         return events
     end
     local ws = s.walkSpeed or 16
+    local jumpProfile = s.jumpHeight or cfg.JumpHeightDefault
+    if tracker.LastWalkSpeed and math.abs(ws - tracker.LastWalkSpeed) > math.max(2, tracker.LastWalkSpeed * 0.15) then
+        tracker.LastWalkSpeed = ws
+        tracker.LastJumpHeight = jumpProfile
+        rebase(1.2)
+        return events
+    end
+    if tracker.LastJumpHeight and math.abs(jumpProfile - tracker.LastJumpHeight) > math.max(1.5, tracker.LastJumpHeight * 0.2) then
+        tracker.LastWalkSpeed = ws
+        tracker.LastJumpHeight = jumpProfile
+        rebase(1.2)
+        return events
+    end
+    tracker.LastWalkSpeed = ws
+    tracker.LastJumpHeight = jumpProfile
     local reported = s.linSpeed or 0
     local reportedHorizontal = s.hSpeed or reported
     local gvx = 0
@@ -8182,8 +8344,8 @@ function Extensions.SentinelEngine.Step(tracker, s, hooks)
             tracker.HighJumpFlagged = true
             evidence("HighJump", 3.5, string.format("lên cao %.1f (tối đa %.1f)", rise, jumpHeight))
         end
-        if tracker.PrevVy and tracker.PrevVy < -2 and vy > cfg.AirJumpVelocity then
-            evidence("AirJump", 3, "bật lên giữa không trung")
+        if tracker.AirTime > 0.55 and (s.groundDist or 0) > cfg.AirThreshold * 1.5 and tracker.PrevVy and tracker.PrevVy < -4 and vy > cfg.AirJumpVelocity then
+            evidence("AirJump", 2.5, "đổi hướng bay lên giữa không trung")
         end
     else
         tracker.AirTime = 0
@@ -8988,25 +9150,34 @@ function Extensions.ScanPlayerAnomalies(manual)
                 local active = engine.GetActive(entry.Tracker, now)
                 local history = engine.GetHistory(entry.Tracker, now)
                 local parts = {}
+                local shortParts = {}
                 local topScore = 0
                 local totalCount = 0
                 for index, finding in ipairs(active) do
-                    if index <= 3 then
-                        parts[#parts + 1] = (engine.Names[finding.Name] or finding.Name) .. " · " .. finding.Label .. " · " .. finding.Reason
-                    end
+                    local findingName = engine.Names[finding.Name] or finding.Name
+                    if index <= 3 then parts[#parts + 1] = findingName .. " · " .. finding.Label .. " · " .. finding.Reason end
+                    if index <= 2 then shortParts[#shortParts + 1] = findingName end
                     topScore = math.max(topScore, finding.Score)
                     totalCount = totalCount + finding.Count
                 end
                 local confidence = math.clamp(topScore / engine.Config.SureLevel * 100, 0, 100)
                 local signature = table.concat(parts, " | ")
+                local shortReason = table.concat(shortParts, " + ")
+                local previousFinding = monitor.Findings[player]
                 monitor.Findings[player] = {
                     Signature = signature,
                     Time = now,
                     Confidence = confidence,
                     Strikes = totalCount,
+                    ShortReason = shortReason,
                     History = history,
                 }
-                if signature ~= "" then suspiciousCount = suspiciousCount + 1 end
+                if signature ~= "" then
+                    suspiciousCount = suspiciousCount + 1
+                    if State.SentinelDetailedLog and State.ActivityLog.Enabled and (not previousFinding or previousFinding.Signature ~= signature) then
+                        Extensions.PushActivityLog(string.format("[SENTINEL DETAIL] %s (@%s) · %s · WS %.1f · H %.1f · V %.1f · A %.1f · Ground %s", player.DisplayName, player.Name, signature, sample.walkSpeed or 0, sample.hSpeed or 0, sample.linSpeed or 0, sample.angSpeed or 0, tostring(sample.groundDist or "Air")), "alert", player == LocalPlayer)
+                    end
+                end
                 for _, name in ipairs(events) do
                     local flag = entry.Tracker.Flags[name]
                     local label = engine.Names[name] or name
@@ -9105,12 +9276,6 @@ function Extensions.EnsureAnomalyPanel()
     panel.ZIndex = 320
     panel.Parent = Overlay
     Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 22)
-    local panelStroke = Instance.new("UIStroke")
-    panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    panelStroke.Color = Theme.Accent
-    panelStroke.Transparency = 0.6
-    panelStroke.Thickness = 1
-    panelStroke.Parent = panel
     local drawerGradient = Instance.new("UIGradient")
     drawerGradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Color3.fromRGB(34, 25, 42)),
@@ -9306,12 +9471,249 @@ function Extensions.ToggleAnomalyPanel(visible)
     if expanded and not State.AnomalyMonitor.Enabled then task.spawn(Extensions.ScanPlayerAnomalies, true) end
 end
 
+Extensions.InstallOfficialFeatures = function()
+    local state = State.OfficialFeatures
+
+    local function characterParts()
+        return getCharacter()
+    end
+
+    local function createActionButton(name, position, text, icon, shortName, tone)
+        local button = Instance.new("TextButton")
+        button.Name = name
+        button:SetAttribute("RaphaelButtonArtworkExempt", true)
+        button.Position = position
+        button.Size = UDim2.fromOffset(State.ButtonStyle.Size, State.ButtonStyle.Size)
+        button.BackgroundColor3 = Theme.SurfaceLight
+        button.BackgroundTransparency = 0.35
+        button.BorderSizePixel = 0
+        button.Text = shortName
+        button.TextColor3 = Theme.Text
+        button.Font = Enum.Font.GothamBold
+        button.TextSize = 11
+        button.AutoButtonColor = false
+        button.ZIndex = 92
+        button.Visible = false
+        button.Parent = Overlay
+        button:SetAttribute("RaphaelTone", tone or "idle")
+        Extensions.ApplyExternalActionPresentation(button, text, icon, shortName)
+        UI.AddRipple(button, Theme.Text)
+        return button
+    end
+
+    local function updateButton(button, visible, active, text, icon, shortName, tone)
+        if not button or not button.Parent then return end
+        button.Visible = visible
+        button:SetAttribute("RaphaelActive", active == true)
+        button:SetAttribute("RaphaelTone", tone or (active and "active" or "idle"))
+        Extensions.ApplyExternalActionPresentation(button, text, icon, shortName)
+    end
+
+    function Extensions.PerformQuickReset(silent)
+        local _, humanoid = characterParts()
+        if not humanoid or humanoid.Health <= 0 then
+            if not silent then notify("Nhân vật chưa sẵn sàng để reset.", Theme.Warning) end
+            return false
+        end
+        humanoid.Health = 0
+        if not silent then notify("Đã reset nhân vật.", Theme.Warning) end
+        return true
+    end
+
+    local function restoreShiftLock()
+        pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.Default end)
+        for humanoid, backup in pairs(state.ShiftLockAutoRotateBackup) do
+            if humanoid and humanoid.Parent then
+                pcall(function()
+                    humanoid.AutoRotate = backup.AutoRotate
+                    humanoid.CameraOffset = backup.CameraOffset
+                end)
+            end
+            state.ShiftLockAutoRotateBackup[humanoid] = nil
+        end
+    end
+
+    function Extensions.SetShiftLockEnabled(enabled, silent)
+        state.ShiftLockEnabled = not not enabled
+        if not state.ShiftLockEnabled then restoreShiftLock() end
+        local definition = Extensions.SettingById.ShiftLockEnabled
+        if definition and definition.Control and definition.Control.Set then definition.Control.Set(state.ShiftLockEnabled, false) end
+        Extensions.RefreshOfficialFeatures()
+        if not silent then notify(state.ShiftLockEnabled and "Shift Lock đã bật." or "Shift Lock đã tắt.", state.ShiftLockEnabled and Theme.Success or Theme.Warning) end
+    end
+
+    function Extensions.UpdateShiftLock()
+        if not state.ShiftLockEnabled then return end
+        local _, humanoid, root = characterParts()
+        if not humanoid or not root or humanoid.Health <= 0 then return end
+        if not state.ShiftLockAutoRotateBackup[humanoid] then
+            state.ShiftLockAutoRotateBackup[humanoid] = {AutoRotate = humanoid.AutoRotate, CameraOffset = humanoid.CameraOffset}
+        end
+        humanoid.AutoRotate = false
+        humanoid.CameraOffset = Vector3.new(state.ShiftLockOffset, 0, 0)
+        if State.IsDesktop then pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter end) end
+        Camera = Workspace.CurrentCamera or Camera
+        local look = Camera.CFrame.LookVector
+        local flat = Vector3.new(look.X, 0, look.Z)
+        if flat.Magnitude > 0.01 then root.CFrame = CFrame.lookAt(root.Position, root.Position + flat.Unit) end
+    end
+
+    function Extensions.EnsureCenterReticle()
+        if state.CenterReticleRoot and state.CenterReticleRoot.Parent then return state.CenterReticleRoot end
+        local root = Instance.new("Frame")
+        root.Name = "RaphaelCenterReticle"
+        root.AnchorPoint = Vector2.new(0.5, 0.5)
+        root.Position = UDim2.fromScale(0.5, 0.5)
+        root.Size = UDim2.fromOffset(44, 44)
+        root.BackgroundTransparency = 1
+        root.BorderSizePixel = 0
+        root.Visible = false
+        root.ZIndex = 430
+        root:SetAttribute("RaphaelOwned", true)
+        root.Parent = Overlay
+        local box = Instance.new("Frame")
+        box.Name = "Box"
+        box.AnchorPoint = Vector2.new(0.5, 0.5)
+        box.Position = UDim2.fromScale(0.5, 0.5)
+        box.Size = UDim2.fromOffset(20, 20)
+        box.BackgroundTransparency = 1
+        box.BorderSizePixel = 0
+        box.ZIndex = 431
+        box.Parent = root
+        local stroke = Instance.new("UIStroke")
+        stroke.Name = "Stroke"
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Color = Color3.fromRGB(255, 255, 255)
+        stroke.Transparency = 0.08
+        stroke.Thickness = 2
+        stroke.Parent = box
+        local dot = Instance.new("Frame")
+        dot.Name = "Dot"
+        dot.AnchorPoint = Vector2.new(0.5, 0.5)
+        dot.Position = UDim2.fromScale(0.5, 0.5)
+        dot.Size = UDim2.fromOffset(5, 5)
+        dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 432
+        dot.Parent = root
+        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+        state.CenterReticleRoot = root
+        return root
+    end
+
+    function Extensions.RefreshCenterReticle()
+        local root = Extensions.EnsureCenterReticle()
+        root.Visible = state.CenterReticleEnabled
+        local box = root:FindFirstChild("Box")
+        local dot = root:FindFirstChild("Dot")
+        if box then
+            box.Size = UDim2.fromOffset(state.CenterReticleBoxSize, state.CenterReticleBoxSize)
+            local stroke = box:FindFirstChild("Stroke")
+            if stroke then stroke.Thickness = state.CenterReticleThickness end
+        end
+        if dot then dot.Size = UDim2.fromOffset(state.CenterReticleDotSize, state.CenterReticleDotSize) end
+    end
+
+    local function restoreSpin()
+        if state.SpinJoint and state.SpinJoint.Parent and state.SpinTransform then
+            pcall(function() state.SpinJoint.Transform = state.SpinTransform end)
+        end
+        state.SpinJoint = nil
+        state.SpinTransform = nil
+        state.SpinAngle = 0
+    end
+
+    function Extensions.UpdateSpinMe(deltaTime)
+        if not state.SpinMeEnabled then
+            if state.SpinJoint then restoreSpin() end
+            return
+        end
+        local character, humanoid, root = characterParts()
+        if not character or not humanoid or not root or humanoid.Health <= 0 then return end
+        local joint = root:FindFirstChild("RootJoint") or character:FindFirstChild("RootJoint", true)
+        if not joint or not joint:IsA("Motor6D") then return end
+        if state.SpinJoint ~= joint then
+            restoreSpin()
+            state.SpinJoint = joint
+            state.SpinTransform = joint.Transform
+        end
+        local direction = state.SpinMeDirection == "Trái" and -1 or 1
+        state.SpinAngle = (state.SpinAngle + direction * state.SpinMeSpeed * deltaTime) % 360
+        joint.Transform = state.SpinTransform * CFrame.Angles(0, math.rad(state.SpinAngle), 0)
+    end
+
+    function Extensions.RefreshOfficialFeatures()
+        if not state.ShiftLockEnabled then restoreShiftLock() end
+        if not state.SpinMeEnabled then restoreSpin() end
+        Extensions.RefreshCenterReticle()
+        local menuVisible = State.InterfaceVisible and MainFrame.Visible
+        updateButton(state.ShiftLockButton, state.ShiftLockButtonVisible and not menuVisible, state.ShiftLockEnabled, "Shift Lock", "lock", "SHIFT", state.ShiftLockEnabled and "active" or "idle")
+        updateButton(state.QuickResetButton, state.QuickResetButtonVisible and not menuVisible, false, "Reset nhanh", "rotate-ccw", "RESET", "danger")
+        state.LastMenuVisible = menuVisible
+    end
+
+    state.ShiftLockButton = createActionButton("RaphaelShiftLockButton", UDim2.new(1, -164, 0.5, -72), "Shift Lock", "lock", "SHIFT", "idle")
+    state.QuickResetButton = createActionButton("RaphaelQuickResetButton", UDim2.new(1, -240, 0.5, -72), "Reset nhanh", "rotate-ccw", "RESET", "danger")
+
+    connect(state.ShiftLockButton.Activated, function()
+        Extensions.WriteSetting("ShiftLockEnabled", not state.ShiftLockEnabled, false)
+        local definition = Extensions.SettingById.ShiftLockEnabled
+        if definition and definition.Control and definition.Control.Set then definition.Control.Set(state.ShiftLockEnabled, false) end
+        notify(state.ShiftLockEnabled and "Shift Lock đã bật." or "Shift Lock đã tắt.", state.ShiftLockEnabled and Theme.Success or Theme.Warning)
+    end)
+    connect(state.QuickResetButton.Activated, function() Extensions.PerformQuickReset(false) end)
+
+    connect(UserInputService.InputBegan, function(input, processed)
+        if processed or UserInputService:GetFocusedTextBox() then return end
+        local key = input.KeyCode and input.KeyCode.Name or ""
+        if key == state.ShiftLockKey then
+            Extensions.WriteSetting("ShiftLockEnabled", not state.ShiftLockEnabled, false)
+            local definition = Extensions.SettingById.ShiftLockEnabled
+            if definition and definition.Control and definition.Control.Set then definition.Control.Set(state.ShiftLockEnabled, false) end
+            notify(state.ShiftLockEnabled and "Shift Lock đã bật." or "Shift Lock đã tắt.", state.ShiftLockEnabled and Theme.Success or Theme.Warning)
+        elseif key == state.QuickResetKey then
+            Extensions.PerformQuickReset(false)
+        end
+    end)
+
+    connect(RunService.RenderStepped, function(deltaTime)
+        Extensions.UpdateShiftLock()
+        Extensions.UpdateSpinMe(deltaTime)
+        local menuVisible = State.InterfaceVisible and MainFrame.Visible
+        if menuVisible ~= state.LastMenuVisible then Extensions.RefreshOfficialFeatures() end
+    end)
+
+    connect(LocalPlayer.CharacterAdded, function()
+        state.SpinJoint = nil
+        state.SpinTransform = nil
+        state.SpinAngle = 0
+    end)
+
+    function Extensions.ShutdownOfficialFeatures()
+        state.ShiftLockEnabled = false
+        state.SpinMeEnabled = false
+        restoreShiftLock()
+        restoreSpin()
+    end
+
+    Extensions.RefreshOfficialFeatures()
+end
+
+do
+    local success, failure = pcall(Extensions.InstallOfficialFeatures)
+    if not success then warn("[Raphael] Các tiện ích chính thức không khởi tạo được: " .. tostring(failure)) end
+end
+
 local MovementPage = createTab("Movement", 1)
-local PlayerPage = createTab("Player", 2)
-local ESPPage = createTab("ESP", 3)
-local InfoPage = createTab("Info", 4)
-local MiscPage = createTab("Misc", 5)
-local WorldPage = createTab("World", 6)
+local FunPage = createTab("Fun", 2)
+local VisionPage = createTab("Vision", 3)
+local TelePage = createTab("Tele", 4)
+local ESPPage = createTab("ESP", 5)
+local AimPage = createTab("Aim", 6)
+local AntiPage = createTab("Anti", 7)
+local MiscPage = createTab("Misc", 8)
+local CustomPage = createTab("Custom", 9)
+local InfoPage = createTab("Info", 10)
 
 Extensions.SearchPanelWidth = State.IsDesktop and 372 or 264
 State.FunctionSearchRecent = {}
@@ -9533,7 +9935,7 @@ function Extensions.BuildSearchSuggestions(limit)
     end
     State.FunctionSearchRecentShown = #list > 0
     if #list == 0 then
-        for _, name in ipairs({"Movement", "Player", "ESP", "Info", "Misc", "World"}) do
+        for _, name in ipairs({"Movement", "Fun", "Vision", "Tele", "ESP", "Aim", "Anti", "Misc", "Custom", "Info"}) do
             local page = Pages[name]
             if page and #list < limit then
                 list[#list + 1] = {Name = name, Page = name, Section = "Tab", Kind = "tab", IsTab = true, Target = page, NameText = string.lower(name), SearchText = string.lower(name)}
@@ -11311,7 +11713,9 @@ local function createVisual(category, key)
     visual.InfoHealthBar.BorderSizePixel = 0
     visual.InfoHealthBar.Visible = false
     visual.InfoHealthBar.Parent = visual.InfoBillboard
-    Instance.new("UICorner", visual.InfoHealthBar).CornerRadius = UDim.new(1, 0)
+    visual.InfoHealthBarCorner = Instance.new("UICorner")
+    visual.InfoHealthBarCorner.CornerRadius = UDim.new(1, 0)
+    visual.InfoHealthBarCorner.Parent = visual.InfoHealthBar
     local healthBarStroke = Instance.new("UIStroke")
     healthBarStroke.Color = Color3.fromRGB(255, 255, 255)
     healthBarStroke.Transparency = 0.68
@@ -11324,7 +11728,21 @@ local function createVisual(category, key)
     visual.InfoHealthFill.BackgroundColor3 = Color3.fromRGB(80, 235, 105)
     visual.InfoHealthFill.BorderSizePixel = 0
     visual.InfoHealthFill.Parent = visual.InfoHealthBar
-    Instance.new("UICorner", visual.InfoHealthFill).CornerRadius = UDim.new(1, 0)
+    visual.InfoHealthFillCorner = Instance.new("UICorner")
+    visual.InfoHealthFillCorner.CornerRadius = UDim.new(1, 0)
+    visual.InfoHealthFillCorner.Parent = visual.InfoHealthFill
+    visual.InfoHealthBarText = Instance.new("TextLabel")
+    visual.InfoHealthBarText.Name = "Value"
+    visual.InfoHealthBarText.Size = UDim2.fromScale(1, 1)
+    visual.InfoHealthBarText.BackgroundTransparency = 1
+    visual.InfoHealthBarText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    visual.InfoHealthBarText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    visual.InfoHealthBarText.TextStrokeTransparency = 0.25
+    visual.InfoHealthBarText.Font = Enum.Font.GothamBold
+    visual.InfoHealthBarText.TextSize = 8
+    visual.InfoHealthBarText.Visible = false
+    visual.InfoHealthBarText.ZIndex = visual.InfoHealthBar.ZIndex + 3
+    visual.InfoHealthBarText.Parent = visual.InfoHealthBar
 
     visual.InfoDistance = Instance.new("TextLabel")
     visual.InfoDistance.Name = "Distance"
@@ -12423,13 +12841,14 @@ function Extensions.GetTracerOriginPoint(config)
     return Vector2.new(viewport.X * 0.5, viewport.Y)
 end
 
-function Extensions.ApplyESPLabelStyle(label, size, fontFace, strokeValue, fadeAlpha, outlineColor)
+function Extensions.ApplyESPLabelStyle(label, size, fontFace, strokeValue, fadeAlpha, outlineColor, textColor)
     if label.TextSize ~= size then label.TextSize = size end
     if label.Font ~= fontFace then label.Font = fontFace end
     if label.TextStrokeTransparency ~= strokeValue then label.TextStrokeTransparency = strokeValue end
     if label.TextTransparency ~= fadeAlpha then label.TextTransparency = fadeAlpha end
     if label.TextStrokeColor3 ~= outlineColor then label.TextStrokeColor3 = outlineColor end
-    if label.TextColor3 ~= Theme.Text then label.TextColor3 = Theme.Text end
+    local resolvedTextColor = textColor or Theme.Text
+    if label.TextColor3 ~= resolvedTextColor then label.TextColor3 = resolvedTextColor end
 end
 
 function Extensions.PlaceESPLabel(label, height, offsetY)
@@ -12465,8 +12884,16 @@ function Extensions.EnsureVerticalHealthBar(visual)
     fill.BorderSizePixel = 0
     fill.ZIndex = 42
     fill.Parent = bar
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(1, 0)
+    barCorner.Parent = bar
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(1, 0)
+    fillCorner.Parent = fill
     visual.HealthBarV = bar
     visual.HealthBarVFill = fill
+    visual.HealthBarVCorner = barCorner
+    visual.HealthBarVFillCorner = fillCorner
     return bar
 end
 
@@ -12504,6 +12931,11 @@ function Extensions.UpdateDynamicVisual(visual)
     local boxColor: any = Extensions.GetESPChannelColor(config, "Box")
     local tracerColor: any = Extensions.GetESPChannelColor(config, "Tracer")
     local lookColor: any = Extensions.GetESPChannelColor(config, "LookDirection")
+    if visual.Category == "Player" and visual.PlayerStatusColor then
+        boxColor = visual.PlayerStatusColor
+        tracerColor = visual.PlayerStatusColor
+        lookColor = visual.PlayerStatusColor
+    end
     local espEnabled = config.Enabled and visual.ESPPermitted ~= false
     local fadeAlpha = visual.FadeAlpha or 0
     Camera = Workspace.CurrentCamera or Camera
@@ -12540,7 +12972,8 @@ function Extensions.UpdateDynamicVisual(visual)
     end
 
     local screenPosition = Vector2.new(projected.X, projected.Y)
-    local boxVisible = espEnabled and config.Box and config.BoxMode == "2D"
+    local filledBox = config.BoxMode == "2D Tô màu"
+    local boxVisible = espEnabled and config.Box and (config.BoxMode == "2D" or filledBox)
     local verticalRatio = visual.VerticalHealth
     if boxVisible then
         local cameraDistance = math.max(projected.Z, 1)
@@ -12553,6 +12986,8 @@ function Extensions.UpdateDynamicVisual(visual)
             local boxTop = centerY - height * 0.5
             visual.BoxGui.Position = UDim2.fromOffset(boxLeft, boxTop)
             visual.BoxGui.Size = UDim2.fromOffset(width, height)
+            visual.BoxGui.BackgroundColor3 = boxColor
+            visual.BoxGui.BackgroundTransparency = filledBox and math.clamp(espStyle.BoxFillTransparency + fadeAlpha, 0, 1) or 1
             visual.BoxGui.Visible = true
             if visual.BoxStroke then
                 visual.BoxStroke.Color = boxColor:Lerp(Color3.fromRGB(255, 255, 255), 0.18)
@@ -12566,6 +13001,9 @@ function Extensions.UpdateDynamicVisual(visual)
                 bar.Size = UDim2.fromOffset(barWidth, height)
                 visual.HealthBarVFill.Size = UDim2.fromScale(1, math.clamp(verticalRatio, 0, 1))
                 visual.HealthBarVFill.BackgroundColor3 = visual.VerticalBarColor or Color3.fromRGB(80, 235, 105)
+                local radius = espStyle.BarSquare and UDim.new(0, 0) or UDim.new(1, 0)
+                if visual.HealthBarVCorner then visual.HealthBarVCorner.CornerRadius = radius end
+                if visual.HealthBarVFillCorner then visual.HealthBarVFillCorner.CornerRadius = radius end
                 bar.Visible = true
             elseif visual.HealthBarV then
                 visual.HealthBarV.Visible = false
@@ -12662,6 +13100,12 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
     local config: any = getCategoryConfig(category)
     local boxColor: any = Extensions.GetESPChannelColor(config, "Box")
     local nameColor: any = Extensions.GetESPChannelColor(config, "Name")
+    local playerStatus = category == "Player" and Extensions.GetPlayerESPStatus(key) or nil
+    if playerStatus then
+        boxColor = playerStatus.Color
+        nameColor = playerStatus.Color
+        displayName = playerStatus.Prefix .. displayName
+    end
     local playerPermitted: boolean = true
     if category == "Player" then
         playerPermitted = Extensions.IsPlayerESPAllowed(key) == true
@@ -12701,6 +13145,7 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
         visual.InfoAnchor = target:IsA("Model") and (target:FindFirstChild("Head") or root) or root
     end
     visual.DisplayName = displayName
+    visual.PlayerStatusColor = playerStatus and playerStatus.Color or nil
     visual.HealthText = healthText
     visual.HealthRatio = healthRatio
     visual.DistanceStuds = distanceStuds
@@ -12742,7 +13187,7 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
     local hasRatio = healthRatio ~= nil
     local showName = espEnabled and config.Name
     local wantsHealth = espEnabled and config.Health and healthText ~= nil
-    local useVerticalBar = wantsHealth and hasRatio and healthStyle == "Thanh dọc" and config.Box and config.BoxMode == "2D"
+    local useVerticalBar = wantsHealth and hasRatio and healthStyle == "Thanh dọc" and config.Box and (config.BoxMode == "2D" or config.BoxMode == "2D Tô màu")
     local showHealthBar = wantsHealth and hasRatio and not useVerticalBar and (healthStyle == "Thanh ngang" or healthStyle == "Chữ + Thanh" or healthStyle == "Thanh dọc")
     local showHealthText = wantsHealth and (healthStyle == "Chữ" or healthStyle == "Chữ + Thanh" or not hasRatio)
     local showDistance = espEnabled and config.Distance
@@ -12758,9 +13203,10 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
 
     local styleLabel = Extensions.ApplyESPLabelStyle
     local placeLabel = Extensions.PlaceESPLabel
+    local statusTextColor = visual.PlayerStatusColor
 
     if visual.InfoName.Text ~= displayName then visual.InfoName.Text = displayName end
-    styleLabel(visual.InfoName, espStyle.NameSize, fontFace, espStyle.TextStroke, fadeAlpha, nameColor)
+    styleLabel(visual.InfoName, espStyle.NameSize, fontFace, espStyle.TextStroke, fadeAlpha, nameColor, statusTextColor)
     if visual.InfoName.Visible ~= showName then visual.InfoName.Visible = showName end
     if showName then
         placeLabel(visual.InfoName, nameHeight, offsetY)
@@ -12769,7 +13215,7 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
 
     local currentHealthText = healthText or ""
     if visual.InfoHealth.Text ~= currentHealthText then visual.InfoHealth.Text = currentHealthText end
-    styleLabel(visual.InfoHealth, espStyle.HealthSize, fontFace, espStyle.TextStroke, fadeAlpha, nameColor)
+    styleLabel(visual.InfoHealth, espStyle.HealthSize, fontFace, espStyle.TextStroke, fadeAlpha, nameColor, statusTextColor)
     if visual.InfoHealth.Visible ~= showHealthText then visual.InfoHealth.Visible = showHealthText end
     if showHealthText then
         placeLabel(visual.InfoHealth, healthHeight, offsetY)
@@ -12779,7 +13225,11 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
     local ratio = math.clamp(tonumber(healthRatio) or 0, 0, 1)
     local barColor = nameColor
     if showHealthBar or useVerticalBar then
-        barColor = espStyle.BarColorMode == "Màu ESP" and nameColor or Color3.fromHSV(ratio * 0.33, 0.88, 1)
+        if visual.PlayerStatusColor then
+            barColor = visual.PlayerStatusColor
+        else
+            barColor = espStyle.BarColorMode == "Màu ESP" and nameColor or Color3.fromHSV(ratio * 0.33, 0.88, 1)
+        end
     end
     if visual.InfoHealthBar.Visible ~= showHealthBar then visual.InfoHealthBar.Visible = showHealthBar end
     if showHealthBar then
@@ -12788,7 +13238,22 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
         visual.InfoHealthBar.Position = UDim2.new(0.5, 0, 0, offsetY + 3)
         visual.InfoHealthFill.Size = UDim2.fromScale(ratio, 1)
         visual.InfoHealthFill.BackgroundColor3 = barColor
+        local radius = espStyle.BarSquare and UDim.new(0, 0) or UDim.new(1, 0)
+        if visual.InfoHealthBarCorner then visual.InfoHealthBarCorner.CornerRadius = radius end
+        if visual.InfoHealthFillCorner then visual.InfoHealthFillCorner.CornerRadius = radius end
+        if visual.InfoHealthBarText then
+            visual.InfoHealthBarText.Visible = espStyle.BarText
+            if espStyle.BarTextMode == "Hiện tại / Tối đa" then
+                visual.InfoHealthBarText.Text = string.gsub(currentHealthText, "^HP%s*", "")
+            else
+                visual.InfoHealthBarText.Text = tostring(math.floor(ratio * 100 + 0.5)) .. "%"
+            end
+            visual.InfoHealthBarText.TextSize = math.clamp(espStyle.BarHeight - 1, 7, 16)
+            visual.InfoHealthBarText.TextColor3 = visual.PlayerStatusColor or Color3.fromRGB(255, 255, 255)
+        end
         offsetY = offsetY + espStyle.BarHeight + 6
+    elseif visual.InfoHealthBarText then
+        visual.InfoHealthBarText.Visible = false
     end
     visual.VerticalHealth = useVerticalBar and ratio or nil
     visual.VerticalBarColor = barColor
@@ -12801,7 +13266,7 @@ local function updateVisual(category: string, key: any, target: any, root: any, 
     elseif visual.InfoDistance.Text ~= "" then
         visual.InfoDistance.Text = ""
     end
-    styleLabel(visual.InfoDistance, espStyle.DistanceSize, fontFace, espStyle.TextStroke, fadeAlpha, nameColor)
+    styleLabel(visual.InfoDistance, espStyle.DistanceSize, fontFace, espStyle.TextStroke, fadeAlpha, nameColor, statusTextColor)
     if visual.InfoDistance.Visible ~= showDistance then visual.InfoDistance.Visible = showDistance end
 
     local largest = math.max(espStyle.NameSize, espStyle.HealthSize, espStyle.DistanceSize)
@@ -13611,6 +14076,8 @@ function Extensions.RunUniversalScan()
 
     local totalObjects = 0
     local visibleCount = 0
+    local nearestStuds = 0
+    local farthestStuds = 0
     local success, failure = pcall(function()
         local _, _, localRoot = getCharacter()
         local origin = localRoot and localRoot.Position or Camera.CFrame.Position
@@ -13648,6 +14115,10 @@ function Extensions.RunUniversalScan()
         table.clear(State.UniversalScan.Cache)
         local candidates = State.UniversalScan.CandidateBuffer
         visibleCount = #candidates
+        if visibleCount > 0 then
+            nearestStuds = math.sqrt(math.max(candidates[1].DistanceSquared or 0, 0))
+            farthestStuds = math.sqrt(math.max(candidates[visibleCount].DistanceSquared or 0, 0))
+        end
         for index = 1, visibleCount do
             local candidate = candidates[index]
             if candidate.Target and candidate.Target.Parent then
@@ -13668,8 +14139,16 @@ function Extensions.RunUniversalScan()
         State.UniversalScan.ResultsBox.CursorPosition = 1
     end
     if success then
-        setStatusText("Quét Đa Năng hoàn tất · " .. #State.UniversalScan.ResultNames .. " tên · " .. visibleCount .. " visual", Theme.Success)
-        notify("Quét Đa Năng đã hoàn tất · " .. #State.UniversalScan.ResultNames .. " tên, " .. totalObjects .. " đối tượng, " .. visibleCount .. " visual.", visibleCount > 0 and Theme.Success or Theme.Warning)
+        local distanceSummary
+        if visibleCount == 1 then
+            distanceSummary = string.format("Phát hiện 1 · %.0f studs", nearestStuds)
+        elseif visibleCount > 1 then
+            distanceSummary = string.format("Phát hiện %d · gần %.0f · xa %.0f studs", visibleCount, nearestStuds, farthestStuds)
+        else
+            distanceSummary = "Không phát hiện mục tiêu phù hợp"
+        end
+        setStatusText(distanceSummary, visibleCount > 0 and Theme.Success or Theme.Warning)
+        notify("Quét xong · " .. distanceSummary, visibleCount > 0 and Theme.Success or Theme.Warning)
     else
         State.UniversalScan.Active = next(State.UniversalScan.Cache) ~= nil
         setStatusText("Quét Đa Năng dừng an toàn · giữ " .. #State.UniversalScan.ResultNames .. " tên", Theme.Danger)
@@ -13801,7 +14280,9 @@ function Extensions.EnsureAimbotTargetESP()
         bar.BackgroundTransparency = 0.18
         bar.BorderSizePixel = 0
         bar.Parent = billboard
-        Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+        local barCorner = Instance.new("UICorner")
+        barCorner.CornerRadius = UDim.new(1, 0)
+        barCorner.Parent = bar
         local barStroke = Instance.new("UIStroke")
         barStroke.Color = Color3.fromRGB(255, 255, 255)
         barStroke.Transparency = 0.68
@@ -13813,12 +14294,29 @@ function Extensions.EnsureAimbotTargetESP()
         fill.BackgroundColor3 = Color3.fromRGB(80, 235, 105)
         fill.BorderSizePixel = 0
         fill.Parent = bar
-        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+        local fillCorner = Instance.new("UICorner")
+        fillCorner.CornerRadius = UDim.new(1, 0)
+        fillCorner.Parent = fill
+        local barText = Instance.new("TextLabel")
+        barText.Name = "Value"
+        barText.Size = UDim2.fromScale(1, 1)
+        barText.BackgroundTransparency = 1
+        barText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        barText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        barText.TextStrokeTransparency = 0.25
+        barText.Font = Enum.Font.GothamBold
+        barText.TextSize = 8
+        barText.Visible = false
+        barText.ZIndex = bar.ZIndex + 3
+        barText.Parent = bar
         aimbot.TargetESPBillboard = billboard
         aimbot.TargetESPLabel = label
         aimbot.TargetESPDetail = detail
         aimbot.TargetESPBar = bar
         aimbot.TargetESPBarFill = fill
+        aimbot.TargetESPBarCorner = barCorner
+        aimbot.TargetESPBarFillCorner = fillCorner
+        aimbot.TargetESPBarText = barText
     end
 end
 
@@ -13921,6 +14419,18 @@ function Extensions.UpdateAimbotTargetESP()
             bar.Size = UDim2.fromOffset(barWidth, barHeight)
             aimbot.TargetESPBarFill.Size = UDim2.fromScale(ratio, 1)
             aimbot.TargetESPBarFill.BackgroundColor3 = (apply and style.BarColorMode == "Màu ESP") and Theme.Danger or Color3.fromHSV(ratio * 0.33, 0.88, 1)
+            local radius = apply and style.BarSquare and UDim.new(0, 0) or UDim.new(1, 0)
+            if aimbot.TargetESPBarCorner then aimbot.TargetESPBarCorner.CornerRadius = radius end
+            if aimbot.TargetESPBarFillCorner then aimbot.TargetESPBarFillCorner.CornerRadius = radius end
+            if aimbot.TargetESPBarText then
+                aimbot.TargetESPBarText.Visible = showBar and apply and style.BarText
+                if style.BarTextMode == "Hiện tại / Tối đa" then
+                    aimbot.TargetESPBarText.Text = string.format("%d/%d", math.max(math.floor(humanoid.Health + 0.5), 0), math.max(math.floor(humanoid.MaxHealth + 0.5), 0))
+                else
+                    aimbot.TargetESPBarText.Text = tostring(math.floor(ratio * 100 + 0.5)) .. "%"
+                end
+                aimbot.TargetESPBarText.TextSize = math.clamp(barHeight - 1, 7, 16)
+            end
             local width = math.clamp(math.max(280, barWidth + 24, nameSize * 18), 280, 620)
             local height = titleHeight + detailHeight + (showBar and (barHeight + 8) or 4)
             aimbot.TargetESPBillboard.Size = UDim2.fromOffset(width, height)
@@ -13940,6 +14450,9 @@ function Extensions.DestroyAimbotTargetESP()
     aimbot.TargetESPDetail = nil
     aimbot.TargetESPBar = nil
     aimbot.TargetESPBarFill = nil
+    aimbot.TargetESPBarCorner = nil
+    aimbot.TargetESPBarFillCorner = nil
+    aimbot.TargetESPBarText = nil
 end
 
 Extensions.AimbotPartNames = {"Head", "UpperTorso", "Torso", "HumanoidRootPart", "LowerTorso", "LeftUpperArm", "RightUpperArm", "Left Arm", "Right Arm", "LeftUpperLeg", "RightUpperLeg", "Left Leg", "Right Leg"}
@@ -15195,12 +15708,9 @@ function Extensions.BindAntiStunCharacter(character, humanoid)
 end
 
 function Extensions.RefreshAntiStunGhosts()
-    local active = State.AntiStun and State.AntiStunOptions.GhostPlayers
-    if not active then
+    if not State.AntiFling then
         for part, originalValue in pairs(State.AntiStunGhostBackup) do
-            if part and part.Parent then
-                pcall(function() part.CanCollide = originalValue end)
-            end
+            if part and part.Parent then pcall(function() part.CanCollide = originalValue end) end
             State.AntiStunGhostBackup[part] = nil
         end
         return
@@ -15208,10 +15718,10 @@ function Extensions.RefreshAntiStunGhosts()
     for _, player in ipairs(Players:GetPlayers()) do
         local character = player ~= LocalPlayer and player.Character
         if character then
-            for _, part in ipairs(character:GetChildren()) do
-                if part:IsA("BasePart") and part.CanCollide then
-                    if State.AntiStunGhostBackup[part] == nil then State.AntiStunGhostBackup[part] = true end
-                    part.CanCollide = false
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if State.AntiStunGhostBackup[part] == nil then State.AntiStunGhostBackup[part] = part.CanCollide end
+                    if part.CanCollide then part.CanCollide = false end
                 end
             end
         end
@@ -15231,19 +15741,18 @@ function Extensions.GetAntiStunFloorVelocity(root, character)
 end
 
 function Extensions.MaintainAntiStun(character, humanoid, root)
-    if not State.AntiStun or not character or not humanoid or not root then return end
+    local stunActive = State.AntiStun == true
+    local flingActive = State.AntiFling == true
+    if not stunActive and not flingActive or not character or not humanoid or not root then return end
     local options = State.AntiStunOptions
     local now = os.clock()
     local original = rememberHumanoid(humanoid)
     local level = options.Level
     local strength = level == "Tối đa" and 3 or (level == "Mạnh" and 2 or 1)
-
     local speed = math.max(tonumber(original and original.WalkSpeed) or tonumber(humanoid.WalkSpeed) or 16, 0)
-    if State.SpeedEnabled then
-        speed = math.max(tonumber(State.SpeedValue) or speed, 0)
-    end
+    if State.SpeedEnabled then speed = math.max(tonumber(State.SpeedValue) or speed, 0) end
 
-    if now - (State.LastAntiStunMaintain or 0) >= 0.1 then
+    if stunActive and now - (State.LastAntiStunMaintain or 0) >= 0.08 then
         State.LastAntiStunMaintain = now
         if options.NoFall then
             pcall(function()
@@ -15271,16 +15780,13 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
                     Extensions.TriggerAntiStunRecovery("cờ trạng thái")
                     local lowerName = string.lower(markerName)
                     local neutral = string.find(lowerName, "slow", 1, true) and not string.find(lowerName, "time", 1, true) and 1 or 0
-                    pcall(function()
-                        object:SetAttribute(markerName, type(attribute) == "number" and neutral or false)
-                    end)
+                    pcall(function() object:SetAttribute(markerName, type(attribute) == "number" and neutral or false) end)
                 end
             end
         end
         if options.KeepSpeed and not State.SpeedEnabled and original then
             local baseWalk = tonumber(original.WalkSpeed) or 16
-            local floorRatio = strength >= 3 and 0.75 or 0.15
-            if baseWalk >= 8 and humanoid.WalkSpeed < baseWalk * floorRatio then
+            if baseWalk >= 8 and humanoid.WalkSpeed < baseWalk * 0.55 then
                 humanoid.WalkSpeed = baseWalk
                 Extensions.TriggerAntiStunRecovery("làm chậm")
             end
@@ -15291,7 +15797,7 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
             end
         end
     end
-    if options.GhostPlayers and now - (State.AntiStunLastGhostRefresh or 0) >= 0.12 then
+    if flingActive and now - (State.AntiStunLastGhostRefresh or 0) >= 0.1 then
         State.AntiStunLastGhostRefresh = now
         Extensions.RefreshAntiStunGhosts()
     end
@@ -15303,7 +15809,6 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
     end
     local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
     local direction = humanoid.MoveDirection
-
     local jumpLimit
     if not State.JumpEnabled and original then
         jumpLimit = original.UseJumpPower and original.JumpPower or math.sqrt(math.max(2 * Workspace.Gravity * original.JumpHeight, 0))
@@ -15315,57 +15820,78 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
     jumpLimit = math.max(tonumber(jumpLimit) or 50, 20)
 
     local currentState = humanoid:GetState()
-    local badState = options.NoFall and (humanoid.PlatformStand
+    local badState = stunActive and options.NoFall and (humanoid.PlatformStand
         or humanoid.Sit and humanoid.SeatPart == nil
         or currentState == Enum.HumanoidStateType.FallingDown
         or currentState == Enum.HumanoidStateType.Ragdoll
         or currentState == Enum.HumanoidStateType.Physics)
-    local jumpGrace = now - State.LastJumpRequest <= 0.7
+    local jumpGrace = now - State.LastJumpRequest <= 0.8
     local horizontalLimit = math.max(speed * (strength == 1 and 2.35 or (strength == 2 and 1.7 or 1.3)), strength == 1 and 48 or (strength == 2 and 34 or 26))
-    local upLimit = math.max(jumpLimit * (strength == 1 and 1.7 or (strength == 2 and 1.45 or 1.25)), strength == 1 and 62 or (strength == 2 and 52 or 46))
-    local extremeHorizontal = options.NoFling and horizontal.Magnitude > horizontalLimit
-    local extremeVertical = options.NoFling and (velocity.Y > upLimit and not jumpGrace or velocity.Y < -115)
+    local upLimit = math.max(jumpLimit * (strength == 1 and 1.5 or (strength == 2 and 1.2 or 1.05)), strength == 1 and 54 or (strength == 2 and 38 or 30))
+    local extremeHorizontal = flingActive and horizontal.Magnitude > horizontalLimit
+    local extremeVertical = stunActive and (velocity.Y > upLimit and not jumpGrace or velocity.Y < -115)
     local last = State.AntiStunLastStepVelocity or velocity
     local deltaHorizontal = (horizontal - Vector3.new(last.X, 0, last.Z)).Magnitude
     local knockbackLimit = math.max(speed * (strength == 1 and 2.6 or (strength == 2 and 2.0 or 1.6)), strength == 1 and 42 or (strength == 2 and 30 or 24))
-    local knocked = options.NoKnockback and deltaHorizontal > knockbackLimit
-    local spinning = options.NoFling and root.AssemblyAngularVelocity.Magnitude > (strength == 1 and 18 or (strength == 2 and 9 or 5))
-    local detected = badState or root.Anchored or extremeHorizontal or extremeVertical or knocked or spinning
+    local knocked = stunActive and options.NoKnockback and deltaHorizontal > knockbackLimit
+    local spinning = (stunActive or flingActive) and root.AssemblyAngularVelocity.Magnitude > (strength == 1 and 18 or (strength == 2 and 9 or 5))
 
+    local grounded = humanoid.FloorMaterial ~= Enum.Material.Air and not badState
+    if grounded then
+        State.AntiStunSafeY = root.Position.Y
+        State.AntiStunLiftStarted = nil
+    elseif stunActive and not jumpGrace then
+        local safeY = tonumber(State.AntiStunSafeY) or root.Position.Y
+        local riseLimit = strength == 1 and 12 or (strength == 2 and 7 or 4)
+        local liftVelocity = strength == 1 and 18 or (strength == 2 and 10 or 5)
+        local rising = velocity.Y > liftVelocity
+        if rising then
+            State.AntiStunLiftStarted = State.AntiStunLiftStarted or now
+        elseif velocity.Y < 2 then
+            State.AntiStunLiftStarted = nil
+        end
+        local sustained = State.AntiStunLiftStarted and now - State.AntiStunLiftStarted > (strength == 1 and 0.22 or 0.1)
+        local liftedByPosition = root.Position.Y - safeY > riseLimit
+        if sustained or liftedByPosition then
+            extremeVertical = true
+            State.AntiStunRecoveryUntil = math.max(State.AntiStunRecoveryUntil or 0, now + 0.9)
+            Extensions.TriggerAntiStunRecovery("bị nâng bổng")
+            local capY = safeY + riseLimit
+            if root.Position.Y > capY then root.CFrame = root.CFrame + Vector3.new(0, capY - root.Position.Y, 0) end
+            velocity = root.AssemblyLinearVelocity
+            horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+            root.AssemblyLinearVelocity = Vector3.new(horizontal.X, math.min(velocity.Y, 0), horizontal.Z)
+            velocity = root.AssemblyLinearVelocity
+            State.AntiStunLiftStarted = nil
+        end
+    end
+
+    local detected = badState or stunActive and root.Anchored or extremeHorizontal or extremeVertical or knocked or spinning
     if detected then Extensions.TriggerAntiStunRecovery("trạng thái bất lợi") end
     local recovering = now < (State.AntiStunRecoveryUntil or 0)
     local correctedVelocity = velocity
-
     if recovering then
-        if root.Anchored then root.Anchored = false end
-        if options.NoFall then
+        if stunActive and root.Anchored then root.Anchored = false end
+        if stunActive and options.NoFall then
             if humanoid.PlatformStand then humanoid.PlatformStand = false end
             if badState then
                 humanoid.Sit = false
-                pcall(function()
-                    humanoid:ChangeState(humanoid.FloorMaterial == Enum.Material.Air and Enum.HumanoidStateType.Freefall or Enum.HumanoidStateType.Running)
-                end)
+                pcall(function() humanoid:ChangeState(humanoid.FloorMaterial == Enum.Material.Air and Enum.HumanoidStateType.Freefall or Enum.HumanoidStateType.Running) end)
             end
         end
-        local correctedHorizontal = horizontal
-        local wrongDirection = direction.Magnitude > 0.05 and horizontal.Magnitude > 1 and horizontal:Dot(direction.Unit) < -1
-        if direction.Magnitude > 0.05 and (horizontal.Magnitude < math.max(speed * 0.22, 3) or extremeHorizontal or wrongDirection or knocked) then
+        local correctedHorizontal = Vector3.new(velocity.X, 0, velocity.Z)
+        local wrongDirection = direction.Magnitude > 0.05 and correctedHorizontal.Magnitude > 1 and correctedHorizontal:Dot(direction.Unit) < -1
+        if direction.Magnitude > 0.05 and (correctedHorizontal.Magnitude < math.max(speed * 0.22, 3) or extremeHorizontal or wrongDirection or knocked) then
             correctedHorizontal = direction.Unit * speed
         elseif extremeHorizontal or knocked then
             correctedHorizontal = Vector3.zero
         end
-        local maximumUp = jumpGrace and math.max(jumpLimit * 1.3, 36) or math.max(jumpLimit, 42)
+        local maximumUp = jumpGrace and math.max(jumpLimit * 1.3, 36) or (stunActive and 0 or math.max(jumpLimit, 42))
         local correctedY = math.clamp(velocity.Y, -90, maximumUp)
         correctedVelocity = Vector3.new(correctedHorizontal.X, correctedY, correctedHorizontal.Z)
-        if (correctedVelocity - velocity).Magnitude > 0.5 then
-            root.AssemblyLinearVelocity = correctedVelocity
-        else
-            correctedVelocity = velocity
-        end
-        if root.AssemblyAngularVelocity.Magnitude > 4 then
-            root.AssemblyAngularVelocity = Vector3.zero
-        end
-    elseif options.NoSlide and direction.Magnitude < 0.05 and not humanoid.Sit and humanoid.FloorMaterial ~= Enum.Material.Air then
+        if (correctedVelocity - velocity).Magnitude > 0.5 then root.AssemblyLinearVelocity = correctedVelocity else correctedVelocity = velocity end
+        if root.AssemblyAngularVelocity.Magnitude > 4 then root.AssemblyAngularVelocity = Vector3.zero end
+    elseif stunActive and options.NoSlide and direction.Magnitude < 0.05 and not humanoid.Sit and humanoid.FloorMaterial ~= Enum.Material.Air then
         local slideLimit = strength == 1 and 6 or (strength == 2 and 3.5 or 2)
         if horizontal.Magnitude > slideLimit then
             local floorVelocity = Extensions.GetAntiStunFloorVelocity(root, character)
@@ -15375,10 +15901,17 @@ function Extensions.MaintainAntiStun(character, humanoid, root)
             end
         end
     end
-    if not recovering and not detected then
-        State.AntiStunLastHealthyVelocity = velocity
-    end
+    if not recovering and not detected then State.AntiStunLastHealthyVelocity = velocity end
     State.AntiStunLastStepVelocity = correctedVelocity
+end
+
+function Extensions.SetAntiFlingEnabled(enabled, silent)
+    State.AntiFling = not not enabled
+    State.AntiStunLastGhostRefresh = 0
+    Extensions.RefreshAntiStunGhosts()
+    local control = State.ConfigControls.AntiFlingEnabled
+    if control and control.Set then control.Set(State.AntiFling, false) end
+    if not silent then notify(State.AntiFling and "Anti Fling đã bật · xuyên Player khác và chặn lực hất." or "Anti Fling đã tắt · va chạm Player đã khôi phục.", State.AntiFling and Theme.Success or Theme.Warning) end
 end
 
 function Extensions.SetAntiStunEnabled(enabled, silent)
@@ -15387,10 +15920,13 @@ function Extensions.SetAntiStunEnabled(enabled, silent)
     State.AntiStunRecoveryUntil = 0
     State.AntiStunLastTrigger = 0
     State.AntiStunTriggerCount = 0
+    State.AntiStunLiftStarted = nil
+    State.AntiStunSafeY = nil
     local character, humanoid, root = getCharacter()
     if State.AntiStun then
         State.AntiStunLastHealthyVelocity = root and root.AssemblyLinearVelocity or Vector3.zero
         State.AntiStunLastStepVelocity = root and root.AssemblyLinearVelocity or nil
+        State.AntiStunSafeY = root and root.Position.Y or nil
         Extensions.RebuildAntiStunTracking(character)
         Extensions.BindAntiStunCharacter(character, humanoid)
         if humanoid and State.AntiStunOptions.NoFall then
@@ -15432,7 +15968,7 @@ function Extensions.SetAntiStunEnabled(enabled, silent)
         control.Set(State.AntiStun, false)
     end
     if not silent then
-        notify(State.AntiStun and ("Anti Stun nâng cao đã bật · cường độ " .. State.AntiStunOptions.Level .. ": chặn hất tung, trượt, đẩy lùi, té ngã.") or "Anti Stun đã tắt và đã khôi phục constraint.", State.AntiStun and Theme.Success or Theme.Warning)
+        notify(State.AntiStun and ("Anti Stun đã bật · " .. State.AntiStunOptions.Level .. " · chống lốc xoáy, nâng bổng, knockback và ragdoll.") or "Anti Stun đã tắt và đã khôi phục constraint.", State.AntiStun and Theme.Success or Theme.Warning)
     end
 end
 
@@ -15820,7 +16356,6 @@ function Luxury.Sheet(config)
     surface.ZIndex = baseZ + 3
     surface.Parent = holder
     Luxury.Corner(surface, compact and 20 or 26)
-    Luxury.Stroke(surface, 0.78, 1, palette.AccentSoft)
     local surfaceGradient = Instance.new("UIGradient")
     surfaceGradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 29, 46)),
@@ -18134,8 +18669,8 @@ function Extensions.RunMinimapScan(token)
             status(string.format("Đang dựng ảnh · %d%%", 80 + math.floor(rectangleIndex / #rectangles * 20)))
         end
     end
-    for index = #rectangles + 1, target.Used do
-        target.Tiles[index].Visible = false
+    for tileIndex = #rectangles + 1, target.Used do
+        target.Tiles[tileIndex].Visible = false
     end
     target.Used = #rectangles
 
@@ -19038,7 +19573,7 @@ function Extensions.CreateMobileToggleButton(id)
             return
         end
         if settings.Editing then
-            notify(settings.Locked and "Nút đang khóa; mở khóa trong Misc → Edit Button Studio." or "Đang ở chế độ di chuyển; kéo nút đến vị trí mong muốn.", Theme.Warning)
+            notify(settings.Locked and "Nút đang khóa; mở khóa trong Custom → Edit Button Studio." or "Đang ở chế độ di chuyển; kéo nút đến vị trí mong muốn.", Theme.Warning)
             return
         end
         Extensions.ActivateRegisteredToggle(id)
@@ -19903,7 +20438,7 @@ function Extensions.ApplyConfig(config, silent)
         target.Tracer = booleanValue(source, "Tracer", target.Tracer)
         target.TracerOrigin = allowed(source.TracerOrigin, {"Trên", "Giữa", "Dưới"}, target.TracerOrigin)
         target.Box = booleanValue(source, "Box", target.Box)
-        target.BoxMode = allowed(source.BoxMode, {"2D", "3D", "Bone", "Skin"}, target.BoxMode)
+        target.BoxMode = allowed(source.BoxMode, {"2D", "2D Tô màu", "3D", "Bone", "Skin"}, target.BoxMode)
         if target.BoxMode == "Skin" or target == State.ItemESP and target.BoxMode == "Bone" then target.BoxMode = "3D" end
         target.Name = booleanValue(source, "Name", target.Name)
         if target.Health ~= nil then
@@ -19939,7 +20474,7 @@ function Extensions.ApplyConfig(config, silent)
     local universal = type(config.UniversalScan) == "table" and config.UniversalScan or {}
     State.UniversalScan.ExcludeMode = allowed(universal.ExcludeMode, {"Không loại trừ", "Loại trừ Player", "Loại trừ Quái", "Loại trừ cả hai"}, State.UniversalScan.ExcludeMode)
     State.UniversalScan.Box = booleanValue(universal, "Box", State.UniversalScan.Box)
-    State.UniversalScan.BoxMode = allowed(universal.BoxMode, {"2D", "3D"}, State.UniversalScan.BoxMode)
+    State.UniversalScan.BoxMode = allowed(universal.BoxMode, {"2D", "2D Tô màu", "3D"}, State.UniversalScan.BoxMode)
     State.UniversalScan.Name = booleanValue(universal, "Name", State.UniversalScan.Name)
     State.UniversalScan.Tracer = booleanValue(universal, "Tracer", State.UniversalScan.Tracer)
     State.UniversalScan.TracerOrigin = allowed(universal.TracerOrigin, {"Trên", "Giữa", "Dưới"}, State.UniversalScan.TracerOrigin)
@@ -20233,6 +20768,42 @@ function Extensions.HandleSpeedToggle(value: boolean)
     Extensions.RefreshSpeedMethodStatus()
     notify(value and ("Speed đã bật · " .. State.SpeedMethod .. " · " .. Extensions.FormatMovementNumber(State.SpeedValue)) or "Speed đã tắt và khôi phục tốc độ gốc.", value and Theme.Success or Theme.Warning)
 end
+
+do
+local ShiftLockSection = createSection(MovementPage, "Shift Lock", "Khóa hướng nhân vật theo camera. PC dùng phím đã chọn; mobile dùng nút SHIFT ngoài menu. Có thể chỉnh độ lệch camera sang vai.")
+local shiftToggle = createToggle(ShiftLockSection, "Bật Shift Lock", State.OfficialFeatures.ShiftLockEnabled, function(value)
+    Extensions.WriteSetting("ShiftLockEnabled", value, false)
+end)
+Extensions.SettingById.ShiftLockEnabled.Control = shiftToggle
+State.ConfigControls.ShiftLockEnabled = shiftToggle
+Extensions.AddNumberSetting(ShiftLockSection, "ShiftLockOffset", "Độ lệch camera sang vai (0 - 4)", "1.75")
+Extensions.AddChoiceSetting(ShiftLockSection, "ShiftLockKey", "Phím Shift Lock trên PC")
+Extensions.AddToggleSetting(ShiftLockSection, "ShiftLockButtonVisible", "Hiện nút SHIFT ngoài menu")
+
+local ReticleSection = createSection(AimPage, "Tâm FPS", "Bật tâm ngắm cục bộ ở giữa màn hình. Kích thước nằm trong tab Custom.")
+local reticleToggle = createToggle(ReticleSection, "Hiện tâm FPS", State.OfficialFeatures.CenterReticleEnabled, function(value)
+    Extensions.WriteSetting("CenterReticleEnabled", value, false)
+end)
+Extensions.SettingById.CenterReticleEnabled.Control = reticleToggle
+State.ConfigControls.CenterReticleEnabled = reticleToggle
+
+local QuickResetSection = createSection(FunPage, "Reset nhanh", "Reset nhân vật bằng một lần bấm. Có thể dùng nút RESET ngoài menu hoặc phím riêng trên PC.")
+createButton(QuickResetSection, "Reset nhân vật ngay", function()
+    Extensions.PerformQuickReset(false)
+end, Theme.Danger)
+Extensions.AddChoiceSetting(QuickResetSection, "QuickResetKey", "Phím reset nhanh trên PC")
+Extensions.AddToggleSetting(QuickResetSection, "QuickResetButtonVisible", "Hiện nút RESET ngoài menu")
+
+local SpinSection = createSection(FunPage, "Spin Me", "Cho phần thân nhân vật xoay như chong chóng nhưng vẫn đi, nhảy và dùng camera bình thường. Cách xoay này không giành quyền điều khiển hướng của Aimbot.")
+local spinToggle = createToggle(SpinSection, "Bật Spin Me", State.OfficialFeatures.SpinMeEnabled, function(value)
+    Extensions.WriteSetting("SpinMeEnabled", value, false)
+end)
+Extensions.SettingById.SpinMeEnabled.Control = spinToggle
+State.ConfigControls.SpinMeEnabled = spinToggle
+Extensions.AddNumberSetting(SpinSection, "SpinMeSpeed", "Tốc độ xoay (60 - 1080 độ/giây)", "360")
+Extensions.AddChoiceSetting(SpinSection, "SpinMeDirection", "Chiều xoay")
+end
+
 
 do
 local SpeedSection = createSection(MovementPage, "Speed", "Bộ Speed thủ công tối giản: bật/tắt, chọn trực tiếp WalkSpeed, Velocity hoặc CFrame, rồi nhập mức tốc độ.")
@@ -20589,7 +21160,7 @@ end)
 State.SharedESPControls.Box = createToggle(SharedESPSection, "Hiện khung", State.PlayerESP.Box, function(value)
     Extensions.SetSharedESPValue("Box", value)
 end)
-State.SharedESPControls.BoxMode = createSelector(SharedESPSection, "Kiểu khung", {"2D", "3D", "Bone"}, State.PlayerESP.BoxMode, function(value)
+State.SharedESPControls.BoxMode = createSelector(SharedESPSection, "Kiểu khung", {"2D", "2D Tô màu", "3D", "Bone"}, State.PlayerESP.BoxMode, function(value)
     Extensions.SetSharedESPValue("BoxMode", value)
 end)
 State.SharedESPControls.Name = createToggle(SharedESPSection, "Hiện tên", State.PlayerESP.Name, function(value)
@@ -20621,7 +21192,7 @@ Extensions.SyncSharedESPControls()
 end
 
 do
-local AimbotLockSection = createSection(PlayerPage, "Aimbot", "Hệ thống hỗ trợ ngắm mục tiêu, đi kèm lựa chọn mục tiêu, bộ phận và điều kiện khóa phù hợp.")
+local AimbotLockSection = createSection(AimPage, "Aimbot", "Hệ thống hỗ trợ ngắm mục tiêu, đi kèm lựa chọn mục tiêu, bộ phận và điều kiện khóa phù hợp.")
 State.ConfigControls.AimbotEnabled = createToggle(AimbotLockSection, "Aimbot", State.Aimbot.Enabled, function(value)
     if State.Aimbot.Enabled ~= value then
         Extensions.SetAimbotEnabled(value, nil, false)
@@ -20701,7 +21272,7 @@ Extensions.RefreshAimbotTeamStatus(false)
 end
 
 do
-local AimbotPrioritySection = createSection(PlayerPage, "Ưu tiên & Danh sách đen", "Các lựa chọn ưu tiên và danh sách loại trừ để Ngài kiểm soát mục tiêu Aimbot chính xác hơn.")
+local AimbotPrioritySection = createSection(AimPage, "Ưu tiên & Danh sách đen", "Các lựa chọn ưu tiên và danh sách loại trừ để Ngài kiểm soát mục tiêu Aimbot chính xác hơn.")
 State.ConfigControls.AimbotStickyEnabled = createToggle(AimbotPrioritySection, "Aim Dính", State.Aimbot.StickyEnabled, function(value)
     State.Aimbot.StickyEnabled = value
     State.Aimbot.LastStickyCheck = 0
@@ -20741,7 +21312,7 @@ end)
 end
 
 do
-local AimbotControlSection = createSection(PlayerPage, "FOV & Bỏ Aim", "Vùng hoạt động của Aimbot và nút điều khiển nhanh để nhả mục tiêu hiện tại.")
+local AimbotControlSection = createSection(AimPage, "FOV & Bỏ Aim", "Vùng hoạt động của Aimbot và nút điều khiển nhanh để nhả mục tiêu hiện tại.")
 State.ConfigControls.AimbotFOVRadius = createInput(AimbotControlSection, "Bán kính FOV (pixel)", State.Aimbot.FOVRadius, "30 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
@@ -20767,7 +21338,7 @@ end, Theme.Danger)
 end
 
 do
-local AimbotAdvancedSection = createSection(PlayerPage, "Aim nâng cao", "Làm mượt, dự đoán chuyển động, ưu tiên mục tiêu, giới hạn khoảng cách và kiểu kích hoạt để Aim tự nhiên hơn.")
+local AimbotAdvancedSection = createSection(AimPage, "Aim nâng cao", "Làm mượt, dự đoán chuyển động, ưu tiên mục tiêu, giới hạn khoảng cách và kiểu kích hoạt để Aim tự nhiên hơn.")
 Extensions.AddNumberSetting(AimbotAdvancedSection, "AimbotSmoothing", "Độ mượt (0 = giật tức thì · 100 = rất chậm)", "30")
 Extensions.AddToggleSetting(AimbotAdvancedSection, "AimbotPrediction", "Dự đoán vị trí mục tiêu đang chạy")
 Extensions.AddNumberSetting(AimbotAdvancedSection, "AimbotPredictionTime", "Thời gian dự đoán (giây · 0 - 0.6)", "0.12")
@@ -20777,7 +21348,7 @@ Extensions.AddChoiceSetting(AimbotAdvancedSection, "AimbotHoldMode", "Kiểu kí
 Extensions.AddToggleSetting(AimbotAdvancedSection, "AimbotIgnoreForceField", "Bỏ qua mục tiêu đang có ForceField")
 Extensions.AddToggleSetting(AimbotAdvancedSection, "AimbotDropOutsideFOV", "Tự bỏ khóa khi mục tiêu ra xa khỏi FOV")
 
-local AimbotLookSection = createSection(PlayerPage, "Giao diện Aimbot", "Tuỳ chỉnh vòng FOV. Kiểu hiển thị nhãn mục tiêu (khung, tên, máu, tracer) chỉnh trong tab ESP → Trung tâm tùy chỉnh ESP → loại Aim.")
+local AimbotLookSection = createSection(AimPage, "Giao diện Aimbot", "Tuỳ chỉnh vòng FOV. Kiểu hiển thị nhãn mục tiêu (khung, tên, máu, tracer) chỉnh trong tab ESP → Trung tâm tùy chỉnh ESP → loại Aim.")
 Extensions.AddNumberSetting(AimbotLookSection, "AimbotFOVThickness", "Độ dày vòng FOV (1 - 8)", "2")
 Extensions.AddNumberSetting(AimbotLookSection, "AimbotFOVTransparency", "Độ mờ vòng FOV (0 - 1)", "0.1")
 Extensions.AddToggleSetting(AimbotLookSection, "AimbotFOVFilled", "Tô nền vòng FOV")
@@ -20785,7 +21356,7 @@ Extensions.AddToggleSetting(AimbotLookSection, "AimbotShrinkFOVOnLock", "Thu nh�
 end
 
 do
-local SkySection = createSection(WorldPage, "Sky", "Bộ điều chỉnh thời gian bầu trời, giúp Ngài lựa chọn khung giờ quan sát phù hợp.")
+local SkySection = createSection(VisionPage, "Sky", "Bộ điều chỉnh thời gian bầu trời, giúp Ngài lựa chọn khung giờ quan sát phù hợp.")
 State.ConfigControls.ClockTime = createInput(SkySection, "Giờ bầu trời", string.format("%.1f", Lighting.ClockTime), "1 - 24", true, function(text)
     local value = tonumber(text)
     if value then
@@ -20801,7 +21372,7 @@ end, Theme.SurfaceLight)
 end
 
 do
-local EnhancedVisionSection = createSection(WorldPage, "Full Bright + No Fog", "Chế độ tăng cường tầm nhìn, giúp cảnh vật sáng và rõ hơn trong môi trường tối hoặc nhiều hiệu ứng.")
+local EnhancedVisionSection = createSection(VisionPage, "Full Bright + No Fog", "Chế độ tăng cường tầm nhìn, giúp cảnh vật sáng và rõ hơn trong môi trường tối hoặc nhiều hiệu ứng.")
 local EnhancedVisionToggle
 EnhancedVisionToggle = createToggle(EnhancedVisionSection, "Full Bright + No Fog", false, function(value)
     State.RemoveEffects = value
@@ -20840,7 +21411,7 @@ end, Theme.SurfaceLight)
 end
 
 do
-local XRaySection = createSection(WorldPage, "X-Ray", "Chế độ X-Ray với nhiều kiểu hiển thị để quan sát mục tiêu qua vật cản.")
+local XRaySection = createSection(VisionPage, "X-Ray", "Chế độ X-Ray với nhiều kiểu hiển thị để quan sát mục tiêu qua vật cản.")
 function Extensions.RemoveDisabledXRayVisuals()
     local runtimeState: any = State
     if not runtimeState.PlayerESP.Enabled then removeAllVisuals("Player") end
@@ -20882,7 +21453,7 @@ end)
 end
 
 do
-local CameraSection = createSection(WorldPage, "Camera", "Các thiết lập góc nhìn và khoảng zoom để camera phù hợp với cách chơi của Ngài.")
+local CameraSection = createSection(VisionPage, "Camera", "Các thiết lập góc nhìn và khoảng zoom để camera phù hợp với cách chơi của Ngài.")
 State.ConfigControls.CameraFov = createInput(CameraSection, "Field of View", string.format("%.1f", Camera.FieldOfView), "1 - 120", true, function(text)
     local value = tonumber(text)
     if value then
@@ -20903,7 +21474,7 @@ end)
 end
 
 do
-local ScreenBlankSection = createSection(WorldPage, "Screen White / Black", "Chế độ nghỉ màn hình, hỗ trợ giảm tải thiết bị khi Ngài cần treo game trong thời gian dài.")
+local ScreenBlankSection = createSection(VisionPage, "Screen White / Black", "Chế độ nghỉ màn hình, hỗ trợ giảm tải thiết bị khi Ngài cần treo game trong thời gian dài.")
 State.ConfigControls.ScreenBlankColor = createSelector(ScreenBlankSection, "Màu màn hình", {"Đen", "Trắng"}, State.ScreenBlankColor, function(value)
     State.ScreenBlankColor = value
     if State.ScreenBlankEnabled then
@@ -20919,20 +21490,17 @@ end)
 end
 
 do
-local MinimapSection = createSection(WorldPage, "Mini Map", "Bản đồ địa hình 2D thích ứng theo phong cách Raphael. Mọi tùy chỉnh zoom, độ nét, lớp hiển thị, phạm vi, kích thước và vị trí nằm trong một bảng riêng.")
+local MinimapSection = createSection(VisionPage, "Mini Map", "Bản đồ địa hình 2D thích ứng theo phong cách Raphael. Mọi tùy chỉnh zoom, độ nét, lớp hiển thị, phạm vi, kích thước và vị trí nằm trong một bảng riêng.")
 State.ConfigControls.MinimapEnabled = createToggle(MinimapSection, "Bật Mini Map", State.Minimap.Enabled, function(value)
     if State.Minimap.Enabled ~= value then Extensions.SetMinimapEnabled(value, false) end
 end)
 createButton(MinimapSection, "Panel Mini Map", function()
     Extensions.OpenMinimapSettings()
 end, Theme.Accent)
-Extensions.AddNumberSetting(MinimapSection, "MinimapResolution", "Độ nét (số ô · 24 - 160)", "72")
-Extensions.AddNumberSetting(MinimapSection, "MinimapRadius", "Bán kính xem (studs · 40 - 2048)", "180")
-Extensions.AddNumberSetting(MinimapSection, "MinimapSide", "Kích thước bản đồ (px · 96 - 420)", "200")
 end
 
 do
-local PlayerTeleSection = createSection(MovementPage, "Tele Player", "Công cụ di chuyển đến Player bằng username, display name hoặc một phần tên duy nhất.")
+local PlayerTeleSection = createSection(TelePage, "Tele Player", "Công cụ di chuyển đến Player bằng username, display name hoặc một phần tên duy nhất.")
 local TeleportPlayerName = ""
 createInput(PlayerTeleSection, "Tên người chơi", "", "Nhập một phần username hoặc display name", false, function(text, box)
     local completed, _, status, count = Extensions.CompletePlayerSearchText(text, false)
@@ -20967,7 +21535,7 @@ end)
 end
 
 do
-local ItemTeleSection = createSection(MovementPage, "Tele Item", "Công cụ tìm và di chuyển đến Item phù hợp gần Ngài nhất.")
+local ItemTeleSection = createSection(TelePage, "Tele Item", "Công cụ tìm và di chuyển đến Item phù hợp gần Ngài nhất.")
 local TeleportItemName = ""
 State.TeleportItemBox = createInput(ItemTeleSection, "Tên item", "", "Nhập một phần tên duy nhất", false, function(text)
     TeleportItemName = string.gsub(text, "^%s*(.-)%s*$", "%1")
@@ -20999,7 +21567,7 @@ end, Theme.Accent2)
 end
 
 do
-local CoordinateTeleSection = createSection(MovementPage, "Tele toạ độ", "Công cụ di chuyển trực tiếp đến vị trí được xác định bằng ba toạ độ X, Y và Z.")
+local CoordinateTeleSection = createSection(TelePage, "Tele toạ độ", "Công cụ di chuyển trực tiếp đến vị trí được xác định bằng ba toạ độ X, Y và Z.")
 local CoordinateTeleportText = ""
 createInput(CoordinateTeleSection, "Toạ độ đích", "", "Ví dụ: 120, 35, -450", false, function(text)
     CoordinateTeleportText = text
@@ -21024,7 +21592,7 @@ end, Theme.Accent2)
 end
 
 do
-local JoinServerSection = createSection(MiscPage, "Join Server ID", "Công cụ tham gia một server cụ thể bằng Job ID thuộc game hiện tại.")
+local JoinServerSection = createSection(TelePage, "Join Server ID", "Công cụ tham gia một server cụ thể bằng Job ID thuộc game hiện tại.")
 local TargetJobId = ""
 createInput(JoinServerSection, "Job ID server", "", "Dán Job ID", false, function(text)
     TargetJobId = string.gsub(text, "^%s*(.-)%s*$", "%1")
@@ -21046,7 +21614,7 @@ end, Theme.Accent)
 end
 
 do
-local SpectateSection = createSection(PlayerPage, "Theo dõi Player", "Chế độ theo dõi Player, giúp camera quan sát mục tiêu trong khi vẫn giữ khả năng xoay tự do.")
+local SpectateSection = createSection(FunPage, "Theo dõi Player", "Chế độ theo dõi Player, giúp camera quan sát mục tiêu trong khi vẫn giữ khả năng xoay tự do.")
 local SpectatePlayerName = ""
 createInput(SpectateSection, "Tên người chơi", "", "Nhập một phần username hoặc display name", false, function(text, box)
     local completed, _, status, count = Extensions.CompletePlayerSearchText(text, false)
@@ -21077,7 +21645,7 @@ end, Theme.SurfaceLight)
 end
 
 do
-local SavedTeleSection = createSection(MovementPage, "Tele đã lưu", "Điểm dịch chuyển cá nhân, cho phép lưu vị trí và quay lại nhanh bằng nút nổi.")
+local SavedTeleSection = createSection(TelePage, "Tele đã lưu", "Điểm dịch chuyển cá nhân, cho phép lưu vị trí và quay lại nhanh bằng nút nổi.")
 State.ConfigControls.SavedButtonName = createInput(SavedTeleSection, "Tên nút nổi", State.SavedButtonName, "Tên nút", false, function(text)
     local trimmed = string.gsub(text, "^%s*(.-)%s*$", "%1")
     State.SavedButtonName = trimmed ~= "" and trimmed or "Về điểm lưu"
@@ -21105,7 +21673,7 @@ createDualButtons(SavedTeleSection, State.IsDesktop and "Phím Alt" or "Tạo / 
 end
 
 do
-local TouchTeleSection = createSection(MovementPage, "Tele cảm ứng", "Chế độ dịch chuyển bằng cảm ứng, cho phép chọn điểm đến trực tiếp trên thế giới.")
+local TouchTeleSection = createSection(TelePage, "Tele cảm ứng", "Chế độ dịch chuyển bằng cảm ứng, cho phép chọn điểm đến trực tiếp trên thế giới.")
 createButton(TouchTeleSection, "Tele cho lần chạm kế tiếp", function()
     State.TouchTeleportArmed = false
     task.delay(0.2, function()
@@ -21123,7 +21691,7 @@ end, Theme.SurfaceLight)
 end
 
 do
-local TravelSettingsSection = createSection(MovementPage, "Thiết lập di chuyển", "Thiết lập tốc độ hành trình cho các chế độ dịch chuyển có chuyển động.")
+local TravelSettingsSection = createSection(TelePage, "Thiết lập di chuyển", "Thiết lập tốc độ hành trình cho các chế độ dịch chuyển có chuyển động.")
 State.ConfigControls.TravelSpeed = createInput(TravelSettingsSection, "Tốc độ bay (stud/s)", State.TravelSpeed, "10 - 1000", true, function(text)
     local value = tonumber(text)
     if value then
@@ -21142,7 +21710,7 @@ end, Theme.Danger)
 end
 
 do
-local UniversalScanSection = createSection(ESPPage, "Quét Đa Năng", "Quét Model, Tool và Part độc lập trong Workspace, gộp Part thuộc Model/Tool, liệt kê tên và tạo visual có giới hạn để giữ FPS.")
+local UniversalScanSection = createSection(MiscPage, "Quét Đa Năng", "Quét Model, Tool và Part độc lập trong Workspace, gộp Part thuộc Model/Tool, liệt kê tên và tạo visual có giới hạn để giữ FPS.")
 State.ConfigControls.UniversalExcludeMode = createSelector(UniversalScanSection, "Loại trừ khi quét", {"Không loại trừ", "Loại trừ Player", "Loại trừ Quái", "Loại trừ cả hai"}, State.UniversalScan.ExcludeMode, function(value)
     State.UniversalScan.ExcludeMode = value
 end)
@@ -21162,7 +21730,7 @@ end)
 State.ConfigControls.UniversalBox = createToggle(UniversalScanSection, "Hiện khung kết quả", State.UniversalScan.Box, function(value)
     State.UniversalScan.Box = value
 end)
-State.ConfigControls.UniversalBoxMode = createSelector(UniversalScanSection, "Kiểu khung kết quả", {"2D", "3D"}, State.UniversalScan.BoxMode, function(value)
+State.ConfigControls.UniversalBoxMode = createSelector(UniversalScanSection, "Kiểu khung kết quả", {"2D", "2D Tô màu", "3D"}, State.UniversalScan.BoxMode, function(value)
     State.UniversalScan.BoxMode = value
 end)
 State.ConfigControls.UniversalName = createToggle(UniversalScanSection, "Hiện tên kết quả", State.UniversalScan.Name, function(value)
@@ -21189,7 +21757,7 @@ end, Theme.Danger)
 end
 
 do
-local NotesSection = createSection(MiscPage, "Ghi chú", "Nhập ghi chú và lưu thành TXT với giờ, phút, giây, ngày, tháng, năm, tên map, PlaceId và JobId trong tên file.")
+local NotesSection = createSection(FunPage, "Ghi chú", "Nhập ghi chú và lưu thành TXT với giờ, phút, giây, ngày, tháng, năm, tên map, PlaceId và JobId trong tên file.")
 State.NoteBox = createInput(NotesSection, "Nội dung ghi chú", "", "Nhập nội dung cần lưu...", false, nil)
 State.NoteBox.Parent.Size = UDim2.new(1, 0, 0, 154)
 State.NoteBox.Size = UDim2.new(1, 0, 0, 132)
@@ -21200,7 +21768,7 @@ createButton(NotesSection, "Lưu ghi chú theo thời gian và map", Extensions.
 end
 
 do
-local NoVoidSection = createSection(WorldPage, "No Void", "Lớp bảo vệ No Void, giúp đưa nhân vật trở lại vị trí an toàn khi rơi khỏi bản đồ.")
+local NoVoidSection = createSection(AntiPage, "No Void", "Lớp bảo vệ No Void, giúp đưa nhân vật trở lại vị trí an toàn khi rơi khỏi bản đồ.")
 State.ConfigControls.NoVoid = createToggle(NoVoidSection, "No Void", false, function(value)
     State.NoVoid = value
     if value then
@@ -21245,7 +21813,7 @@ end, "Xóa toàn bộ log", function()
     notify("Đã xóa log Bản thân và Server Log.", Theme.Success)
 end, Theme.Accent, Theme.Danger)
 
-local ServerSection = createSection(MiscPage, "Server Browser", "Mở danh sách server công khai (ít người hoặc đông người), làm mới, chọn Job ID rồi xác nhận Join. Nếu API bị chặn, Raphael tự thử lại, thử tuyến dự phòng và cho phép vào server ngẫu nhiên.")
+local ServerSection = createSection(TelePage, "Server Browser", "Mở danh sách server công khai (ít người hoặc đông người), làm mới, chọn Job ID rồi xác nhận Join. Nếu API bị chặn, Raphael tự thử lại, thử tuyến dự phòng và cho phép vào server ngẫu nhiên.")
 createDualButtons(ServerSection, "Hop ít người", function()
     hopServer(true)
 end, "Hop đông người", function()
@@ -21316,15 +21884,10 @@ end
 
 
 do
-local GuardSection = createSection(PlayerPage, "Bảo vệ nhân vật", "God Mode, Anti Stun, Anti AFK và nút reset nhân vật. Tuỳ chọn chi tiết của Anti Stun và Anti Kick nằm ngay bên dưới.")
+local GuardSection = createSection(AntiPage, "Bảo vệ chung", "Các công tắc bảo vệ thường dùng. Anti Stun và Anti Fling được gom trong mục riêng ngay bên dưới để dễ chỉnh.")
 State.ConfigControls.GodMode = createToggle(GuardSection, "God Mode · duy trì Humanoid", false, function(value)
     if State.GodMode ~= value then
         Extensions.SetGodModeEnabled(value, false)
-    end
-end)
-State.ConfigControls.AntiStun = createToggle(GuardSection, "Anti Stun nâng cao", false, function(value)
-    if State.AntiStun ~= value then
-        Extensions.SetAntiStunEnabled(value, false)
     end
 end)
 State.ConfigControls.AntiAFK = createToggle(GuardSection, "Anti AFK nâng cao", false, function(value)
@@ -21332,15 +21895,9 @@ State.ConfigControls.AntiAFK = createToggle(GuardSection, "Anti AFK nâng cao", 
         Extensions.SetAntiAFKEnabled(value, false)
     end
 end)
-Extensions.AddNumberSetting(GuardSection, "AntiAFKInterval", "Chu kỳ Anti AFK nâng cao (giây · 10 - 300)", "50")
-createButton(GuardSection, "Reset nhân vật", function()
-    local _, humanoid = getCharacter()
-    if humanoid then
-        humanoid.Health = 0
-    end
-end, Theme.Danger)
+Extensions.AddNumberSetting(GuardSection, "AntiAFKInterval", "Chu kỳ Anti AFK (giây · 10 - 300)", "50")
 
-local PerformanceSection = createSection(WorldPage, "Hiệu năng", "Giảm tải đồ họa cho máy yếu: Fast Mode giữ màu gốc nhưng bỏ texture và vật liệu nặng. Chế độ nghỉ màn hình nằm ở mục Screen White / Black.")
+local PerformanceSection = createSection(VisionPage, "Hiệu năng", "Giảm tải đồ họa cho máy yếu: Fast Mode giữ màu gốc nhưng bỏ texture và vật liệu nặng. Chế độ nghỉ màn hình nằm ở mục Screen White / Black.")
 State.ConfigControls.FPSBoost = createToggle(PerformanceSection, "Fast Mode · màu phẳng giữ màu gốc", false, setFPSBoost)
 
 local SentinelSection = Extensions.FindSection(InfoPage, "Sentinel · Anomaly & Server Log")
@@ -21348,38 +21905,45 @@ State.ConfigControls.DeathNotifications = createToggle(SentinelSection or GuardS
     State.DeathNotifications.Enabled = value
     notify(value and "Đã bật thông báo Player tử vong." or "Đã tắt thông báo Player tử vong.", value and Theme.Success or Theme.Warning)
 end)
+if SentinelSection then Extensions.AddToggleSetting(SentinelSection, "SentinelDetailedLog", "Ghi log chi tiết khi hành vi nghi ngờ thay đổi") end
 end
 
 
 do
-local KickSection = createSection(PlayerPage, "Anti Kick Shield", "Chặn lệnh Kick từ LocalScript của game và chống kick do không thao tác (idle). Kick do server ra lệnh không thể chặn từ client; khi đó có thể bật tự vào lại. Mặc định bật; nếu executor lỗi hoặc văng, tắt công tắc này để gỡ hook.")
-local kickToggle = createToggle(KickSection, "Anti Kick Shield", State.AntiKick.Enabled, function(value)
+local KickSection = createSection(AntiPage, "Anti Kick Shield", "Chặn lệnh Kick từ LocalScript của game và chống kick do không thao tác. Hook sâu mặc định tắt để tăng độ ổn định.")
+local kickToggle = createToggle(KickSection, "Bật Anti Kick Shield", State.AntiKick.Enabled, function(value)
     Extensions.WriteSetting("AntiKickEnabled", value, false)
     notify(value and "Anti Kick Shield đã bật." or "Anti Kick Shield đã tắt.", value and Theme.Success or Theme.Warning)
 end)
 Extensions.SettingById.AntiKickEnabled.Control = kickToggle
 State.ConfigControls.AntiKickEnabled = kickToggle
 Extensions.AddToggleSetting(KickSection, "AntiKickBlockKick", "Chặn lệnh Kick tới nhân vật của Ngài")
-Extensions.AddToggleSetting(KickSection, "AntiKickIdleGuard", "Chống bị kick khi đứng yên (idle 20 phút)")
+Extensions.AddToggleSetting(KickSection, "AntiKickIdleGuard", "Chống bị kick khi đứng yên")
 Extensions.AddToggleSetting(KickSection, "AntiKickBlockShutdown", "Chặn game:Shutdown() từ game")
-Extensions.AddToggleSetting(KickSection, "AntiKickAutoRejoin", "Tự vào lại server khi mất kết nối (tối đa 3 lần / 10 phút)")
-Extensions.AddToggleSetting(KickSection, "AntiKickDeepHook", "Hook sâu hàm Kick (chặn cả gọi trực tiếp · rủi ro văng trên vài executor)")
-State.AntiKick.StatusLabel = createInfoRow(KickSection, "Hook", Extensions.GetAntiKickStatusText())
+Extensions.AddToggleSetting(KickSection, "AntiKickAutoRejoin", "Tự vào lại server khi mất kết nối")
+Extensions.AddToggleSetting(KickSection, "AntiKickDeepHook", "Hook sâu hàm Kick · chỉ bật khi executor hỗ trợ tốt")
+State.AntiKick.StatusLabel = createInfoRow(KickSection, "Trạng thái", Extensions.GetAntiKickStatusText())
 State.AntiKick.CountLabel = createInfoRow(KickSection, "Đã chặn", "0")
 
-local StunSection = createSection(PlayerPage, "Anti Stun nâng cao", "Bật công tắc Anti Stun nâng cao trong mục Bảo vệ nhân vật. Tại đây chọn cường độ và loại tác động cần chặn: hất tung, trượt, đẩy lùi, té ngã, đóng băng.")
-Extensions.AddChoiceSetting(StunSection, "AntiStunLevel", "Cường độ")
-Extensions.AddToggleSetting(StunSection, "AntiStunNoFling", "Chống hất tung và xoay tít (fling)")
-Extensions.AddToggleSetting(StunSection, "AntiStunNoKnockback", "Chống đẩy lùi đột ngột")
-Extensions.AddToggleSetting(StunSection, "AntiStunNoSlide", "Chống trượt khi đứng yên")
-Extensions.AddToggleSetting(StunSection, "AntiStunNoFall", "Chống té ngã / ragdoll / bị tắt khớp")
-Extensions.AddToggleSetting(StunSection, "AntiStunKeepSpeed", "Giữ tốc độ khi bị đóng băng / làm chậm")
-Extensions.AddToggleSetting(StunSection, "AntiStunGhostPlayers", "Xuyên người chơi khác (chống fling chạm người)")
+local StunSection = createSection(AntiPage, "Anti Stun", "Một công tắc duy nhất để chống choáng, lốc xoáy nâng bổng, đẩy lùi, trượt, ragdoll, khóa khớp và giảm tốc.")
+State.ConfigControls.AntiStun = createToggle(StunSection, "Bật Anti Stun", State.AntiStun, function(value)
+    if State.AntiStun ~= value then Extensions.SetAntiStunEnabled(value, false) end
+end)
+Extensions.AddChoiceSetting(StunSection, "AntiStunLevel", "Cường độ bảo vệ")
+createInfoRow(StunSection, "Bao gồm", "Lốc xoáy · hất tung · knockback · ragdoll · trượt · đóng băng")
+
+local FlingSection = createSection(AntiPage, "Anti Fling", "Tách riêng khỏi Anti Stun. Khi bật, client bỏ va chạm với toàn bộ bộ phận của Player khác và triệt vận tốc xoay/hất bất thường của nhân vật Ngài.")
+local flingToggle = createToggle(FlingSection, "Bật Anti Fling", State.AntiFling, function(value)
+    Extensions.WriteSetting("AntiFlingEnabled", value, false)
+end)
+Extensions.SettingById.AntiFlingEnabled.Control = flingToggle
+State.ConfigControls.AntiFlingEnabled = flingToggle
+createInfoRow(FlingSection, "Cách hoạt động", "Xuyên Player khác · chặn xoay · giảm lực hất ngang")
 end
 
 
 do
-local BoomboxSection = createSection(MiscPage, "Boombox", "Phát audio theo Asset ID trên client hiện tại. Roblox có thể chặn audio theo quyền sở hữu, kiểm duyệt hoặc chính sách của experience.")
+local BoomboxSection = createSection(FunPage, "Boombox", "Phát audio theo Asset ID trên client hiện tại. Roblox có thể chặn audio theo quyền sở hữu, kiểm duyệt hoặc chính sách của experience.")
 State.Boombox.Input = createInput(BoomboxSection, "Asset ID âm thanh", State.Boombox.AssetId, "Ví dụ: 1843529607", false, function(text, box)
     local assetId = string.match(tostring(text or ""), "%d+") or ""
     State.Boombox.AssetId = assetId
@@ -21493,52 +22057,71 @@ end)
 end
 
 do
-local EspStyleSection = createSection(ESPPage, "ESP Style", "Cỡ chữ Tên, HP, Khoảng cách; font; viền chữ; kiểu thanh máu (chữ, thanh ngang, thanh dọc, chữ + thanh); độ dày khung và tracer; nhịp cập nhật. Áp dụng cho mọi loại ESP và cả nhãn mục tiêu Aimbot.")
-State.ConfigControls.ESPRefreshMode = createSelector(EspStyleSection, "Nhịp cập nhật ESP", {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode, function(value)
+local EspDisplaySection = createSection(ESPPage, "Hiển thị ESP", "Chọn kiểu chữ, kiểu HP, màu thanh và trạng thái hiển thị. Màu từng kênh chỉnh trong Function Color; kích thước nằm trong tab Custom.")
+State.ConfigControls.ESPRefreshMode = createSelector(EspDisplaySection, "Nhịp cập nhật ESP", {"Adaptive", "25 FPS", "15 FPS", "10 FPS"}, State.ESPRefreshMode, function(value)
     State.ESPRefreshMode = value
 end)
-Extensions.AddNumberSetting(EspStyleSection, "ESPNameSize", "Cỡ chữ Tên (8 - 32)", "14")
-Extensions.AddNumberSetting(EspStyleSection, "ESPHealthSize", "Cỡ chữ HP (8 - 32)", "13")
-Extensions.AddNumberSetting(EspStyleSection, "ESPDistanceSize", "Cỡ chữ Khoảng cách (8 - 32)", "13")
-Extensions.AddChoiceSetting(EspStyleSection, "ESPFont", "Font chữ ESP")
-Extensions.AddNumberSetting(EspStyleSection, "ESPTextStroke", "Độ mờ viền chữ (0 = đậm · 1 = ẩn)", "0 - 1")
-Extensions.AddChoiceSetting(EspStyleSection, "ESPHealthStyle", "Kiểu hiển thị máu")
-Extensions.AddChoiceSetting(EspStyleSection, "ESPBarColorMode", "Màu thanh máu")
-Extensions.AddNumberSetting(EspStyleSection, "ESPBarWidth", "Chiều dài thanh máu ngang (40 - 400)", "150")
-Extensions.AddNumberSetting(EspStyleSection, "ESPBarHeight", "Độ dày thanh máu (3 - 30)", "9")
-Extensions.AddNumberSetting(EspStyleSection, "ESPBoxThickness", "Độ dày khung (0.5 - 8)", "1.5")
-Extensions.AddNumberSetting(EspStyleSection, "ESPTracerThickness", "Độ dày Tracer (0.5 - 8)", "1.5")
-Extensions.AddToggleSetting(EspStyleSection, "ESPDistanceFade", "Mờ dần theo khoảng cách")
-Extensions.AddToggleSetting(EspStyleSection, "ESPHideTeammates", "Ẩn đồng đội khỏi ESP Player")
-Extensions.AddToggleSetting(EspStyleSection, "ESPApplyToAimbot", "Áp dụng kiểu này cho ESP mục tiêu Aimbot")
-createButton(EspStyleSection, "Khôi phục ESP Style mặc định", function()
-    Extensions.ResetSettingGroup({"ESPNameSize", "ESPHealthSize", "ESPDistanceSize", "ESPFont", "ESPTextStroke", "ESPHealthStyle", "ESPBarColorMode", "ESPBarWidth", "ESPBarHeight", "ESPBoxThickness", "ESPTracerThickness", "ESPDistanceFade", "ESPHideTeammates", "ESPApplyToAimbot"})
-    notify("Đã khôi phục ESP Style mặc định.", Theme.Success)
+Extensions.AddChoiceSetting(EspDisplaySection, "ESPFont", "Font chữ ESP")
+Extensions.AddChoiceSetting(EspDisplaySection, "ESPHealthStyle", "Kiểu hiển thị HP")
+Extensions.AddChoiceSetting(EspDisplaySection, "ESPBarColorMode", "Màu thanh HP")
+Extensions.AddNumberSetting(EspDisplaySection, "ESPBoxFillTransparency", "Độ trong khung 2D tô màu (0 - 0.95)", "0.72")
+Extensions.AddToggleSetting(EspDisplaySection, "ESPBarSquare", "Thanh HP hình chữ nhật · không bo góc")
+Extensions.AddToggleSetting(EspDisplaySection, "ESPBarText", "Hiện số máu trên thanh HP")
+Extensions.AddChoiceSetting(EspDisplaySection, "ESPBarTextMode", "Nội dung số trên thanh HP")
+Extensions.AddToggleSetting(EspDisplaySection, "ESPDistanceFade", "Mờ dần theo khoảng cách")
+Extensions.AddToggleSetting(EspDisplaySection, "ESPHideTeammates", "Ẩn đồng đội khỏi ESP Player")
+Extensions.AddToggleSetting(EspDisplaySection, "PlayerESPStatusColors", "Đổi màu Player vừa chết, hồi sinh hoặc bị Sentinel nghi ngờ")
+Extensions.AddToggleSetting(EspDisplaySection, "ESPApplyToAimbot", "Áp dụng kiểu này cho ESP mục tiêu Aim")
+
+local EspSizeSection = createSection(CustomPage, "Kích thước ESP", "Chỉ chứa các thông số kích thước của chữ, khung, tracer và thanh HP.")
+Extensions.AddNumberSetting(EspSizeSection, "ESPNameSize", "Cỡ chữ tên (8 - 32)", "14")
+Extensions.AddNumberSetting(EspSizeSection, "ESPHealthSize", "Cỡ chữ HP (8 - 32)", "13")
+Extensions.AddNumberSetting(EspSizeSection, "ESPDistanceSize", "Cỡ chữ khoảng cách (8 - 32)", "13")
+Extensions.AddNumberSetting(EspSizeSection, "ESPTextStroke", "Độ mờ viền chữ (0 - 1)", "0")
+Extensions.AddNumberSetting(EspSizeSection, "ESPBarWidth", "Chiều dài thanh HP (40 - 400)", "150")
+Extensions.AddNumberSetting(EspSizeSection, "ESPBarHeight", "Độ dày thanh HP (3 - 30)", "9")
+Extensions.AddNumberSetting(EspSizeSection, "ESPBoxThickness", "Độ dày khung (0.5 - 8)", "1.5")
+Extensions.AddNumberSetting(EspSizeSection, "ESPTracerThickness", "Độ dày Tracer (0.5 - 8)", "1.5")
+createButton(EspSizeSection, "Khôi phục kích thước ESP", function()
+    Extensions.ResetSettingGroup({"ESPNameSize", "ESPHealthSize", "ESPDistanceSize", "ESPTextStroke", "ESPBarWidth", "ESPBarHeight", "ESPBoxThickness", "ESPTracerThickness"})
+    notify("Đã khôi phục kích thước ESP mặc định.", Theme.Success)
 end, Theme.SurfaceLight)
 
-local IslandSection = createSection(MiscPage, "Dynamic Island", "Đảo động ở giữa trên màn hình: gộp trạng thái và thông báo của Raphael cùng thông báo Roblox. Chạm vào đảo để xem các chức năng đang bật và tắt nhanh từng chức năng.")
+local IslandSection = createSection(MiscPage, "Dynamic Island", "Bật tắt các nội dung của đảo. Kích thước và vị trí nằm trong tab Custom.")
 Extensions.AddToggleSetting(IslandSection, "IslandEnabled", "Bật Dynamic Island")
-Extensions.AddToggleSetting(IslandSection, "IslandMergeRoblox", "Gộp thông báo Roblox của game vào đảo")
-Extensions.AddToggleSetting(IslandSection, "IslandShowStats", "Hiện FPS và ping khi rảnh")
-Extensions.AddNumberSetting(IslandSection, "IslandScale", "Kích thước đảo (% · 60 - 150)", "100")
-Extensions.AddNumberSetting(IslandSection, "IslandOffsetY", "Khoảng cách từ mép trên (px)", "10")
-Extensions.AddNumberSetting(IslandSection, "IslandDuration", "Thời gian hiện thông báo (giây)", "3.2")
+Extensions.AddToggleSetting(IslandSection, "IslandMergeRoblox", "Gộp thông báo Roblox vào đảo")
+Extensions.AddToggleSetting(IslandSection, "IslandShowStats", "Hiện Player, giờ, FPS và ping khi rảnh")
 createButton(IslandSection, "Thử thông báo đảo", function()
-    notify("Dynamic Island hoạt động · Raphael Sovereign sẵn sàng", Theme.Success)
+    notify("Dynamic Island hoạt động · Sẵn sàng", Theme.Success)
 end, Theme.Accent)
+
+local IslandSizeSection = createSection(CustomPage, "Kích thước Dynamic Island", "Chỉnh tỷ lệ, vị trí và thời gian hiển thị thông báo.")
+Extensions.AddNumberSetting(IslandSizeSection, "IslandScale", "Tỷ lệ đảo (60 - 150%)", "100")
+Extensions.AddNumberSetting(IslandSizeSection, "IslandOffsetY", "Khoảng cách từ mép trên (px)", "10")
+Extensions.AddNumberSetting(IslandSizeSection, "IslandDuration", "Thời gian thông báo (giây)", "3.2")
+
+local MinimapSizeSection = createSection(CustomPage, "Kích thước Mini Map", "Các thông số chính về độ nét, bán kính quét và kích thước bản đồ.")
+Extensions.AddNumberSetting(MinimapSizeSection, "MinimapResolution", "Độ nét (24 - 160 ô)", "72")
+Extensions.AddNumberSetting(MinimapSizeSection, "MinimapRadius", "Bán kính xem (40 - 2048 studs)", "180")
+Extensions.AddNumberSetting(MinimapSizeSection, "MinimapSide", "Kích thước bản đồ (96 - 420 px)", "200")
+
+local ReticleSizeSection = createSection(CustomPage, "Kích thước tâm FPS", "Chỉnh chấm giữa, khung vuông và độ dày khung.")
+Extensions.AddNumberSetting(ReticleSizeSection, "CenterReticleDotSize", "Kích thước chấm (2 - 12 px)", "5")
+Extensions.AddNumberSetting(ReticleSizeSection, "CenterReticleBoxSize", "Kích thước khung (10 - 60 px)", "20")
+Extensions.AddNumberSetting(ReticleSizeSection, "CenterReticleThickness", "Độ dày khung (1 - 5 px)", "2")
 
 local RuntimeInfoSection = Extensions.FindSection(InfoPage, "Game & Runtime")
 if RuntimeInfoSection then
-    createButton(RuntimeInfoSection, "Copy toạ độ", function()
+    createButton(RuntimeInfoSection, "Copy tọa độ", function()
         local _, _, root = getCharacter()
         if not root then
-            notify("Không lấy được toạ độ.", Theme.Danger)
+            notify("Không lấy được tọa độ.", Theme.Danger)
             return
         end
         local text = string.format("CFrame.new(%.3f, %.3f, %.3f)", root.Position.X, root.Position.Y, root.Position.Z)
         if setclipboard then
             setclipboard(text)
-            notify("Đã copy toạ độ.", Theme.Success)
+            notify("Đã copy tọa độ.", Theme.Success)
         else
             notify(text, Theme.Success)
         end
@@ -21546,7 +22129,7 @@ if RuntimeInfoSection then
 end
 end
 
-Extensions.BuildDeviceControlTabs(MiscPage, MiscPage, createSection)
+Extensions.BuildDeviceControlTabs(CustomPage, CustomPage, createSection)
 connect(UserInputService.InputChanged, Extensions.UpdateMobileButtonDrag)
 connect(UserInputService.InputEnded, Extensions.EndMobileButtonDrag)
 connect(UserInputService.InputBegan, function(input, processed)
@@ -21577,7 +22160,7 @@ connect(UserInputService.InputBegan, function(input, processed)
     end
 end)
 
-local AvatarViewerSection = createSection(PlayerPage, "Player Viewer", "Xem roster server hiện tại hoặc nhập username Roblox bất kỳ; mô hình 3D kéo để xoay, cuộn để zoom, chạm đúp để căn lại.")
+local AvatarViewerSection = createSection(FunPage, "Player Viewer", "Xem roster server hiện tại hoặc nhập username Roblox bất kỳ; mô hình 3D kéo để xoay, cuộn để zoom, chạm đúp để căn lại.")
 createButton(AvatarViewerSection, "Mở Player Viewer", function()
     Extensions.OpenAvatarViewer(nil)
 end, Theme.Accent)
@@ -21888,6 +22471,7 @@ function Extensions.HookDeathNotificationCharacter(player, character)
         connect(humanoid.Died, function()
             if reported then return end
             reported = true
+            Extensions.MarkPlayerESPDead(player)
             local immediateKiller = Extensions.ResolveObservableKiller(player, character, humanoid)
             if immediateKiller then
                 Extensions.NotifyPlayerDeath(player, character, humanoid)
@@ -21905,6 +22489,8 @@ function Extensions.HookDeathNotificationPlayer(player)
     if not player or tracker.HookedPlayers[player] then return end
     tracker.HookedPlayers[player] = true
     connect(player.CharacterAdded, function(character)
+        local previous = State.PlayerESPStates[player]
+        if previous and previous.DiedAt then Extensions.MarkPlayerESPRespawn(player) end
         Extensions.HookDeathNotificationCharacter(player, character)
     end)
     if player.Character then Extensions.HookDeathNotificationCharacter(player, player.Character) end
@@ -22282,7 +22868,7 @@ function Extensions.UpdateNoclipStep()
         end
     end
 
-    if State.AntiStun then
+    if State.AntiStun or State.AntiFling then
         Extensions.MaintainAntiStun(character, humanoid, root)
     end
 end
@@ -22643,7 +23229,9 @@ cleanup = function()
         end)
         pcall(Extensions.SetGodModeEnabled, false, true)
         pcall(Extensions.SetAntiStunEnabled, false, true)
+        pcall(Extensions.SetAntiFlingEnabled, false, true)
         pcall(Extensions.ShutdownAntiKick)
+        pcall(Extensions.ShutdownOfficialFeatures)
         pcall(Extensions.ReleaseNamecallHandlers)
         pcall(restoreHumanoid, humanoid)
     end
