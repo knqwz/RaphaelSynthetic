@@ -858,6 +858,7 @@ local State = {
         SearchBox = nil,
         SearchButton = nil,
         ApplyButton = nil,
+        RestoreButton = nil,
         CopyButton = nil,
         SelectedRow = nil,
         PreviewUserId = nil,
@@ -976,9 +977,24 @@ local State = {
     XRayRestoreBudget = 20,
     SpectatingPlayer = nil,
     SpectateButton = nil,
+    SkinApplying = false,
+    SkinActive = false,
+    SkinUsername = "",
+    SkinOriginalDescription = nil,
+    SkinActiveDescription = nil,
+    SkinDisplayNameConnection = nil,
     TelePlayerMode = "Instant",
     TeleItemMode = "Instant",
     TravelSpeed = 80,
+    DoCaoBayM = 0,
+    DangChayLich = false,
+    TheHeLich = 0,
+    DangBamTheo = false,
+    TheHeBam = 0,
+    MucTieuBam = nil,
+    VungCamBat = false,
+    VungCamBanKinhM = 30,
+    TheHeVungCam = 0,
     ActiveTravelTween = nil,
     MobManualFilterEnabled = false,
     MobManualNames = {},
@@ -4367,10 +4383,10 @@ local function formatDuration(totalSeconds)
     return string.format("%02d:%02d:%02d", hours, minutes, remaining)
 end
 
-local function setStatusText(text, color)
+local function setStatusText(text, color, duration)
     local island = Extensions.Island
     if island and island.SetStatus and island.IsActive and island.IsActive() then
-        pcall(island.SetStatus, text, color)
+        pcall(island.SetStatus, text, color, duration)
     end
     if StatusLabel and StatusLabel.Parent then
         StatusLabel.Text = tostring(text or "")
@@ -4748,6 +4764,621 @@ local function travelToCFrame(targetCFrame, mode)
     travelTween:Play()
     notify(string.format("Đang bay %.1f m với tốc độ %.0f stud/s.", distance * 0.28, State.TravelSpeed), Theme.Warning)
     return true
+end
+
+function Extensions.FixSkinHair(description: any)
+    local hairIds: {any} = {}
+    local getAccessories: any = description.GetAccessories
+    local success: boolean, accessories: any = pcall(getAccessories, description, false)
+    if success and type(accessories) == "table" then
+        for _, accessoryInfo: any in ipairs(accessories) do
+            if accessoryInfo.AccessoryType == Enum.AccessoryType.Hair then
+                hairIds[#hairIds + 1] = accessoryInfo.AssetId
+            end
+        end
+    end
+    if #hairIds > 0 then
+        description.HairAccessory = table.concat(hairIds, ",")
+    end
+end
+
+function Extensions.ReplaceLocalCharacterDescription(description: any)
+    local oldCharacter: any, oldHumanoid: any = getCharacter()
+    if not oldCharacter or not oldHumanoid then
+        return false, "Nhân vật chưa sẵn sàng."
+    end
+    local oldPivot: any = oldCharacter:GetPivot()
+    local rigType: any = oldHumanoid.RigType
+    local maximumHealth: number = tonumber(oldHumanoid.MaxHealth) or 0
+    local currentHealth: number = tonumber(oldHumanoid.Health) or 0
+    local healthRatio: number = maximumHealth > 0 and currentHealth / maximumHealth or 1
+    local createModel: any = Players.CreateHumanoidModelFromDescription
+    local success: boolean, newCharacter: any = pcall(createModel, Players, description, rigType)
+    if not success or not newCharacter then
+        return false, "Không thể tạo mô hình skin cục bộ."
+    end
+    newCharacter.Name = LocalPlayer.Name
+    local newHumanoid: any = newCharacter:FindFirstChildOfClass("Humanoid")
+    if not newHumanoid then
+        newCharacter:Destroy()
+        return false, "Skin tải về không có Humanoid hợp lệ."
+    end
+    newHumanoid.DisplayName = LocalPlayer.DisplayName
+    newHumanoid.DisplayDistanceType = oldHumanoid.DisplayDistanceType
+    newHumanoid.HealthDisplayType = oldHumanoid.HealthDisplayType
+    newHumanoid.NameDisplayDistance = oldHumanoid.NameDisplayDistance
+    newHumanoid.HealthDisplayDistance = oldHumanoid.HealthDisplayDistance
+    local oldAnimate: any = oldCharacter:FindFirstChild("Animate")
+    local generatedAnimate: any = newCharacter:FindFirstChild("Animate")
+    if oldAnimate then
+        if generatedAnimate then generatedAnimate:Destroy() end
+        local clonedAnimate: any = oldAnimate:Clone()
+        clonedAnimate.Parent = newCharacter
+        if clonedAnimate:IsA("LocalScript") then
+            clonedAnimate.Enabled = true
+        end
+    end
+    local oldChildren: any = oldCharacter:GetChildren()
+    for _, child: any in ipairs(oldChildren) do
+        if child:IsA("Tool") then
+            child.Parent = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer
+        end
+    end
+    newCharacter:PivotTo(oldPivot)
+    newCharacter.Parent = Workspace
+    LocalPlayer.Character = newCharacter
+    Camera = Workspace.CurrentCamera or Camera
+    Camera.CameraType = Enum.CameraType.Custom
+    Camera.CameraSubject = newHumanoid
+    local newMaximumHealth: number = tonumber(newHumanoid.MaxHealth) or 1
+    newHumanoid.Health = math.clamp(newMaximumHealth * healthRatio, 1, newMaximumHealth)
+    local rememberFunction: any = rememberHumanoid
+    rememberFunction(newHumanoid)
+    task.delay(0.1, function()
+        if oldCharacter and oldCharacter.Parent and oldCharacter ~= newCharacter then
+            oldCharacter:Destroy()
+        end
+    end)
+    return true
+end
+
+function Extensions.ApplyLocalSkinDescription(description)
+    local _, humanoid = getCharacter()
+    if not humanoid then
+        return false, "Nhân vật chưa sẵn sàng."
+    end
+    if not State.SkinOriginalDescription then
+        local captured, original = pcall(humanoid.GetAppliedDescription, humanoid)
+        if captured and original then
+            State.SkinOriginalDescription = original
+        end
+    end
+    local applied = pcall(humanoid.ApplyDescription, humanoid, description)
+    if applied then
+        humanoid.DisplayName = LocalPlayer.DisplayName
+        return true
+    end
+    return Extensions.ReplaceLocalCharacterDescription(description)
+end
+
+function Extensions.BindSkinDisplayName(humanoid)
+    if State.SkinDisplayNameConnection then
+        State.SkinDisplayNameConnection:Disconnect()
+        State.SkinDisplayNameConnection = nil
+    end
+    if not State.SkinActive or not humanoid then
+        return
+    end
+    humanoid.DisplayName = LocalPlayer.DisplayName
+    State.SkinDisplayNameConnection = humanoid:GetPropertyChangedSignal("DisplayName"):Connect(function()
+        if State.SkinActive and humanoid.Parent and humanoid.DisplayName ~= LocalPlayer.DisplayName then
+            humanoid.DisplayName = LocalPlayer.DisplayName
+        end
+    end)
+end
+
+function Extensions.ApplySkinWorker(normalized: string)
+    local runtimeState: any = State
+    local getUserId: any = Players.GetUserIdFromNameAsync
+    local idSuccess: boolean, userId: any = pcall(getUserId, Players, normalized)
+    if not idSuccess or not userId then
+        runtimeState.SkinApplying = false
+        notify("Không tìm thấy username “" .. normalized .. "”.", Theme.Danger)
+        return
+    end
+    local getDescription: any = Players.GetHumanoidDescriptionFromUserId
+    local descriptionSuccess: boolean, description: any = pcall(getDescription, Players, userId)
+    if not descriptionSuccess or not description then
+        runtimeState.SkinApplying = false
+        notify("Không tải được dữ liệu Skin từ Roblox.", Theme.Danger)
+        return
+    end
+    if not runtimeState.Running then
+        description:Destroy()
+        runtimeState.SkinApplying = false
+        return
+    end
+    local fixHair: any = rawget(Extensions, "FixSkinHair")
+    local applyDescription: any = rawget(Extensions, "ApplyLocalSkinDescription")
+    if fixHair then fixHair(description) end
+    local applied: boolean, reason: any = applyDescription(description)
+    if applied then
+        runtimeState.SkinActive = true
+        runtimeState.SkinUsername = normalized
+        if runtimeState.SkinActiveDescription then runtimeState.SkinActiveDescription:Destroy() end
+        runtimeState.SkinActiveDescription = description:Clone()
+        local _, currentHumanoid: any = getCharacter()
+        local bindDisplayName: any = rawget(Extensions, "BindSkinDisplayName")
+        if bindDisplayName then bindDisplayName(currentHumanoid) end
+        notify("Đã áp dụng Skin của " .. normalized .. "; bảng tên giữ Display Name “" .. LocalPlayer.DisplayName .. "”.", Theme.Success)
+    else
+        notify(reason or "Không thể áp dụng Skin cục bộ.", Theme.Danger)
+    end
+    description:Destroy()
+    runtimeState.SkinApplying = false
+end
+
+function Extensions.ApplySkinFromUsername(username: any)
+    if State.SkinApplying then
+        notify("Đổi Skin đang xử lý.", Theme.Warning)
+        return
+    end
+    local normalized: string = string.gsub(tostring(username or ""), "[%s@]+", "")
+    if normalized == "" then
+        notify("Hãy nhập username Roblox cần lấy Skin.", Theme.Warning)
+        return
+    end
+    State.SkinApplying = true
+    task.spawn(Extensions.ApplySkinWorker, normalized)
+end
+
+function Extensions.RestoreLocalSkinImmediate()
+    local description = State.SkinOriginalDescription
+    if not description then
+        return
+    end
+    local restored = Extensions.ApplyLocalSkinDescription(description:Clone())
+    if restored then
+        State.SkinActive = false
+        Extensions.BindSkinDisplayName(nil)
+        State.SkinUsername = ""
+        if State.SkinActiveDescription then State.SkinActiveDescription:Destroy() end
+        State.SkinActiveDescription = nil
+        local _, humanoid = getCharacter()
+        if humanoid then humanoid.DisplayName = LocalPlayer.DisplayName end
+    end
+end
+
+function Extensions.RestoreLocalSkin()
+    if State.SkinApplying then
+        notify("Đổi Skin đang xử lý.", Theme.Warning)
+        return
+    end
+    State.SkinApplying = true
+    task.spawn(function()
+        local description: any = State.SkinOriginalDescription
+        if not description then
+            local getDescriptionFunction: any = Players.GetHumanoidDescriptionFromUserId
+            local success, original = pcall(getDescriptionFunction, Players, LocalPlayer.UserId)
+            if success then description = original end
+        end
+        if not description then
+            State.SkinApplying = false
+            notify("Không lấy được Skin gốc để khôi phục.", Theme.Danger)
+            return
+        end
+        if not State.Running then
+            State.SkinApplying = false
+            return
+        end
+        local restored, reason = Extensions.ApplyLocalSkinDescription(description:Clone())
+        if restored then
+            State.SkinActive = false
+            Extensions.BindSkinDisplayName(nil)
+            State.SkinUsername = ""
+            if State.SkinActiveDescription then State.SkinActiveDescription:Destroy() end
+            State.SkinActiveDescription = nil
+            local _, humanoid = getCharacter()
+            if humanoid then humanoid.DisplayName = LocalPlayer.DisplayName end
+            notify("Đã khôi phục Skin và Display Name gốc.", Theme.Success)
+        else
+            notify(reason or "Không thể khôi phục Skin.", Theme.Danger)
+        end
+        State.SkinApplying = false
+    end)
+end
+
+function Extensions.TimGocDoiTuong(instance)
+    if not instance or not instance.Parent then
+        return nil
+    end
+    if instance:IsA("BasePart") then
+        return instance
+    end
+    if instance:IsA("Tool") then
+        return instance:FindFirstChild("Handle") or instance:FindFirstChildWhichIsA("BasePart", true)
+    end
+    if instance:IsA("Model") then
+        return instance:FindFirstChild("HumanoidRootPart")
+            or instance:FindFirstChild("UpperTorso")
+            or instance:FindFirstChild("Torso")
+            or instance:FindFirstChild("Head")
+            or instance.PrimaryPart
+            or instance:FindFirstChildWhichIsA("BasePart", true)
+    end
+    return instance:FindFirstChildWhichIsA("BasePart", true)
+end
+
+function Extensions.LaNhanVatNguoiChoi(instance)
+    local current = instance
+    local depth = 0
+    while current and current ~= Workspace and depth < 12 do
+        if current:IsA("Model") and Players:GetPlayerFromCharacter(current) then
+            return true
+        end
+        current = current.Parent
+        depth = depth + 1
+    end
+    return false
+end
+
+function Extensions.MetSangStud(met)
+    return (tonumber(met) or 0) / 0.28
+end
+
+function Extensions.DinhDangPhatHien(soLuong, ganNhat, xaNhat)
+    soLuong = tonumber(soLuong) or 0
+    if soLuong <= 0 then
+        return "Không phát hiện mục tiêu phù hợp"
+    end
+    if soLuong == 1 then
+        return string.format("Phát hiện 1 và %.0f stub", ganNhat or 0)
+    end
+    return string.format("Phát hiện %d xa %.0f stub gần %.0f stub", soLuong, xaNhat or 0, ganNhat or 0)
+end
+
+function Extensions.QuetMucTieuTele(chuoiTruyVan)
+    local ketQua = {}
+    local truyVan = string.lower((string.gsub(tostring(chuoiTruyVan or ""), "^%s*(.-)%s*$", "%1")))
+    if truyVan == "" then
+        return ketQua
+    end
+    local cacTu = {}
+    for tu in string.gmatch(truyVan, "[^,;]+") do
+        tu = string.lower((string.gsub(tu, "^%s*(.-)%s*$", "%1")))
+        if tu ~= "" then
+            cacTu[#cacTu + 1] = tu
+        end
+    end
+    if #cacTu == 0 then
+        return ketQua
+    end
+    local _, _, gocNhanVat = getCharacter()
+    local diemGoc = gocNhanVat and gocNhanVat.Position or Camera.CFrame.Position
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local tenThuong = string.lower(player.Name)
+            local tenHienThi = string.lower(player.DisplayName)
+            for _, tu in ipairs(cacTu) do
+                if string.find(tenThuong, tu, 1, true) or string.find(tenHienThi, tu, 1, true) then
+                    local goc = player.Character and Extensions.TimGocDoiTuong(player.Character)
+                    if goc then
+                        ketQua[#ketQua + 1] = {MucTieu = player.Character, Goc = goc, Ten = player.Name, KhoangCach = (goc.Position - diemGoc).Magnitude}
+                    end
+                    break
+                end
+            end
+        end
+    end
+    local daGhiNhan = {}
+    local toanBo = Workspace:GetDescendants()
+    for index, doiTuong in ipairs(toanBo) do
+        if (doiTuong:IsA("Model") or doiTuong:IsA("Tool") or doiTuong:IsA("BasePart")) and not daGhiNhan[doiTuong] and not Extensions.LaNhanVatNguoiChoi(doiTuong) then
+            local tenThuong = string.lower(doiTuong.Name)
+            for _, tu in ipairs(cacTu) do
+                if string.find(tenThuong, tu, 1, true) then
+                    local goc = Extensions.TimGocDoiTuong(doiTuong)
+                    if goc then
+                        daGhiNhan[doiTuong] = true
+                        ketQua[#ketQua + 1] = {MucTieu = doiTuong, Goc = goc, Ten = doiTuong.Name, KhoangCach = (goc.Position - diemGoc).Magnitude}
+                    end
+                    break
+                end
+            end
+        end
+        if index % 1800 == 0 then
+            task.wait()
+        end
+    end
+    table.sort(ketQua, function(a, b)
+        return a.KhoangCach < b.KhoangCach
+    end)
+    return ketQua
+end
+
+function Extensions.HoanTenTheoTu(donTu)
+    local player = Extensions.ResolveUniquePlayer(donTu, false)
+    if player then
+        return player.Name
+    end
+    local cacTen = {}
+    for _, doiTuong in ipairs(Workspace:GetDescendants()) do
+        if (doiTuong:IsA("Model") or doiTuong:IsA("Tool") or doiTuong:IsA("BasePart")) and not Extensions.LaNhanVatNguoiChoi(doiTuong) then
+            if string.find(string.lower(doiTuong.Name), donTu, 1, true) then
+                cacTen[doiTuong.Name] = true
+            end
+        end
+    end
+    local soTen = 0
+    for _ in pairs(cacTen) do
+        soTen = soTen + 1
+    end
+    if soTen == 1 then
+        return next(cacTen)
+    end
+    return nil, soTen
+end
+
+function Extensions.LapLichTele(danhSach)
+    local _, _, gocNhanVat = getCharacter()
+    local diemHienTai = gocNhanVat and gocNhanVat.Position or Camera.CFrame.Position
+    local conLai = table.clone(danhSach)
+    local lich = {}
+    while #conLai > 0 do
+        local chiSoTot = 1
+        local khoangTot = math.huge
+        for index, banGhi in ipairs(conLai) do
+            if banGhi.Goc and banGhi.Goc.Parent then
+                local khoang = (banGhi.Goc.Position - diemHienTai).Magnitude
+                if khoang < khoangTot then
+                    khoangTot = khoang
+                    chiSoTot = index
+                end
+            end
+        end
+        local banGhi = table.remove(conLai, chiSoTot)
+        if banGhi.Goc and banGhi.Goc.Parent then
+            lich[#lich + 1] = banGhi
+            diemHienTai = banGhi.Goc.Position
+        end
+    end
+    return lich
+end
+
+function Extensions.BayChoXong(diemDen)
+    if not travelToCFrame(diemDen, State.TelePlayerMode) then
+        return false
+    end
+    if State.TelePlayerMode ~= "Fly" then
+        return true
+    end
+    while State.ActiveTravelTween ~= nil and State.Running do
+        RunService.Heartbeat:Wait()
+    end
+    return true
+end
+
+function Extensions.ChayLichTele(danhSach)
+    if State.DangChayLich then
+        notify("Lộ trình đang chạy.", Theme.Warning)
+        return
+    end
+    State.DangChayLich = true
+    State.TheHeLich = State.TheHeLich + 1
+    local theHe = State.TheHeLich
+    local lich = Extensions.LapLichTele(danhSach)
+    local tong = #lich
+    local daQua = 0
+    for _, banGhi in ipairs(lich) do
+        if theHe ~= State.TheHeLich or not State.Running then
+            break
+        end
+        if banGhi.Goc and banGhi.Goc.Parent then
+            setStatusText(string.format("%d/%d · %s", daQua, tong, banGhi.Ten), Theme.AccentSoft, 8)
+            Extensions.BayChoXong(banGhi.Goc.CFrame + Vector3.new(0, 3 + Extensions.MetSangStud(State.DoCaoBayM), 0))
+            daQua = daQua + 1
+            if State.TelePlayerMode ~= "Fly" then
+                task.wait(0.12)
+            end
+        end
+    end
+    State.DangChayLich = false
+    if theHe == State.TheHeLich and State.Running then
+        setStatusText(string.format("Hoàn tất lộ trình %d/%d mục tiêu.", daQua, tong), Theme.Success)
+    end
+end
+
+function Extensions.DungHoatDongTele()
+    State.TheHeLich = State.TheHeLich + 1
+    State.DangChayLich = false
+    State.DangBamTheo = false
+    State.TheHeBam = State.TheHeBam + 1
+    State.MucTieuBam = nil
+    pcall(cancelActiveTravel)
+    local _, humanoid, root = getCharacter()
+    if humanoid then
+        pcall(function()
+            humanoid.PlatformStand = false
+            humanoid.AutoRotate = true
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
+    end
+    if root then
+        pcall(function()
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end
+    setStatusText("Đã dừng mọi di chuyển.", Theme.Warning)
+end
+
+function Extensions.TimPlayerGanNhat(khongTinh)
+    local _, _, gocNhanVat = getCharacter()
+    local diemGoc = gocNhanVat and gocNhanVat.Position or Camera.CFrame.Position
+    local totNhat = nil
+    local khoangTot = math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player ~= khongTinh then
+            local goc = player.Character and Extensions.TimGocDoiTuong(player.Character)
+            if goc then
+                local khoang = (goc.Position - diemGoc).Magnitude
+                if khoang < khoangTot then
+                    khoangTot = khoang
+                    totNhat = player
+                end
+            end
+        end
+    end
+    return totNhat
+end
+
+function Extensions.BatDauBamTheo(mucTieu)
+    if not mucTieu or mucTieu == LocalPlayer then
+        notify("Không có mục tiêu hợp lệ để bám theo.", Theme.Danger)
+        return
+    end
+    State.MucTieuBam = mucTieu
+    State.DangBamTheo = true
+    State.TheHeBam = State.TheHeBam + 1
+    local theHe = State.TheHeBam
+    notify("Đang bám theo " .. mucTieu.Name .. ".", Theme.Success)
+    task.spawn(function()
+        local lanCapNhat = 0
+        while State.Running and State.DangBamTheo and theHe == State.TheHeBam do
+            local player = State.MucTieuBam
+            local gocMucTieu = player and player.Parent == Players and player.Character and Extensions.TimGocDoiTuong(player.Character)
+            local _, _, root = getCharacter()
+            if not gocMucTieu or not root then
+                task.wait(0.25)
+            else
+                local viTriDich = Vector3.new(gocMucTieu.Position.X, gocMucTieu.Position.Y + Extensions.MetSangStud(State.DoCaoBayM), gocMucTieu.Position.Z)
+                local khoang = (viTriDich - root.Position).Magnitude
+                if State.TelePlayerMode == "Fly" then
+                    if khoang > 0.4 then
+                        local deltaTime = RunService.Heartbeat:Wait()
+                        local tyLe = math.clamp(math.max(State.TravelSpeed, 1) * deltaTime / khoang, 0.02, 1)
+                        pcall(function()
+                            root.CFrame = CFrame.new(root.Position:Lerp(viTriDich, tyLe)) * (root.CFrame - root.Position)
+                        end)
+                    else
+                        RunService.Heartbeat:Wait()
+                    end
+                else
+                    if khoang > 0.6 then
+                        pcall(function()
+                            root.CFrame = CFrame.new(viTriDich) * (root.CFrame - root.Position)
+                            root.AssemblyLinearVelocity = Vector3.zero
+                        end)
+                    end
+                    task.wait(0.12)
+                end
+                if os.clock() - lanCapNhat > 1 then
+                    lanCapNhat = os.clock()
+                    setStatusText(string.format("Bám theo %s · %.0f m", player.Name, khoang * 0.28), Theme.AccentSoft, 3)
+                end
+            end
+        end
+        if State.Running and theHe == State.TheHeBam then
+            State.DangBamTheo = false
+        end
+    end)
+end
+
+function Extensions.DoiMucTieuBam()
+    if not State.DangBamTheo then
+        notify("Chưa bật chế độ bám theo.", Theme.Warning)
+        return
+    end
+    local moi = Extensions.TimPlayerGanNhat(State.MucTieuBam)
+    if not moi then
+        notify("Không còn player khác để đổi mục tiêu.", Theme.Warning)
+        return
+    end
+    State.MucTieuBam = moi
+    notify("Đã đổi mục tiêu bám theo: " .. moi.Name .. ".", Theme.Success)
+end
+
+function Extensions.TimDiemDungNgauNhien(khoangNho, khoangLon)
+    local _, _, gocNhanVat = getCharacter()
+    local diemGoc = gocNhanVat and gocNhanVat.Position or Camera.CFrame.Position
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {LocalPlayer.Character}
+    for luot = 1, 24 do
+        local gocRad = math.random() * math.pi * 2
+        local khoang = math.random(math.floor(khoangNho or 40), math.floor(khoangLon or 220))
+        local diemKiem = Vector3.new(diemGoc.X + math.cos(gocRad) * khoang, diemGoc.Y + 500, diemGoc.Z + math.sin(gocRad) * khoang)
+        local ketQua = Workspace:Raycast(diemKiem, Vector3.new(0, -2000, 0), params)
+        if ketQua and ketQua.Material ~= Enum.Material.Water and ketQua.Normal.Y > 0.7 then
+            return CFrame.new(ketQua.Position + Vector3.new(0, 3, 0))
+        end
+    end
+    return nil
+end
+
+function Extensions.SetVungCam(bat)
+    State.VungCamBat = bat == true
+    if State.TheHeVungCam == nil then State.TheHeVungCam = 0 end
+    if State.ConfigControls.VungCamBat and State.ConfigControls.VungCamBat.Set then
+        State.ConfigControls.VungCamBat.Set(State.VungCamBat, false)
+    end
+    if State.VungCamBat then
+        State.TheHeVungCam = State.TheHeVungCam + 1
+        local theHe = State.TheHeVungCam
+        notify("Vùng cấm đã bật · bán kính " .. Extensions.FormatMovementNumber(State.VungCamBanKinhM) .. " m.", Theme.Success)
+        task.spawn(function()
+            while State.Running and State.VungCamBat and theHe == State.TheHeVungCam do
+                local _, _, root = getCharacter()
+                if root then
+                    local banKinh = Extensions.MetSangStud(State.VungCamBanKinhM)
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        if player ~= LocalPlayer then
+                            local goc = player.Character and Extensions.TimGocDoiTuong(player.Character)
+                            if goc and (goc.Position - root.Position).Magnitude < banKinh then
+                                local diem = Extensions.TimDiemDungNgauNhien(banKinh * 1.4, banKinh * 3.2)
+                                if diem then safeTeleport(diem) end
+                                setStatusText("Vùng cấm: " .. player.Name .. " xâm nhập · đã né.", Theme.Danger)
+                                notify("Vùng cấm: " .. player.Name .. " vừa vào bán kính · đã dịch chuyển né.", Theme.Danger)
+                                break
+                            end
+                        end
+                    end
+                end
+                task.wait(0.25)
+            end
+        end)
+    else
+        notify("Vùng cấm đã tắt.", Theme.Warning)
+    end
+end
+
+function Extensions.TimDiemDungXaNhat()
+    local _, _, gocNhanVat = getCharacter()
+    local diemGoc = gocNhanVat and gocNhanVat.Position or Camera.CFrame.Position
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {LocalPlayer.Character}
+    local totNhat = nil
+    local khoangTotNhat = -1
+    for _, bacKhoang in ipairs({400, 800, 1600, 3200, 6400}) do
+        for buocGoc = 0, 23 do
+            local gocRad = buocGoc / 24 * math.pi * 2
+            local diemKiem = Vector3.new(diemGoc.X + math.cos(gocRad) * bacKhoang, 1500, diemGoc.Z + math.sin(gocRad) * bacKhoang)
+            local ketQua = Workspace:Raycast(diemKiem, Vector3.new(0, -3000, 0), params)
+            if ketQua and ketQua.Material ~= Enum.Material.Water and ketQua.Normal.Y > 0.5 then
+                local khoang = (ketQua.Position - diemGoc).Magnitude
+                if khoang > khoangTotNhat then
+                    khoangTotNhat = khoang
+                    totNhat = ketQua.Position
+                end
+            end
+        end
+        task.wait()
+    end
+    if totNhat then
+        return CFrame.new(totNhat + Vector3.new(0, 3 + Extensions.MetSangStud(State.DoCaoBayM), 0))
+    end
+    return nil
 end
 
 function Extensions.ResolveUniquePlayer(query: any, includeLocalPlayer: boolean?): (any, string, number)
@@ -5754,11 +6385,11 @@ Extensions.InstallIsland = function()
             text = Island.StatusText
             color = Island.StatusColor
         elseif islandState.ShowStats then
-            text = string.format("%d Player · %s · %d FPS · Ping %d ms", playerCount(), sessionText(), math.floor(Island.DisplayFrameRate + 0.5), math.floor(Island.Ping + 0.5))
+            text = string.format("%dP · %s · %dFPS · %dms", playerCount(), sessionText(), math.floor(Island.DisplayFrameRate + 0.5), math.floor(Island.Ping + 0.5))
             color = Theme.Success
-            fixedWidth = State.IsDesktop and 330 or 310
+            fixedWidth = State.IsDesktop and 232 or 214
         else
-            text = string.format("%d Player · %s", playerCount(), sessionText())
+            text = string.format("%dP · %s", playerCount(), sessionText())
             color = Theme.AccentSoft
         end
         local signature = tostring(text) .. "|" .. tostring(color)
@@ -5916,10 +6547,10 @@ Extensions.InstallIsland = function()
         return true
     end
 
-    function Island.SetStatus(text, color)
+    function Island.SetStatus(text, color, duration)
         Island.StatusText = tostring(text or "")
         Island.StatusColor = color or Theme.Success
-        Island.StatusUntil = os.clock() + 2.6
+        Island.StatusUntil = os.clock() + (tonumber(duration) or 2.6)
         if Island.Mode == "Compact" then Island.RenderCompact(true) end
     end
 
@@ -9540,35 +10171,38 @@ Extensions.InstallOfficialFeatures = function()
         state.SpinJoint = nil
         state.SpinC0 = nil
         state.SpinAngle = 0
+        if state.SpinAutoRotateBackup ~= nil then
+            local _, humanoidCu = characterParts()
+            if humanoidCu then
+                pcall(function() humanoidCu.AutoRotate = state.SpinAutoRotateBackup end)
+            end
+            state.SpinAutoRotateBackup = nil
+        end
+        state.SpinLastRoot = nil
     end
 
     function Extensions.UpdateSpinMe(deltaTime)
         if not state.SpinMeEnabled then
-            if state.SpinJoint then restoreSpin() end
+            if state.SpinJoint or state.SpinAutoRotateBackup ~= nil then restoreSpin() end
             return
         end
         local character, humanoid, root = characterParts()
         if not character or not humanoid or not root or humanoid.Health <= 0 then return end
-        local joint = root:FindFirstChild("RootJoint") or character:FindFirstChild("RootJoint", true)
-        if not joint or not joint:IsA("Motor6D") then
-            joint = nil
-            for _, descendant in ipairs(character:GetDescendants()) do
-                if descendant:IsA("Motor6D") and (descendant.Part0 == root or descendant.Part1 == root or string.find(string.lower(descendant.Name), "root", 1, true)) then
-                    joint = descendant
-                    break
-                end
-            end
-        end
-        if not joint then return end
-        if state.SpinJoint ~= joint then
+        if state.SpinLastRoot ~= root then
             restoreSpin()
-            state.SpinJoint = joint
-            state.SpinC0 = joint.C0 or CFrame.new()
+            state.SpinLastRoot = root
+            state.SpinAutoRotateBackup = humanoid.AutoRotate
+            state.SpinAngle = 0
         end
+        humanoid.AutoRotate = false
         local direction = state.SpinMeDirection == "Trái" and -1 or 1
         state.SpinAngle = (state.SpinAngle + direction * state.SpinMeSpeed * deltaTime) % 360
-        joint.C0 = state.SpinC0 * CFrame.Angles(0, math.rad(state.SpinAngle), 0)
+        pcall(function()
+            root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, math.rad(state.SpinAngle), 0)
+            root.AssemblyAngularVelocity = Vector3.zero
+        end)
     end
+
 
     function Extensions.RefreshOfficialFeatures()
         if not state.ShiftLockEnabled then restoreShiftLock() end
@@ -9615,6 +10249,8 @@ Extensions.InstallOfficialFeatures = function()
         state.SpinJoint = nil
         state.SpinC0 = nil
         state.SpinAngle = 0
+        state.SpinLastRoot = nil
+        state.SpinAutoRotateBackup = nil
     end)
 
     function Extensions.ShutdownOfficialFeatures()
@@ -13610,6 +14246,21 @@ rescanMobs = function()
     table.clear(descendants)
     State.MobESP.RenderShard = 0
     Extensions.ResetMobCandidateBuffer()
+    local ganNhatQuai, xaNhatQuai, soQuai = nil, nil, 0
+    local _, _, gocNhanVatQuai = getCharacter()
+    local diemGocQuai = gocNhanVatQuai and gocNhanVatQuai.Position or Camera.CFrame.Position
+    for mucTieuQuai in pairs(MobCache) do
+        local gocQuai = Extensions.TimGocDoiTuong(mucTieuQuai)
+        if gocQuai then
+            soQuai = soQuai + 1
+            local khoangQuai = (gocQuai.Position - diemGocQuai).Magnitude
+            if not ganNhatQuai or khoangQuai < ganNhatQuai then ganNhatQuai = khoangQuai end
+            if not xaNhatQuai or khoangQuai > xaNhatQuai then xaNhatQuai = khoangQuai end
+        end
+    end
+    if soQuai > 0 then
+        setStatusText(Extensions.DinhDangPhatHien(soQuai, ganNhatQuai, xaNhatQuai), Theme.Success, 4)
+    end
     State.MobScanRunning = false
 end
 
@@ -13808,6 +14459,9 @@ scanItems = function(forceNotification)
     table.clear(found)
     local foundCount = 0
     local totalMatches = 0
+    local ganNhat, xaNhat = nil, nil
+    local _, _, gocNhanVatScan = getCharacter()
+    local diemGoc = gocNhanVatScan and gocNhanVatScan.Position or Camera.CFrame.Position
 
     if #State.ItemESP.SearchTerms > 0 then
         local descendants = Workspace:GetDescendants()
@@ -13817,6 +14471,12 @@ scanItems = function(forceNotification)
                 if foundCount < State.ItemESP.MaxTargets then
                     found[instance] = true
                     foundCount = foundCount + 1
+                    local gocItem = getAdorneeRoot(instance)
+                    if gocItem then
+                        local khoangItem = (gocItem.Position - diemGoc).Magnitude
+                        if not ganNhat or khoangItem < ganNhat then ganNhat = khoangItem end
+                        if not xaNhat or khoangItem > xaNhat then xaNhat = khoangItem end
+                    end
                 end
             end
             if index % 180 == 0 then
@@ -13848,7 +14508,7 @@ scanItems = function(forceNotification)
         elseif totalMatches > foundCount then
             notify("Tìm thấy " .. totalMatches .. " đối tượng; đang hiển thị giới hạn " .. foundCount .. " kết quả để giữ FPS.", Theme.Warning)
         else
-            notify("Đã dò và lập chỉ mục " .. foundCount .. " đối tượng khớp tên.", foundCount > 0 and Theme.Success or Theme.Warning)
+            notify(Extensions.DinhDangPhatHien(foundCount, ganNhat, xaNhat), foundCount > 0 and Theme.Success or Theme.Warning)
         end
     end
     return foundCount
@@ -14066,10 +14726,8 @@ function Extensions.RunUniversalScan()
     end
     if success then
         local distanceSummary
-        if visibleCount == 1 then
-            distanceSummary = string.format("Phát hiện 1 · %.0f studs", nearestStuds)
-        elseif visibleCount > 1 then
-            distanceSummary = string.format("Phát hiện %d · gần %.0f · xa %.0f studs", visibleCount, nearestStuds, farthestStuds)
+        if visibleCount >= 1 then
+            distanceSummary = Extensions.DinhDangPhatHien(visibleCount, nearestStuds, farthestStuds)
         else
             distanceSummary = "Không phát hiện mục tiêu phù hợp"
         end
@@ -17214,6 +17872,8 @@ function Extensions.UpdateAvatarViewerActions()
     paint(viewer.CopyIdButton, hasUser)
     paint(viewer.TeleButton, inServer)
     paint(viewer.SpectateButton, inServer)
+    paint(viewer.ApplyButton, hasUser and not State.SkinApplying)
+    paint(viewer.RestoreButton, State.SkinActive == true)
     if viewer.SpectateButton and viewer.SpectateButton.Parent then
         viewer.SpectateButton.Text = (inServer and State.SpectatingPlayer == player) and "Huỷ theo dõi" or "Theo dõi"
     end
@@ -17553,7 +18213,7 @@ function Extensions.EnsureAvatarViewer()
     local stage = Instance.new("Frame")
     stage.Name = "Stage"
     stage.Position = UDim2.fromOffset(0, 0)
-    stage.Size = UDim2.new(1, 0, 1, -(actionHeight * 2 + 18))
+    stage.Size = UDim2.new(1, 0, 1, -(actionHeight * 3 + 26))
     stage.BackgroundColor3 = Color3.fromRGB(21, 19, 31)
     stage.BackgroundTransparency = 0
     stage.BorderSizePixel = 0
@@ -17636,7 +18296,7 @@ function Extensions.EnsureAvatarViewer()
     actions.Name = "Actions"
     actions.AnchorPoint = Vector2.new(0, 1)
     actions.Position = UDim2.new(0, 0, 1, 0)
-    actions.Size = UDim2.new(1, 0, 0, actionHeight * 2 + 8)
+    actions.Size = UDim2.new(1, 0, 0, actionHeight * 3 + 16)
     actions.BackgroundTransparency = 1
     actions.ZIndex = baseZ + 5
     actions.Parent = previewPanel
@@ -17651,12 +18311,15 @@ function Extensions.EnsureAvatarViewer()
         button:SetAttribute("BaseTransparency", button.BackgroundTransparency)
         return button
     end
-    local copy = actionButton("Copy @", "copy", "secondary", 1, 1)
-    local copyId = actionButton("Copy ID", "copy", "secondary", 2, 1)
-    local reset = actionButton("Căn lại", "rotate-ccw", "secondary", 3, 1)
+    local applySkin = actionButton("Đổi Skin", "sparkles", "primary", 1, 1)
+    local restoreSkin = actionButton("Khôi phục", "rotate-ccw", "secondary", 2, 1)
+    local reset = actionButton("Căn lại", "crosshair", "secondary", 3, 1)
     local tele = actionButton("Tele", "map-pin", "primary", 1, 2)
     local spectate = actionButton("Theo dõi", "telescope", "tinted", 2, 2)
     local autoSpin = actionButton("Tự xoay", "cycle", "tinted", 3, 2)
+    local copy = actionButton("Copy @", "copy", "secondary", 1, 3)
+    local copyId = actionButton("Copy ID", "copy", "secondary", 2, 3)
+    local closeSheet = actionButton("Đóng", "x", "tinted", 3, 3)
 
     local function responsiveLayout()
         local size = content.AbsoluteSize
@@ -17693,7 +18356,8 @@ function Extensions.EnsureAvatarViewer()
     viewer.TeleButton = tele
     viewer.SpectateButton = spectate
     viewer.AutoSpinButton = autoSpin
-    viewer.ApplyButton = nil
+    viewer.ApplyButton = applySkin
+    viewer.RestoreButton = restoreSkin
     viewer.PreviewYaw = 0
     viewer.PreviewPitch = 0.08
     viewer.Zoom = 1
@@ -17766,6 +18430,20 @@ function Extensions.EnsureAvatarViewer()
             notify("Đang theo dõi " .. player.Name .. ".", Theme.Success)
         end
         Extensions.UpdateAvatarViewerActions()
+    end)
+    connect(applySkin.Activated, function()
+        local username = viewer.PreviewUsername
+        if not username or username == "" then
+            notify("Chưa chọn username để áp dụng Skin.", Theme.Warning)
+            return
+        end
+        Extensions.ApplySkinFromUsername(username)
+    end)
+    connect(restoreSkin.Activated, function()
+        Extensions.RestoreLocalSkin()
+    end)
+    connect(closeSheet.Activated, function()
+        Extensions.OverlayLuxury.Hide(viewer.Sheet, true)
     end)
 
     connect(viewport.InputBegan, function(input)
@@ -20101,6 +20779,9 @@ function Extensions.BuildConfig()
             TelePlayerMode = State.TelePlayerMode,
             TeleItemMode = State.TeleItemMode,
             TravelSpeed = State.TravelSpeed,
+            TravelHeightMeters = State.DoCaoBayM,
+            ZoneGuardEnabled = State.VungCamBat,
+            ZoneGuardRadiusMeters = State.VungCamBanKinhM,
             SavedButtonName = State.SavedButtonName,
             DesktopSavedTeleEnabled = State.DesktopSavedTeleEnabled
         },
@@ -20471,6 +21152,25 @@ function Extensions.ApplyConfig(config, silent)
     State.TravelSpeed = math.clamp(tonumber(travel.TravelSpeed) or State.TravelSpeed, 10, 1000)
     State.SavedButtonName = tostring(travel.SavedButtonName or State.SavedButtonName)
     State.DesktopSavedTeleEnabled = State.IsDesktop and booleanValue(travel, "DesktopSavedTeleEnabled", State.DesktopSavedTeleEnabled) or false
+    State.DoCaoBayM = math.clamp(tonumber(travel.TravelHeightMeters) or State.DoCaoBayM, 0, 50)
+    State.VungCamBanKinhM = math.clamp(tonumber(travel.ZoneGuardRadiusMeters) or State.VungCamBanKinhM, 5, 500)
+    if State.ConfigControls and State.ConfigControls.TravelMode and State.ConfigControls.TravelMode.Set then
+        State.ConfigControls.TravelMode.Set(State.TelePlayerMode, false)
+    end
+    if State.ConfigControls and State.ConfigControls.TravelSpeed then
+        State.ConfigControls.TravelSpeed.Text = tostring(State.TravelSpeed)
+    end
+    if State.ConfigControls and State.ConfigControls.DoCaoBayM then
+        State.ConfigControls.DoCaoBayM.Text = Extensions.FormatMovementNumber(State.DoCaoBayM)
+    end
+    if State.ConfigControls and State.ConfigControls.VungCamBanKinhM then
+        State.ConfigControls.VungCamBanKinhM.Text = Extensions.FormatMovementNumber(State.VungCamBanKinhM)
+    end
+    if booleanValue(travel, "ZoneGuardEnabled", false) then
+        task.defer(function()
+            Extensions.SetVungCam(true)
+        end)
+    end
 
     local autoExecutor = type(config.AutoExecutor) == "table" and config.AutoExecutor or {}
     State.AutoExecutor.Scope = allowed(autoExecutor.Scope, {"Mọi map", "Chỉ map này"}, State.AutoExecutor.Scope)
@@ -21426,70 +22126,149 @@ end, Theme.Accent)
 end
 
 do
-local PlayerTeleSection = createSection(TelePage, "Tele Player", "Công cụ di chuyển đến Player bằng username, display name hoặc một phần tên duy nhất.")
-local TeleportPlayerName = ""
-createInput(PlayerTeleSection, "Tên người chơi", "", "Nhập một phần username hoặc display name", false, function(text, box)
-    local completed, _, status, count = Extensions.CompletePlayerSearchText(text, false)
-    TeleportPlayerName = completed
-    if box and box.Text ~= completed then
-        box.Text = completed
-    end
-    if status == "Ambiguous" then
-        notify("Có " .. count .. " player phù hợp; hãy nhập thêm ký tự.", Theme.Warning)
-    end
-end)
-State.ConfigControls.TelePlayerMode = createSelector(PlayerTeleSection, "Cách di chuyển", {"Instant", "Fly"}, State.TelePlayerMode, function(value)
+local CaiDatDiChuyenSection = createSection(TelePage, "Cài đặt di chuyển", "Áp dụng chung cho mọi chức năng trong tab Tele: cách đến nơi, tốc độ bay và độ cao khi tới mục tiêu.")
+State.ConfigControls.TravelMode = createSelector(CaiDatDiChuyenSection, "Cách di chuyển", {"Instant", "Fly"}, State.TelePlayerMode, function(value)
     State.TelePlayerMode = value
+    State.TeleItemMode = value
 end)
-createButton(PlayerTeleSection, "Di chuyển đến người chơi", function()
-    local targetPlayer = findPlayer(TeleportPlayerName)
-    if not targetPlayer then
-        notify("Không tìm thấy người chơi phù hợp.", Theme.Danger)
-        return
+State.ConfigControls.TravelSpeed = createInput(CaiDatDiChuyenSection, "Tốc độ bay (stud/giây)", tostring(State.TravelSpeed), "Ví dụ: 80", false, function(text, box)
+    local giaTri = tonumber(text)
+    if giaTri then
+        State.TravelSpeed = math.clamp(math.floor(giaTri + 0.5), 5, 1000)
     end
-    local targetRoot = targetPlayer.Character and (targetPlayer.Character:FindFirstChild("HumanoidRootPart") or targetPlayer.Character.PrimaryPart)
-    if targetRoot then
-        local targetCFrame = targetRoot.CFrame + Vector3.new(0, 3, 0)
-        if travelToCFrame(targetCFrame, State.TelePlayerMode) and State.TelePlayerMode == "Instant" then
-            notify("Đã tele đến " .. targetPlayer.Name .. ".", Theme.Success)
-        end
-    else
-        notify("Nhân vật mục tiêu chưa sẵn sàng.", Theme.Warning)
-    end
+    box.Text = tostring(State.TravelSpeed)
 end)
-
+State.ConfigControls.DoCaoBayM = createInput(CaiDatDiChuyenSection, "Độ cao khi tới nơi (mets)", Extensions.FormatMovementNumber(State.DoCaoBayM), "0 - 50 · 0 là dính mục tiêu", false, function(text, box)
+    local giaTri = tonumber(text)
+    if giaTri then
+        State.DoCaoBayM = math.clamp(math.floor(giaTri * 10 + 0.5) / 10, 0, 50)
+    end
+    box.Text = Extensions.FormatMovementNumber(State.DoCaoBayM)
+end)
+createButton(CaiDatDiChuyenSection, "Dừng mọi di chuyển", function()
+    Extensions.DungHoatDongTele()
+end, Theme.Danger)
 end
 
 do
-local ItemTeleSection = createSection(TelePage, "Tele Item", "Công cụ tìm và di chuyển đến Item phù hợp gần Ngài nhất.")
-local TeleportItemName = ""
-State.TeleportItemBox = createInput(ItemTeleSection, "Tên item", "", "Nhập một phần tên duy nhất", false, function(text)
-    TeleportItemName = string.gsub(text, "^%s*(.-)%s*$", "%1")
+local TeleDaNangSection = createSection(TelePage, "Tele Đa Năng", "Nhập tên player hoặc tên đồ vật, một phần tên là đủ, ngăn cách bằng dấu phẩy. Enter tự hoàn tất tên; nếu tên có nhiều bản sao kèm số thì quét hết và tele theo lộ trình tối ưu từ vị trí hiện tại.")
+local TruyVanTele = ""
+local function hoanTatTruyVan(text)
+    local cacPhan = {}
+    for tu in string.gmatch(tostring(text or ""), "[^,;]+") do
+        local daCat = string.gsub(tu, "^%s*(.-)%s*$", "%1")
+        if daCat ~= "" then
+            local daHoan = Extensions.HoanTenTheoTu(string.lower(daCat))
+            cacPhan[#cacPhan + 1] = daHoan or daCat
+        end
+    end
+    if #cacPhan == 0 then
+        return text
+    end
+    return table.concat(cacPhan, ", ")
+end
+State.TeleDaNangBox = createInput(TeleDaNangSection, "Tên mục tiêu", "", "Ví dụ: sword, builderman, stub", false, function(text, box, enterPressed)
+    TruyVanTele = string.gsub(text, "^%s*(.-)%s*$", "%1")
+    if enterPressed then
+        local ketQua = hoanTatTruyVan(TruyVanTele)
+        if ketQua ~= TruyVanTele then
+            TruyVanTele = ketQua
+            if box and box.Parent then box.Text = ketQua end
+        end
+    end
 end)
-State.ConfigControls.TeleItemMode = createSelector(ItemTeleSection, "Cách di chuyển", {"Instant", "Fly"}, State.TeleItemMode, function(value)
-    State.TeleItemMode = value
+createButton(TeleDaNangSection, "Tele mục tiêu gần nhất", function()
+    task.spawn(function()
+        local danhSach = Extensions.QuetMucTieuTele(TruyVanTele)
+        if #danhSach == 0 then
+            notify("Không tìm thấy mục tiêu phù hợp với “" .. TruyVanTele .. "”.", Theme.Danger)
+            return
+        end
+        setStatusText(Extensions.DinhDangPhatHien(#danhSach, danhSach[1].KhoangCach, danhSach[#danhSach].KhoangCach), Theme.Success, 4)
+        local banGhi = danhSach[1]
+        if banGhi.Goc and banGhi.Goc.Parent then
+            Extensions.BayChoXong(banGhi.Goc.CFrame + Vector3.new(0, 3 + Extensions.MetSangStud(State.DoCaoBayM), 0))
+            if State.TelePlayerMode == "Instant" then
+                notify("Đã tele đến " .. banGhi.Ten .. ".", Theme.Success)
+            end
+        end
+    end)
+end, Theme.Accent2)
+createButton(TeleDaNangSection, "Tele tất cả theo lộ trình", function()
+    task.spawn(function()
+        local danhSach = Extensions.QuetMucTieuTele(TruyVanTele)
+        if #danhSach == 0 then
+            notify("Không tìm thấy mục tiêu phù hợp với “" .. TruyVanTele .. "”.", Theme.Danger)
+            return
+        end
+        setStatusText(Extensions.DinhDangPhatHien(#danhSach, danhSach[1].KhoangCach, danhSach[#danhSach].KhoangCach), Theme.Success, 4)
+        notify("Đã lập lộ trình " .. #danhSach .. " mục tiêu từ vị trí hiện tại.", Theme.Warning)
+        Extensions.ChayLichTele(danhSach)
+    end)
+end, Theme.Accent)
+createButton(TeleDaNangSection, "Dừng lộ trình", function()
+    Extensions.DungHoatDongTele()
+end, Theme.Danger)
+end
+
+do
+local BamTheoSection = createSection(TelePage, "Bám theo Player", "Bám sát mục tiêu cho tới khi dừng hoặc đổi mục tiêu. X và Z theo player, độ cao lấy từ “Độ cao khi tới nơi” trong Cài đặt di chuyển.")
+local TenBamTheo = ""
+createInput(BamTheoSection, "Tên mục tiêu", "", "Bỏ trống sẽ bám player gần nhất", false, function(text, box)
+    local hoanTen = Extensions.CompletePlayerSearchText(text, false)
+    TenBamTheo = hoanTen
+    if box and box.Text ~= hoanTen then
+        box.Text = hoanTen
+    end
 end)
-local function teleportToNamedItem()
-    local item: any, itemRoot: any, resolvedName: string?, status: string, matchCount: number = findClosestNamedWorldObject(TeleportItemName)
-    resolvedName = tostring(resolvedName or "")
-    matchCount = tonumber(matchCount) or 0
-    if not item or not itemRoot then
-        notify(status == "Ambiguous" and ("Có " .. matchCount .. " tên item phù hợp; hãy nhập thêm ký tự.") or ("Không tìm thấy item phù hợp với “" .. TeleportItemName .. "”."), status == "Ambiguous" and Theme.Warning or Theme.Danger)
+createDualButtons(BamTheoSection, "Bám theo", function()
+    local mucTieu = findPlayer(TenBamTheo)
+    if not mucTieu then
+        mucTieu = Extensions.TimPlayerGanNhat(nil)
+    end
+    if not mucTieu then
+        notify("Không có player nào để bám theo.", Theme.Danger)
         return
     end
-    TeleportItemName = resolvedName
-    if State.TeleportItemBox and State.TeleportItemBox.Parent then
-        State.TeleportItemBox.Text = resolvedName
-    end
-    local targetCFrame = itemRoot.CFrame + Vector3.new(0, 3, 0)
-    if travelToCFrame(targetCFrame, State.TeleItemMode) and State.TeleItemMode == "Instant" then
-        notify("Đã tele đến item " .. tostring(item.Name) .. ".", Theme.Success)
-    end
+    Extensions.BatDauBamTheo(mucTieu)
+end, "Dừng", function()
+    Extensions.DungHoatDongTele()
+end, Theme.Accent, Theme.Danger)
+createButton(BamTheoSection, "Đổi mục tiêu", function()
+    Extensions.DoiMucTieuBam()
+end, Theme.SurfaceLight)
 end
-createButton(ItemTeleSection, "Di chuyển đến item", function()
-    task.spawn(teleportToNamedItem)
-end, Theme.Accent2)
 
+do
+local VungCamSection = createSection(TelePage, "Vùng cấm Player", "Khi player khác lọt vào bán kính quanh Ngài, script lập tức né đến vị trí đứng được ngẫu nhiên ngoài bán kính.")
+State.ConfigControls.VungCamBanKinhM = createInput(VungCamSection, "Bán kính vùng cấm (mets)", Extensions.FormatMovementNumber(State.VungCamBanKinhM), "Ví dụ: 30", false, function(text, box)
+    local giaTri = tonumber(text)
+    if giaTri then
+        State.VungCamBanKinhM = math.clamp(math.floor(giaTri * 10 + 0.5) / 10, 5, 500)
+    end
+    box.Text = Extensions.FormatMovementNumber(State.VungCamBanKinhM)
+end)
+State.ConfigControls.VungCamBat = createToggle(VungCamSection, "Bật vùng cấm", State.VungCamBat, function(value)
+    Extensions.SetVungCam(value)
+end)
+end
+
+do
+local CucDiemSection = createSection(TelePage, "Tele cực điểm", "Dò địa hình và di chuyển đến vị trí xa nhất có thể đứng được so với chỗ Ngài đang đứng.")
+createButton(CucDiemSection, "Tele đến chỗ xa nhất map", function()
+    task.spawn(function()
+        setStatusText("Đang dò địa hình tìm điểm xa nhất…", Theme.Warning, 6)
+        local diem = Extensions.TimDiemDungXaNhat()
+        if not diem then
+            notify("Không tìm được vị trí đứng hợp lệ.", Theme.Danger)
+            return
+        end
+        Extensions.BayChoXong(diem)
+        if State.TelePlayerMode == "Instant" then
+            notify("Đã tele đến điểm xa nhất tìm được.", Theme.Success)
+        end
+    end)
+end, Theme.Accent2)
 end
 
 do
@@ -23110,6 +23889,11 @@ cleanup = function()
             RunService:Set3dRenderingEnabled(true)
         end)
         pcall(cancelActiveTravel)
+        pcall(function()
+            State.DangBamTheo = false
+            State.DangChayLich = false
+            State.VungCamBat = false
+        end)
         pcall(Extensions.SetFreecamEnabled, false, true)
         pcall(Extensions.SetCharacterFlyEnabled, false, true)
         pcall(resetSpeedSideEffects)
